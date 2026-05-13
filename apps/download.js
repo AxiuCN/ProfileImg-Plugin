@@ -48,9 +48,27 @@ export class Download extends plugin {
     if (!fs.existsSync(path.join(GIT_WORK_DIR, '.git'))) {
       return e.reply('[面板图图库管理器] 主图库未初始化 Git，请先安装主图库')
     }
+
+    // 检查是否已正确安装为子模块（存在 .git 文件）
     if (fs.existsSync(path.join(BLOCKED_GALLERY_PATH, '.git'))) {
-      return e.reply('[面板图图库管理器] 屏蔽图库已安装，请使用 #更新屏蔽图库 进行更新')
+      return e.reply('[面板图图库管理器] 屏蔽图库已安装，请使用 #屏蔽图库更新 进行更新')
     }
+
+    // 清理可能残留的索引条目或普通目录
+    try {
+      execSync('git rm --cached -r blocked-character', {
+        cwd: GIT_WORK_DIR,
+        encoding: 'utf8',
+        timeout: 10000
+      })
+    } catch (e) {
+      // 忽略错误（如果不存在则继续）
+    }
+
+    if (fs.existsSync(BLOCKED_GALLERY_PATH)) {
+      fs.rmSync(BLOCKED_GALLERY_PATH, { recursive: true, force: true })
+    }
+
     try {
       execSync(`git submodule add ${BLOCKED_REPO_URL} blocked-character`, {
         cwd: GIT_WORK_DIR,
