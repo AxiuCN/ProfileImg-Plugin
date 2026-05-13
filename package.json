@@ -1,0 +1,11 @@
+{
+  "name": "ProfileImg-Plugin",
+  "version": "1.0.0",
+  "description": "一个用于管理喵喵插件角色面板图库（主图库/屏蔽图库）的面板图图库管理器，支持状态查看、更新、安装、屏蔽/启用面板图等功能",
+  "author": "阿修Axiu",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AxiuCN/ProfileImg-Plugin.git"
+  }
+}

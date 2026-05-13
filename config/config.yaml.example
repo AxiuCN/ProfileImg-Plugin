@@ -1,0 +1,37 @@
+# ==============================================================
+# ProfileImg-Plugin 配置文件
+# 请将此文件复制为 config.yaml 并根据需要修改
+# ==============================================================
+update:
+  # ---------- 插件自身更新设置 ----------
+  pluginSelf:
+    # 是否启用插件自身的自动检查更新
+    enabled: true
+    # 自动检查更新的 cron 表达式（默认每天 5:00）
+    cron: "0 0 5 * * *"
+    # 是否在检测到更新后自动下载覆盖（true=自动更新，false=仅通知主人）
+    autoUpdate: true
+    # 自动更新后是否重启云崽（代码更新后需要重启生效，建议设为 true）
+    autoRestart: true
+
+  # ---------- 主图库更新设置 ----------
+  mainGallery:
+    # 是否启用主图库的自动检查更新
+    enabled: true
+    # 自动检查更新的 cron 表达式（默认每天 5:20）
+    cron: "0 20 5 * * *"
+    # 是否在检测到更新后自动执行 git pull
+    autoUpdate: true
+    # 自动更新后是否重启云崽（主图库更新一般无需重启，设为 false）
+    autoRestart: false
+
+  # ---------- 屏蔽图库更新设置 ----------
+  blockedGallery:
+    # 是否启用屏蔽图库的自动检查更新
+    enabled: true
+    # 自动检查更新的 cron 表达式（默认每天 5:40）
+    cron: "0 40 5 * * *"
+    # 是否在检测到更新后自动执行 git pull
+    autoUpdate: true
+    # 自动更新后是否重启云崽（屏蔽图库更新无需重启，设为 false）
+    autoRestart: false
