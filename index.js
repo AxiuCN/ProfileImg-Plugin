@@ -1,5 +1,20 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import { promisify } from 'util'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const configDir = path.join(__dirname, 'config')
+const configFile = path.join(configDir, 'config.yaml')
+const exampleFile = path.join(configDir, 'config.yaml.example')
+
+// 仅在配置文件不存在时，从 example 复制一份
+if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
+  fs.copyFileSync(exampleFile, configFile)
+  logger.info('[ProfileImg-Plugin] 已从 config.yaml.example 创建配置文件')
+}
 
 const readdir = promisify(fs.readdir)
 
