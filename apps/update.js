@@ -1,11 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 import {
-  checkGallery, checkBlockedGallery,
-  gitExec, gitExecBlocked,
-  getRemoteSha, getRemoteShaBlocked,
-  forceResetToRemote, forceResetBlocked,
-  notifyMaster, getPluginConfig
+  checkGallery,
+  checkBlockedGallery,
+  gitExec,
+  gitExecBlocked,
+  getRemoteSha,
+  getRemoteShaBlocked,
+  forceResetToRemote,
+  forceResetBlocked,
+  notifyMaster,
+  getPluginConfig
 } from './utils.js'
 
 export class Update extends plugin {
@@ -31,6 +37,7 @@ export class Update extends plugin {
     this._registerCronTasks()
   }
 
+  // 根据配置注册定时任务
   _registerCronTasks() {
     const config = getPluginConfig()
     const updateCfg = config?.update || {}
@@ -83,12 +90,13 @@ export class Update extends plugin {
   async forceUpdateSelf(e) {
     e.reply('[面板图图库管理器] 开始强制更新管理器自身...')
     try {
-      const remoteUrl = this._getPluginRemoteUrl()
-      const localPath = path.join(process.cwd(), 'plugins/example/面板图图库管理器.js')
-      const res = await fetch(remoteUrl)
-      if (!res.ok) throw new Error('下载失败，HTTP ' + res.status)
-      const remoteCode = await res.text()
-      fs.writeFileSync(localPath, remoteCode, 'utf8')
+      const pluginDir = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
+      // 强制重置到远程 main 分支（丢弃本地修改）
+      execSync('git fetch --all && git reset --hard @{u}', {
+        cwd: pluginDir,
+        encoding: 'utf8',
+        timeout: 30000
+      })
       e.reply('[面板图图库管理器] 管理器自身已更新到最新版本')
 
       const config = getPluginConfig()
@@ -112,25 +120,45 @@ export class Update extends plugin {
     if (!isManual && selfCfg.enabled === false) return
 
     try {
-      const remoteUrl = this._getPluginRemoteUrl()
-      const localPath = path.join(process.cwd(), 'plugins/example/面板图图库管理器.js')
-      const res = await fetch(remoteUrl)
-      if (!res.ok) throw new Error('下载失败，HTTP ' + res.status)
-      const remoteCode = await res.text()
+      const pluginDir = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 
-      let localCode = ''
-      if (fs.existsSync(localPath)) {
-        localCode = fs.readFileSync(localPath, 'utf8')
-      }
+      // 获取本地当前 HEAD 短哈希
+      let localSha = ''
+      try {
+        localSha = execSync('git rev-parse --short HEAD', {
+          cwd: pluginDir,
+          encoding: 'utf8',
+          timeout: 10000
+        }).trim()
+      } catch (e) { /* 可能是未初始化的 Git 仓库，忽略 */ }
 
-      if (remoteCode.trim() === localCode.trim()) {
+      // 获取远程 main 分支最新短哈希
+      let remoteSha = ''
+      try {
+        execSync('git fetch origin main', {
+          cwd: pluginDir,
+          encoding: 'utf8',
+          timeout: 30000
+        })
+        remoteSha = execSync('git rev-parse --short origin/main', {
+          cwd: pluginDir,
+          encoding: 'utf8',
+          timeout: 10000
+        }).trim()
+      } catch (e) { /* 网络或仓库问题，忽略 */ }
+
+      if (localSha && remoteSha && localSha === remoteSha) {
         if (isManual) this.e?.reply('[面板图图库管理器] 管理器自身已是最新版本')
         logger.info('[面板图图库管理器] 自身已是最新版本')
         return
       }
 
       if (selfCfg.autoUpdate !== false || isManual) {
-        fs.writeFileSync(localPath, remoteCode, 'utf8')
+        execSync('git pull origin main', {
+          cwd: pluginDir,
+          encoding: 'utf8',
+          timeout: 30000
+        })
         if (isManual) this.e?.reply('[面板图图库管理器] 管理器自身已更新到最新版本')
         else notifyMaster('[面板图图库管理器] 管理器自身已自动更新至最新版本')
         logger.info('[面板图图库管理器] 自身更新成功')
@@ -149,10 +177,6 @@ export class Update extends plugin {
       if (isManual) throw err
       else notifyMaster('[面板图图库管理器] 自身更新失败: ' + (err.message || '未知错误'))
     }
-  }
-
-  _getPluginRemoteUrl() {
-    return 'https://raw.githubusercontent.com/AxiuCN/Yunzai_JS_Plugins/main/%E9%9D%A2%E6%9D%BF%E5%9B%BE%E5%9B%BE%E5%BA%93%E7%AE%A1%E7%90%86%E5%99%A8.js'
   }
 
   // ==================== 主图库更新 ====================
