@@ -130,31 +130,33 @@ export class Update extends plugin {
           encoding: 'utf8',
           timeout: 10000
         }).trim()
-      } catch (e) { /* 可能是未初始化的 Git 仓库，忽略 */ }
+      } catch (e) { /* 忽略 */ }
 
-      // 获取远程 main 分支最新短哈希
+      // 获取远程 master 分支最新短哈希
       let remoteSha = ''
       try {
-        execSync('git fetch origin main', {
+        execSync('git fetch origin master', {
           cwd: pluginDir,
           encoding: 'utf8',
           timeout: 30000
         })
-        remoteSha = execSync('git rev-parse --short origin/main', {
+        remoteSha = execSync('git rev-parse --short origin/master', {
           cwd: pluginDir,
           encoding: 'utf8',
           timeout: 10000
         }).trim()
-      } catch (e) { /* 网络或仓库问题，忽略 */ }
+      } catch (e) { /* 忽略 */ }
 
+      // 版本一致则无需更新
       if (localSha && remoteSha && localSha === remoteSha) {
         if (isManual) this.e?.reply('[面板图图库管理器] 管理器自身已是最新版本')
         logger.info('[面板图图库管理器] 自身已是最新版本')
         return
       }
 
+      // 执行更新
       if (selfCfg.autoUpdate !== false || isManual) {
-        execSync('git pull origin main', {
+        execSync('git pull origin master', {
           cwd: pluginDir,
           encoding: 'utf8',
           timeout: 30000
