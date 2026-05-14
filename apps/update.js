@@ -37,39 +37,41 @@ export class Update extends plugin {
     this._registerCronTasks()
   }
 
-  // 根据配置注册定时任务
   _registerCronTasks() {
     const config = getPluginConfig()
     const updateCfg = config?.update || {}
     const tasks = []
 
+    // 插件自身自动更新（5:00）
+    const selfCfg = updateCfg.pluginSelf || {}
+    if (selfCfg.enabled !== false) {
+      tasks.push({
+        name: '管理器自身自动更新',
+        cron: selfCfg.cron || '0 5 * * *',
+        fnc: this.autoCheckSelf.bind(this),
+        log: false
+      })
+    }
+
+    // 主图库自动更新（5:20）
     const mainCfg = updateCfg.mainGallery || {}
     if (mainCfg.enabled !== false) {
       tasks.push({
         name: '主图库自动检查更新',
-        cron: mainCfg.cron || '0 30 6 * * *',
+        cron: mainCfg.cron || '20 5 * * *',
         fnc: this.autoCheckMain.bind(this),
         log: true
       })
     }
 
+    // 屏蔽图库自动更新（5:40）
     const blockedCfg = updateCfg.blockedGallery || {}
     if (blockedCfg.enabled !== false) {
       tasks.push({
         name: '屏蔽图库自动检查更新',
-        cron: blockedCfg.cron || '0 0 8 * * *',
+        cron: blockedCfg.cron || '40 5 * * *',
         fnc: this.autoCheckBlocked.bind(this),
         log: true
-      })
-    }
-
-    const selfCfg = updateCfg.pluginSelf || {}
-    if (selfCfg.enabled !== false) {
-      tasks.push({
-        name: '管理器自身自动更新',
-        cron: selfCfg.cron || '50 5 * * *',
-        fnc: this.autoCheckSelf.bind(this),
-        log: false
       })
     }
 
@@ -130,7 +132,7 @@ export class Update extends plugin {
           encoding: 'utf8',
           timeout: 10000
         }).trim()
-      } catch (e) { /* 忽略 */ }
+      } catch (e) {}
 
       // 获取远程 master 分支最新短哈希
       let remoteSha = ''
@@ -145,7 +147,7 @@ export class Update extends plugin {
           encoding: 'utf8',
           timeout: 10000
         }).trim()
-      } catch (e) { /* 忽略 */ }
+      } catch (e) {}
 
       // 版本一致则无需更新
       if (localSha && remoteSha && localSha === remoteSha) {
@@ -187,7 +189,8 @@ export class Update extends plugin {
     const check = checkGallery()
     if (!check.ok) return e.reply(check.msg)
     try {
-      const result = gitExec('git pull', 30000)
+      // 忽略子模块，避免 blocked-character 状态干扰
+      const result = gitExec('git -c submodule.recurse=false pull --no-recurse-submodules', 30000)
       return e.reply('[面板图图库管理器] 主图库更新成功\n' + (result || 'Already up to date.'))
     } catch (err) {
       const errorMsg = err.stderr || err.stdout || err.message || '未知错误'
@@ -223,7 +226,7 @@ export class Update extends plugin {
 
       if (mainCfg.autoUpdate !== false) {
         try {
-          gitExec('git pull origin main --allow-unrelated-histories', 30000)
+          gitExec('git -c submodule.recurse=false pull origin main --no-recurse-submodules --allow-unrelated-histories', 30000)
           const msg = '[面板图图库管理器] 主图库自动更新成功\n' + localSha + ' -> ' + remoteSha
           notifyMaster(msg)
           logger.info('[面板图图库管理器] 主图库自动更新成功: ' + localSha + ' -> ' + remoteSha)
