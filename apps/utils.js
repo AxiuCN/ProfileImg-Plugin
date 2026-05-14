@@ -102,6 +102,26 @@ export function countImages(dirPath) {
   return count
 }
 
+// ========================= 角色名解析 =========================
+
+/**
+ * 解析角色名，支持别名。优先使用 miao-plugin 的 Character 类。
+ * @param {string} input 用户输入的角色名
+ * @returns {Promise<string>} 官方角色名，若解析失败则返回原输入
+ */
+export async function resolveRoleName(input) {
+  try {
+    const { Character } = await import('#miao.models')
+    const char = Character.get(input)
+    if (char && char.name) {
+      return char.name
+    }
+  } catch (e) {
+    // miao-plugin 不存在或导入失败，降级使用原输入
+  }
+  return input
+}
+
 // ========================= 版本信息 =========================
 
 /** 获取主图库本地版本 */
