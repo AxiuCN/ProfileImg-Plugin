@@ -189,8 +189,7 @@ export class Update extends plugin {
     const check = checkGallery()
     if (!check.ok) return e.reply(check.msg)
     try {
-      // 忽略子模块，避免 blocked-character 状态干扰
-      const result = gitExec('git -c submodule.recurse=false pull --no-recurse-submodules', 30000)
+      const result = gitExec('git pull', 30000)
       return e.reply('[面板图图库管理器] 主图库更新成功\n' + (result || 'Already up to date.'))
     } catch (err) {
       const errorMsg = err.stderr || err.stdout || err.message || '未知错误'
@@ -221,7 +220,7 @@ export class Update extends plugin {
     try {
       const remoteSha = getRemoteSha()
       if (!remoteSha) return
-      const localSha = gitExec('git rev-parse --short HEAD')
+      const localSha = gitExec('git pull')
       if (remoteSha === localSha) return
 
       if (mainCfg.autoUpdate !== false) {
