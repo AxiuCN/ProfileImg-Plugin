@@ -105,20 +105,52 @@ export function countImages(dirPath) {
 // ========================= 角色名解析 =========================
 
 /**
- * 解析角色名，支持别名。优先使用 miao-plugin 的 Character 类。
+ * 解析角色名，支持别名。利用 miao-plugin 的 Meta 模块进行别名查找。
  * @param {string} input 用户输入的角色名
  * @returns {Promise<string>} 官方角色名，若解析失败则返回原输入
  */
 export async function resolveRoleName(input) {
   try {
-    const { Character } = await import('#miao.models')
-    const char = Character.get(input)
-    if (char && char.name) {
-      return char.name
+    // 动态导入 miao-plugin 的 Meta 模块
+    const { default: Meta } = await import('#miao.models')
+
+    // 使用 matchGame 方法跨游戏查找角色
+    const result = Meta.matchGame('gs', 'character', input)
+    if (result && result.data && result.data.name) {
+      logger.debug(`[ProfileImg-Plugin] 别名解析: "${input}" → "${result.data.name}" (${result.game})`)
+      return result.data.name
+    }
+
+    // 如果 matchGame 未找到，尝试直接 getId
+    const id = Meta.getId('gs', 'character', input) || Meta.getId('sr', 'character', input)
+    if (id) {
+      const data = Meta.getData('gs', 'character', id) || Meta.getData('sr', 'character', id)
+      if (data && data.name) {
+        logger.debug(`[ProfileImg-Plugin] 别名解析: "${input}" → "${data.name}"`)
+        return data.name
+      }
     }
   } catch (e) {
-    // miao-plugin 不存在或导入失败，降级使用原输入
+    logger.warn('[ProfileImg-Plugin] Meta 模块导入失败，回退到目录扫描')
   }
+
+  // 降级：目录模糊匹配
+  try {
+    const charDirs = fs.readdirSync(GALLERY_PATH, { withFileTypes: true })
+      .filter(d => d.isDirectory() && d.name !== '.git')
+      .map(d => d.name)
+
+    if (charDirs.includes(input)) return input
+    const lowerInput = input.toLowerCase()
+    const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
+    if (caseMatch) return caseMatch
+    const partialMatches = charDirs.filter(dir => dir.includes(input))
+    if (partialMatches.length === 1) return partialMatches[0]
+  } catch (e) {
+    logger.error('[ProfileImg-Plugin] 目录扫描失败:', e.message)
+  }
+
+  logger.warn(`[ProfileImg-Plugin] 角色名解析失败，使用原始输入: "${input}"`)
   return input
 }
 
