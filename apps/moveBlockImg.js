@@ -21,7 +21,7 @@ export class MoveBlockImg extends plugin {
     const match = rawMsg.match(/^屏蔽(.+)面板图\s*(\d*)$/)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #屏蔽角色名面板图 序号')
     let roleName = match[1].trim()
-    roleName = await resolveRoleName(roleName)
+    roleName = resolveRoleName(roleName)
     const idx = parseInt(match[2]) || 1
     const mainDir = getMainDir(roleName)
     const blockedDir = getBlockedDir(roleName)
@@ -51,7 +51,7 @@ export class MoveBlockImg extends plugin {
     const match = rawMsg.match(/^启用(.+?)(屏蔽)?面板图\s*(\d*)$/)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
     let roleName = match[1].trim()
-    roleName = await resolveRoleName(roleName)
+    roleName = resolveRoleName(roleName)
     const idx = parseInt(match[3]) || 1
     const blockedDir = getBlockedDir(roleName)
     const mainDir = getMainDir(roleName)

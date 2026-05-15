@@ -18,7 +18,7 @@ export class ProfileImgList extends plugin {
   async blockedImgList(e) {
     let roleName = e.msg.replace(/^#/, '').replace(/面板图屏蔽列表$/, '').trim()
     if (!roleName) return e.reply('[面板图图库管理器]\n请输入正确的角色名')
-    roleName = await resolveRoleName(roleName)
+    roleName = resolveRoleName(roleName)
     const blockedDir = getBlockedDir(roleName)
     if (!fs.existsSync(blockedDir)) return e.reply(`[面板图图库管理器]\n角色「${roleName}」暂无屏蔽面板图`)
     const imgFiles = fs.readdirSync(blockedDir).filter(file => /\.(webp|png|jpg|jpeg|gif)$/i.test(file))

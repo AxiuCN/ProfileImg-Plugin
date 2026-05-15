@@ -102,53 +102,68 @@ export function countImages(dirPath) {
   return count
 }
 
-// ========================= 角色名解析 =========================
+// ========================= 别名解析 =========================
+
+// 别名映射表，启动时从 miao-plugin 的 alias.js 构建
+let ALIAS_MAP = new Map()
+
+function buildAliasMap() {
+  const aliasFiles = [
+    path.join(process.cwd(), 'plugins/miao-plugin/resources/meta-gs/character/alias.js'),
+    path.join(process.cwd(), 'plugins/miao-plugin/resources/meta-sr/character/alias.js')
+  ]
+  for (const file of aliasFiles) {
+    if (!fs.existsSync(file)) continue
+    try {
+      const content = fs.readFileSync(file, 'utf8')
+      const match = content.match(/export const alias = \{([^}]+)\}/s)
+      if (!match) continue
+      const aliasBlock = match[1]
+      const lines = aliasBlock.split('\n')
+      for (const line of lines) {
+        const kv = line.match(/^\s*'?(.+?)'?\s*:\s*'([^']+)',?\s*$/)
+        if (!kv) continue
+        const officialName = kv[1].trim()
+        const aliasStr = kv[2].trim()
+        ALIAS_MAP.set(officialName.toLowerCase(), officialName)
+        for (const alias of aliasStr.split(',')) {
+          ALIAS_MAP.set(alias.trim().toLowerCase(), officialName)
+        }
+      }
+    } catch (e) {
+      logger.error('[ProfileImg-Plugin] 解析别名文件失败:', file, e.message)
+    }
+  }
+  logger.info(`[ProfileImg-Plugin] 别名表已加载，共 ${ALIAS_MAP.size} 条记录`)
+}
+
+// 插件初始化时构建别名表
+buildAliasMap()
 
 /**
- * 解析角色名，支持别名。利用 miao-plugin 的 Meta 模块进行别名查找。
+ * 解析角色名，支持别名
  * @param {string} input 用户输入的角色名
- * @returns {Promise<string>} 官方角色名，若解析失败则返回原输入
+ * @returns {string} 官方角色名，若解析失败则返回原输入
  */
-export async function resolveRoleName(input) {
-  try {
-    // 动态导入 miao-plugin 的 Meta 模块
-    const { default: Meta } = await import('#miao.models')
+export function resolveRoleName(input) {
+  // 1. 精确匹配文件夹
+  const charDir = path.join(GALLERY_PATH, input)
+  if (fs.existsSync(charDir)) return input
 
-    // 使用 matchGame 方法跨游戏查找角色
-    const result = Meta.matchGame('gs', 'character', input)
-    if (result && result.data && result.data.name) {
-      logger.debug(`[ProfileImg-Plugin] 别名解析: "${input}" → "${result.data.name}" (${result.game})`)
-      return result.data.name
-    }
+  // 2. 别名表查询
+  const lowerInput = input.toLowerCase()
+  if (ALIAS_MAP.has(lowerInput)) return ALIAS_MAP.get(lowerInput)
 
-    // 如果 matchGame 未找到，尝试直接 getId
-    const id = Meta.getId('gs', 'character', input) || Meta.getId('sr', 'character', input)
-    if (id) {
-      const data = Meta.getData('gs', 'character', id) || Meta.getData('sr', 'character', id)
-      if (data && data.name) {
-        logger.debug(`[ProfileImg-Plugin] 别名解析: "${input}" → "${data.name}"`)
-        return data.name
-      }
-    }
-  } catch (e) {
-    logger.warn('[ProfileImg-Plugin] Meta 模块导入失败，回退到目录扫描')
-  }
-
-  // 降级：目录模糊匹配
+  // 3. 目录模糊匹配（降级）
   try {
     const charDirs = fs.readdirSync(GALLERY_PATH, { withFileTypes: true })
       .filter(d => d.isDirectory() && d.name !== '.git')
       .map(d => d.name)
-
-    if (charDirs.includes(input)) return input
-    const lowerInput = input.toLowerCase()
     const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
     if (caseMatch) return caseMatch
     const partialMatches = charDirs.filter(dir => dir.includes(input))
     if (partialMatches.length === 1) return partialMatches[0]
-  } catch (e) {
-    logger.error('[ProfileImg-Plugin] 目录扫描失败:', e.message)
-  }
+  } catch (e) {}
 
   logger.warn(`[ProfileImg-Plugin] 角色名解析失败，使用原始输入: "${input}"`)
   return input
