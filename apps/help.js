@@ -1,5 +1,5 @@
 import { render } from '../components/render.js'
-import { changelogs } from '../components/Changelog.js'
+import { changelogs } from '../components/pluginVersion.js'
 
 export class Help extends plugin {
   constructor() {
