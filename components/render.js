@@ -3,28 +3,32 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { currentVersion, yunzaiVersion } from './pluginVersion.js'
 
-const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
+const plugin = 'ProfileImg-Plugin'
+const _path = process.cwd()
 
-export async function render(app, tpl, data = {}, imgType = 'png') {
-  data._plugin = 'ProfileImg-Plugin'
-  data._res_path = `../../../../../plugins/ProfileImg-Plugin/resources/`
-  data.pluResPath = data._res_path
-  data.tplFile = path.join(pluginRoot, 'resources', app, `${tpl}.html`)
-  data.saveId = data.saveId || data.save_id || tpl
-  data.imgType = imgType
-
-  if (imgType === 'png') {
+export async function render(app = '', tpl = '', data = {}, imgType = 'jpeg') {
+  data._plugin = plugin
+  data._res_path = `../../../../../plugins/${plugin}/resources/`
+  if (imgType == "png") {
     data.omitBackground = true
   }
+  data.imgType = imgType
+
+  // 对齐 Data.createDir 的行为
+  const dataDir = path.join(_path, 'data', 'html', plugin, app, tpl)
+  fs.mkdirSync(dataDir, { recursive: true })
+
+  data.saveId = data.saveId || data.save_id || tpl
+  data.tplFile = `./plugins/${plugin}/resources/${app}/${tpl}.html`
+  data.pluResPath = data._res_path
   data.pageGotoParams = {
     waitUntil: 'networkidle0'
   }
+
+  // 注入系统版权信息
   data.sys = {
     copyright: `Created By Yunzai-Bot<span class="version">${yunzaiVersion}</span> & ProfileImg-Plugin<span class="version">${currentVersion}</span>`
   }
 
-  const dataDir = path.join(process.cwd(), 'data', 'html', 'ProfileImg-Plugin', app, tpl)
-  fs.mkdirSync(dataDir, { recursive: true })
-
-  return await puppeteer.screenshot(`ProfileImg-Plugin/${app}/${tpl}`, data)
+  return await puppeteer.screenshot(`${plugin}/${app}/${tpl}`, data)
 }
