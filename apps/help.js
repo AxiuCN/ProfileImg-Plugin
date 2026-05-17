@@ -14,7 +14,6 @@ export class Help extends plugin {
   }
 
   async help(e) {
-    e.reply('[面板图图库管理器] 正在生成帮助图片，请稍候...')
     try {
       const helpPath = `${process.cwd()}/plugins/ProfileImg-Plugin/resources/help/help-cfg.js`
       const { helpCfg, helpList } = await import(`file://${helpPath}?t=${Date.now()}`)
