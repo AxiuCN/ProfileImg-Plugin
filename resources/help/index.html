@@ -1,0 +1,29 @@
+{{extend elemLayout}}
+
+{{block 'css'}}
+<link rel="stylesheet" type="text/css" href="{{_res_path}}/help/help.css"/>
+{{/block}}
+
+{{block 'main'}}
+<div class="head-box">
+  <div class="title">{{title}}</div>
+  <div class="subtitle">{{subTitle}}</div>
+</div>
+{{each groups group}}
+<div class="cont-box">
+  <div class="help-group">{{group.group}}</div>
+  <div class="help-table">
+    {{each group.items item}}
+    <div class="tr">
+      <div class="td">
+        <i class="help-icon" style="{{item.iconCss}}"></i>
+        <span class="help-title">{{item.title}}</span>
+        <span class="help-desc">{{item.desc}}</span>
+      </div>
+    </div>
+    {{/each}}
+  </div>
+</div>
+{{/each}}
+<div class="footer">{{@sys.copyright}}</div>
+{{/block}}
