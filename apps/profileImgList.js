@@ -25,7 +25,7 @@ export class ProfileImgList extends plugin {
     const imgFiles = fs.readdirSync(blockedDir).filter(file => /\.(webp|png|jpg|jpeg|gif)$/i.test(file))
     if (imgFiles.length === 0) return e.reply(`[面板图图库管理器]\n角色「${roleName}」的屏蔽文件夹为空`)
     const msgList = []
-    msgList.push({ message: [`当前查看的是${roleName}面板图,共${imgFiles.length}张，可输入【#删除${roleName}面板图(序列号)】进行删除，可输入【#启用${roleName}面板图(序列号)】进行恢复`] })
+    msgList.push({ message: [`当前查看的是${roleName}面板图,共${imgFiles.length}张，可输入【#启用${roleName}面板图(序列号)】进行恢复`] })
     imgFiles.forEach((file, idx) => {
       const imgPath = path.join(blockedDir, file)
       msgList.push({ message: [`${idx + 1}.`, segment.image(`file://${imgPath}`)] })
