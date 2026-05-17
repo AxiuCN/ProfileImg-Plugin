@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
-import { GIT_WORK_DIR, BLOCKED_GALLERY_PATH, MAIN_REPO_URL, BLOCKED_REPO_URL } from './utils.js'
+import { GIT_WORK_DIR, BLOCKED_GALLERY_PATH, MAIN_REPO_URL, BLOCKED_REPO_URL } from '../components/constants.js'
 
 async function installGallery(repoUrl, targetDir, label, updateCmd) {
   if (fs.existsSync(targetDir) && fs.existsSync(path.join(targetDir, '.git'))) {

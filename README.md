@@ -7,11 +7,13 @@
 > Github
 ```bash 
 git clone --depth=1 https://github.com/AxiuCN/ProfileImg-Plugin ./plugins/ProfileImg-Plugin/
+pnpm install -P
 ```
 
 > Gitee
 ```bash 
 git clone --depth=1 https://gitee.com/AxiuCN/ProfileImg-Plugin ./plugins/ProfileImg-Plugin/
+pnpm install -P
 ```
 
 ## 面板图图库管理器

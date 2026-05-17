@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getMainDir, getBlockedDir, resolveRoleName } from './utils.js'
+import { getMainDir, getBlockedDir } from '../components/blockedInfo.js'
+import { resolveRoleName } from '../components/alias.js'
 
 export class MoveBlockImg extends plugin {
   constructor() {

@@ -1,18 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
-import {
-  checkGallery,
-  checkBlockedGallery,
-  gitExec,
-  gitExecBlocked,
-  getRemoteSha,
-  getRemoteShaBlocked,
-  forceResetToRemote,
-  forceResetBlocked,
-  notifyMaster,
-  getPluginConfig
-} from './utils.js'
+import { checkGallery, checkBlockedGallery } from '../components/gallery.js'
+import { gitExec, gitExecBlocked, getRemoteSha, getRemoteShaBlocked, forceResetToRemote, forceResetBlocked } from '../components/git.js'
+import { notifyMaster } from '../components/notify.js'
+import { getPluginConfig } from '../components/config.js'
 
 export class Update extends plugin {
   constructor() {

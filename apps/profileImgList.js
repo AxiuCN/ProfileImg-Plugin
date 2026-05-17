@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getBlockedDir, resolveRoleName } from './utils.js'
+import { getBlockedDir } from '../components/blockedInfo.js'
+import { resolveRoleName } from '../components/alias.js'
 
 export class ProfileImgList extends plugin {
   constructor() {

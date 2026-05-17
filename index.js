@@ -3,6 +3,9 @@ import path from 'node:path'
 import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 
+// 导入别名构建函数
+import { buildAliasMap } from './components/alias.js'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -15,6 +18,9 @@ if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
   fs.copyFileSync(exampleFile, configFile)
   logger.info('[ProfileImg-Plugin] 已从 config.yaml.example 创建配置文件')
 }
+
+// 构建别名表（在加载 apps 之前完成）
+buildAliasMap()
 
 const readdir = promisify(fs.readdir)
 
