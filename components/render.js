@@ -1,6 +1,6 @@
 import puppeteer from '../../../lib/puppeteer/puppeteer.js'
 import path from 'node:path'
-import { currentVersion, yunzaiVersion } from './Changelog.js'
+import { currentVersion, yunzaiVersion } from './pluginVersion.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 
