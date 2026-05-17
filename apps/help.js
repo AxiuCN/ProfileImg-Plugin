@@ -1,5 +1,4 @@
 import { render } from '../components/render.js'
-import { changelogs } from '../components/pluginVersion.js'
 
 export class Help extends plugin {
   constructor() {
@@ -9,8 +8,7 @@ export class Help extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: '^#图库帮助$', fnc: 'help' },
-        { reg: '^#图库版本$', fnc: 'versionInfo' }
+        { reg: '^#图库帮助$', fnc: 'help' }
       ]
     })
   }
@@ -47,17 +45,6 @@ export class Help extends plugin {
     } catch (err) {
       logger.error('[面板图图库管理器] 帮助图生成失败:', err)
       return e.reply('[面板图图库管理器] 帮助图生成失败，请重试。')
-    }
-  }
-
-  async versionInfo(e) {
-    e.reply('[面板图图库管理器] 正在生成版本信息，请稍候...')
-    try {
-      const base64 = await render('help', 'version-info', { changelogs }, 'png')
-      return e.reply(segment.image(`base64://${base64}`))
-    } catch (err) {
-      logger.error('[面板图图库管理器] 版本信息生成失败:', err)
-      return e.reply('[面板图图库管理器] 版本信息生成失败，请重试。')
     }
   }
 }
