@@ -1,28 +1,44 @@
-{{extend elemLayout}}
+{{extend defaultLayout}}
 
 {{block 'css'}}
 <link rel="stylesheet" type="text/css" href="{{_res_path}}/help/index.css"/>
+<% style = style.replace(/{{_res_path}}/g, _res_path) %>
+{{@style}}
 {{/block}}
 
 {{block 'main'}}
-<div class="head-box">
-  <div class="title">{{title}}</div>
-  <div class="subtitle">{{subTitle}}</div>
+
+<div class="info-box">
+  <div class="head-box type{{bgType}}">
+    <div class="title">{{helpCfg.title||"使用帮助"}}</div>
+    <div class="label">{{helpCfg.subTitle || "Yunzai-Bot & Miao-Plugin"}}</div>
+  </div>
 </div>
-{{each groups group}}
+
+{{each helpGroup group}}
+{{set len = group?.list?.length || 0 }}
 <div class="cont-box">
   <div class="help-group">{{group.group}}</div>
+  {{if len > 0}}
   <div class="help-table">
-    {{each group.items item}}
     <div class="tr">
+      {{each group.list help idx}}
       <div class="td">
-        <i class="help-icon" style="{{item.iconCss}}"></i>
-        <span class="help-title">{{item.title}}</span>
-        <span class="help-desc">{{item.desc}}</span>
+        <span class="help-icon" style="{{help.css}}"></span>
+        <strong class="help-title">{{help.title}}</strong>
+        <span class="help-desc">{{help.desc}}</span>
       </div>
+      {{if idx%colCount === colCount-1 && idx>0 && idx< len-1}}
     </div>
-    {{/each}}
+    <div class="tr">
+      {{/if}}
+      {{/each}}
+      <% for(let i=(len-1)%colCount; i< colCount-1 ; i++){ %>
+      <div class="td"></div>
+      <% } %>
+    </div>
   </div>
+  {{/if}}
 </div>
 {{/each}}
 {{/block}}
