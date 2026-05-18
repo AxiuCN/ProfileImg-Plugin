@@ -6,6 +6,9 @@ import { currentVersion, yunzaiVersion } from './pluginVersion.js'
 const plugin = 'ProfileImg-Plugin'
 const _path = process.cwd()
 
+data.elemLayout = path.join(pluginRoot, 'resources', 'common', 'layout', 'elem.html')
+data.defaultLayout = path.join(pluginRoot, 'resources', 'common', 'layout', 'default.html')
+
 export async function render(app = '', tpl = '', data = {}, imgType = 'jpeg') {
   data._plugin = plugin
   data._res_path = `../../../../../plugins/${plugin}/resources/`

@@ -1,7 +1,8 @@
 body {
   transform: scale(1);
   width: 830px;
-  background: url("../common/theme/bg-01.jpg");
+  background: url("../common/theme/bg-01.jpg") no-repeat;
+  background-size: cover;
 }
 
 .container {
@@ -13,17 +14,17 @@ body {
 .head-box {
   margin: 60px 0 0 0;
   padding-bottom: 0;
-}
 
-.head-box .title {
-  font-size: 50px;
-  color: #ceb78b;
-}
+  .title {
+    font-size: 50px;
+    color: #ceb78b;
+  }
 
-.head-box .subtitle {
-  font-size: 18px;
-  color: #888;
-  margin-top: 5px;
+  .subtitle {
+    font-size: 18px;
+    color: #888;
+    margin-top: 5px;
+  }
 }
 
 .cont-box {
@@ -53,29 +54,29 @@ body {
   overflow: hidden;
   width: calc(100% + 30px);
   color: #fff;
-}
 
-.help-table .tr {
-  display: table-row;
-}
+  .tr {
+    display: table-row;
+  }
 
-.help-table .td {
-  font-size: 14px;
-  display: table-cell;
-  box-shadow: 0 0 1px 0 #888 inset;
-  padding: 12px 0 12px 50px;
-  line-height: 24px;
-  position: relative;
-  width: 50%;
-  text-align: left;
-}
+  .td {
+    font-size: 14px;
+    display: table-cell;
+    box-shadow: 0 0 1px 0 #888 inset;
+    padding: 12px 0 12px 50px;
+    line-height: 24px;
+    position: relative;
+    width: 50%;
+    text-align: left;
+  }
 
-.help-table .tr:nth-child(odd) {
-  background: rgba(34, 41, 51, 0.6);
-}
+  .tr:nth-child(odd) {
+    background: rgba(34, 41, 51, 0.6);
+  }
 
-.help-table .tr:nth-child(even) {
-  background: rgba(34, 41, 51, 0.3);
+  .tr:nth-child(even) {
+    background: rgba(34, 41, 51, 0.3);
+  }
 }
 
 .help-icon {
@@ -103,12 +104,4 @@ body {
   font-size: 13px;
   line-height: 18px;
   color: #eee;
-}
-
-.footer {
-  text-align: center;
-  font-size: 12px;
-  color: #888;
-  margin-top: 20px;
-  padding: 10px;
 }
