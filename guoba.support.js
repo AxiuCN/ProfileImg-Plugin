@@ -1,11 +1,101 @@
-import fs from 'fs'
-import path from 'path'
+import fs from 'node:fs'
+import path from 'node:path'
 import YAML from 'yaml'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
 const configExamplePath = path.join(pluginRoot, 'config', 'config.yaml.example')
 
+// ==================== 配置管理器 ====================
+class Config {
+  getConfig() {
+    try {
+      if (!fs.existsSync(configPath)) {
+        return this.getDefault()
+      }
+      return YAML.parse(fs.readFileSync(configPath, 'utf8')) || this.getDefault()
+    } catch (e) {
+      logger.error('[ProfileImg-Plugin] 读取配置失败:', e)
+      return this.getDefault()
+    }
+  }
+
+  getDefault() {
+    // 从 config.yaml.example 读取默认配置
+    if (fs.existsSync(configExamplePath)) {
+      try {
+        const raw = fs.readFileSync(configExamplePath, 'utf8')
+        return YAML.parse(raw) || {}
+      } catch (e) {
+        logger.error('[ProfileImg-Plugin] 读取默认配置失败:', e)
+      }
+    }
+    return {
+      update: {
+        pluginSelf: { enabled: true, cron: '0 5 * * *', autoUpdate: true, autoRestart: true },
+        mainGallery: { enabled: true, cron: '20 5 * * *', autoUpdate: true, autoRestart: false },
+        blockedGallery: { enabled: true, cron: '40 5 * * *', autoUpdate: true, autoRestart: false }
+      }
+    }
+  }
+
+  setConfig(data) {
+    try {
+      const dirPath = path.dirname(configPath)
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true })
+      }
+
+      const merged = this.getConfig()
+      merged.update = merged.update || {}
+
+      // 合并三个更新模块的配置
+      for (const module of ['pluginSelf', 'mainGallery', 'blockedGallery']) {
+        merged.update[module] = merged.update[module] || {}
+        merged.update[module].enabled = data[`${module}.enabled`]
+        merged.update[module].cron = data[`${module}.cron`]
+        merged.update[module].autoUpdate = data[`${module}.autoUpdate`]
+        merged.update[module].autoRestart = data[`${module}.autoRestart`]
+      }
+
+      // 生成带注释的配置文件内容（借鉴 MCTool 的模板化方式）
+      const content = `# ProfileImg-Plugin 配置文件
+# 修改后保存即可，无需重启机器人（定时任务下次执行时自动读取最新配置）
+
+update:
+  # ---------- 插件自身更新设置 ----------
+  pluginSelf:
+    enabled: ${merged.update.pluginSelf.enabled}          # 是否启用插件自身自动检查更新
+    cron: "${merged.update.pluginSelf.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:00）
+    autoUpdate: ${merged.update.pluginSelf.autoUpdate}    # 是否在检测到更新后自动下载覆盖
+    autoRestart: ${merged.update.pluginSelf.autoRestart}  # 自动更新后是否重启云崽
+
+  # ---------- 主图库更新设置 ----------
+  mainGallery:
+    enabled: ${merged.update.mainGallery.enabled}          # 是否启用主图库自动检查更新
+    cron: "${merged.update.mainGallery.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:20）
+    autoUpdate: ${merged.update.mainGallery.autoUpdate}    # 是否在检测到更新后自动执行 git pull
+    autoRestart: ${merged.update.mainGallery.autoRestart}  # 自动更新后是否重启云崽
+
+  # ---------- 屏蔽图库更新设置 ----------
+  blockedGallery:
+    enabled: ${merged.update.blockedGallery.enabled}          # 是否启用屏蔽图库自动检查更新
+    cron: "${merged.update.blockedGallery.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:40）
+    autoUpdate: ${merged.update.blockedGallery.autoUpdate}    # 是否在检测到更新后自动执行 git pull
+    autoRestart: ${merged.update.blockedGallery.autoRestart}  # 自动更新后是否重启云崽
+`
+      fs.writeFileSync(configPath, content, 'utf8')
+      return true
+    } catch (e) {
+      logger.error('[ProfileImg-Plugin] 保存配置失败:', e)
+      return false
+    }
+  }
+}
+
+const config = new Config()
+
+// ==================== 锅巴支持模块 ====================
 export function supportGuoba() {
   return {
     pluginInfo: {
@@ -38,9 +128,7 @@ export function supportGuoba() {
           label: '检查时间 (cron)',
           bottomHelpMessage: 'cron 表达式，默认 0 5 * * * (每天5:00)',
           component: 'Input',
-          componentProps: {
-            placeholder: '0 5 * * *'
-          }
+          componentProps: { placeholder: '0 5 * * *' }
         },
         {
           field: 'pluginSelf.autoUpdate',
@@ -54,7 +142,6 @@ export function supportGuoba() {
           bottomHelpMessage: '自动更新后是否重启云崽',
           component: 'Switch'
         },
-
         // ==================== 主图库更新 ====================
         {
           label: '主图库更新',
@@ -71,9 +158,7 @@ export function supportGuoba() {
           label: '检查时间 (cron)',
           bottomHelpMessage: 'cron 表达式，默认 20 5 * * * (每天5:20)',
           component: 'Input',
-          componentProps: {
-            placeholder: '20 5 * * *'
-          }
+          componentProps: { placeholder: '20 5 * * *' }
         },
         {
           field: 'mainGallery.autoUpdate',
@@ -87,7 +172,6 @@ export function supportGuoba() {
           bottomHelpMessage: '自动更新后是否重启云崽',
           component: 'Switch'
         },
-
         // ==================== 屏蔽图库更新 ====================
         {
           label: '屏蔽图库更新',
@@ -104,9 +188,7 @@ export function supportGuoba() {
           label: '检查时间 (cron)',
           bottomHelpMessage: 'cron 表达式，默认 40 5 * * * (每天5:40)',
           component: 'Input',
-          componentProps: {
-            placeholder: '40 5 * * *'
-          }
+          componentProps: { placeholder: '40 5 * * *' }
         },
         {
           field: 'blockedGallery.autoUpdate',
@@ -122,69 +204,29 @@ export function supportGuoba() {
         },
       ],
       getConfigData() {
-        try {
-          if (fs.existsSync(configPath)) {
-            const raw = fs.readFileSync(configPath, 'utf8')
-            const full = YAML.parse(raw) || {}
-            const update = full.update || {}
-            // 平铺字段为 schema 需要的 field 格式
-            return {
-              'pluginSelf.enabled': update.pluginSelf?.enabled,
-              'pluginSelf.cron': update.pluginSelf?.cron,
-              'pluginSelf.autoUpdate': update.pluginSelf?.autoUpdate,
-              'pluginSelf.autoRestart': update.pluginSelf?.autoRestart,
-              'mainGallery.enabled': update.mainGallery?.enabled,
-              'mainGallery.cron': update.mainGallery?.cron,
-              'mainGallery.autoUpdate': update.mainGallery?.autoUpdate,
-              'mainGallery.autoRestart': update.mainGallery?.autoRestart,
-              'blockedGallery.enabled': update.blockedGallery?.enabled,
-              'blockedGallery.cron': update.blockedGallery?.cron,
-              'blockedGallery.autoUpdate': update.blockedGallery?.autoUpdate,
-              'blockedGallery.autoRestart': update.blockedGallery?.autoRestart,
-            }
-          }
-        } catch (e) {
-          logger.error('[ProfileImg-Plugin] guoba 读取配置失败:', e)
+        const cfg = config.getConfig()
+        const update = cfg.update || {}
+        return {
+          'pluginSelf.enabled': update.pluginSelf?.enabled,
+          'pluginSelf.cron': update.pluginSelf?.cron,
+          'pluginSelf.autoUpdate': update.pluginSelf?.autoUpdate,
+          'pluginSelf.autoRestart': update.pluginSelf?.autoRestart,
+          'mainGallery.enabled': update.mainGallery?.enabled,
+          'mainGallery.cron': update.mainGallery?.cron,
+          'mainGallery.autoUpdate': update.mainGallery?.autoUpdate,
+          'mainGallery.autoRestart': update.mainGallery?.autoRestart,
+          'blockedGallery.enabled': update.blockedGallery?.enabled,
+          'blockedGallery.cron': update.blockedGallery?.cron,
+          'blockedGallery.autoUpdate': update.blockedGallery?.autoUpdate,
+          'blockedGallery.autoRestart': update.blockedGallery?.autoRestart,
         }
-        return {}
       },
       setConfigData(data, { Result }) {
-        try {
-          // 读取原有配置（保留非 update 部分）
-          let full = {}
-          if (fs.existsSync(configPath)) {
-            const raw = fs.readFileSync(configPath, 'utf8')
-            full = YAML.parse(raw) || {}
-          } else if (fs.existsSync(configExamplePath)) {
-            const raw = fs.readFileSync(configExamplePath, 'utf8')
-            full = YAML.parse(raw) || {}
-          }
-          full.update = full.update || {}
-          // 将锅巴表单的平铺字段写回嵌套结构
-          full.update.pluginSelf = full.update.pluginSelf || {}
-          full.update.pluginSelf.enabled = data['pluginSelf.enabled']
-          full.update.pluginSelf.cron = data['pluginSelf.cron']
-          full.update.pluginSelf.autoUpdate = data['pluginSelf.autoUpdate']
-          full.update.pluginSelf.autoRestart = data['pluginSelf.autoRestart']
-
-          full.update.mainGallery = full.update.mainGallery || {}
-          full.update.mainGallery.enabled = data['mainGallery.enabled']
-          full.update.mainGallery.cron = data['mainGallery.cron']
-          full.update.mainGallery.autoUpdate = data['mainGallery.autoUpdate']
-          full.update.mainGallery.autoRestart = data['mainGallery.autoRestart']
-
-          full.update.blockedGallery = full.update.blockedGallery || {}
-          full.update.blockedGallery.enabled = data['blockedGallery.enabled']
-          full.update.blockedGallery.cron = data['blockedGallery.cron']
-          full.update.blockedGallery.autoUpdate = data['blockedGallery.autoUpdate']
-          full.update.blockedGallery.autoRestart = data['blockedGallery.autoRestart']
-
-          fs.writeFileSync(configPath, YAML.stringify(full), 'utf8')
+        const success = config.setConfig(data)
+        if (success) {
           return Result.ok({}, '保存成功~')
-        } catch (e) {
-          logger.error('[ProfileImg-Plugin] guoba 保存配置失败:', e)
-          return Result.error(e.message || '保存失败')
         }
+        return Result.error('保存失败')
       }
     }
   }
