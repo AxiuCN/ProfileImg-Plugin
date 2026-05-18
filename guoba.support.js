@@ -21,11 +21,9 @@ class Config {
   }
 
   getDefault() {
-    // 从 config.yaml.example 读取默认配置
     if (fs.existsSync(configExamplePath)) {
       try {
-        const raw = fs.readFileSync(configExamplePath, 'utf8')
-        return YAML.parse(raw) || {}
+        return YAML.parse(fs.readFileSync(configExamplePath, 'utf8')) || {}
       } catch (e) {
         logger.error('[ProfileImg-Plugin] 读取默认配置失败:', e)
       }
@@ -49,7 +47,6 @@ class Config {
       const merged = this.getConfig()
       merged.update = merged.update || {}
 
-      // 合并三个更新模块的配置
       for (const module of ['pluginSelf', 'mainGallery', 'blockedGallery']) {
         merged.update[module] = merged.update[module] || {}
         merged.update[module].enabled = data[`${module}.enabled`]
@@ -58,31 +55,32 @@ class Config {
         merged.update[module].autoRestart = data[`${module}.autoRestart`]
       }
 
-      // 生成带注释的配置文件内容（借鉴 MCTool 的模板化方式）
+      // 生成带注释的配置文件
+      const u = merged.update
       const content = `# ProfileImg-Plugin 配置文件
-# 修改后保存即可，无需重启机器人（定时任务下次执行时自动读取最新配置）
+# 修改后保存即可，无需重启机器人
 
 update:
   # ---------- 插件自身更新设置 ----------
   pluginSelf:
-    enabled: ${merged.update.pluginSelf.enabled}          # 是否启用插件自身自动检查更新
-    cron: "${merged.update.pluginSelf.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:00）
-    autoUpdate: ${merged.update.pluginSelf.autoUpdate}    # 是否在检测到更新后自动下载覆盖
-    autoRestart: ${merged.update.pluginSelf.autoRestart}  # 自动更新后是否重启云崽
+    enabled: ${u.pluginSelf.enabled}
+    cron: "${u.pluginSelf.cron}"
+    autoUpdate: ${u.pluginSelf.autoUpdate}
+    autoRestart: ${u.pluginSelf.autoRestart}
 
   # ---------- 主图库更新设置 ----------
   mainGallery:
-    enabled: ${merged.update.mainGallery.enabled}          # 是否启用主图库自动检查更新
-    cron: "${merged.update.mainGallery.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:20）
-    autoUpdate: ${merged.update.mainGallery.autoUpdate}    # 是否在检测到更新后自动执行 git pull
-    autoRestart: ${merged.update.mainGallery.autoRestart}  # 自动更新后是否重启云崽
+    enabled: ${u.mainGallery.enabled}
+    cron: "${u.mainGallery.cron}"
+    autoUpdate: ${u.mainGallery.autoUpdate}
+    autoRestart: ${u.mainGallery.autoRestart}
 
   # ---------- 屏蔽图库更新设置 ----------
   blockedGallery:
-    enabled: ${merged.update.blockedGallery.enabled}          # 是否启用屏蔽图库自动检查更新
-    cron: "${merged.update.blockedGallery.cron}"              # 自动检查更新的 cron 表达式（默认每天 5:40）
-    autoUpdate: ${merged.update.blockedGallery.autoUpdate}    # 是否在检测到更新后自动执行 git pull
-    autoRestart: ${merged.update.blockedGallery.autoRestart}  # 自动更新后是否重启云崽
+    enabled: ${u.blockedGallery.enabled}
+    cron: "${u.blockedGallery.cron}"
+    autoUpdate: ${u.blockedGallery.autoUpdate}
+    autoRestart: ${u.blockedGallery.autoRestart}
 `
       fs.writeFileSync(configPath, content, 'utf8')
       return true
@@ -125,10 +123,14 @@ export function supportGuoba() {
         },
         {
           field: 'pluginSelf.cron',
-          label: '检查时间 (cron)',
-          bottomHelpMessage: 'cron 表达式，默认 0 5 * * * (每天5:00)',
-          component: 'Input',
-          componentProps: { placeholder: '0 5 * * *' }
+          label: '检查时间',
+          helpMessage: '使用可视化界面配置 cron 表达式，默认每天 5:00',
+          component: 'EasyCron',
+          required: true,
+          componentProps: {
+            defaultValue: '0 5 * * *',
+            placeholder: '0 5 * * *'
+          }
         },
         {
           field: 'pluginSelf.autoUpdate',
@@ -142,6 +144,7 @@ export function supportGuoba() {
           bottomHelpMessage: '自动更新后是否重启云崽',
           component: 'Switch'
         },
+
         // ==================== 主图库更新 ====================
         {
           label: '主图库更新',
@@ -155,10 +158,14 @@ export function supportGuoba() {
         },
         {
           field: 'mainGallery.cron',
-          label: '检查时间 (cron)',
-          bottomHelpMessage: 'cron 表达式，默认 20 5 * * * (每天5:20)',
-          component: 'Input',
-          componentProps: { placeholder: '20 5 * * *' }
+          label: '检查时间',
+          helpMessage: '使用可视化界面配置 cron 表达式，默认每天 5:20',
+          component: 'EasyCron',
+          required: true,
+          componentProps: {
+            defaultValue: '20 5 * * *',
+            placeholder: '20 5 * * *'
+          }
         },
         {
           field: 'mainGallery.autoUpdate',
@@ -172,6 +179,7 @@ export function supportGuoba() {
           bottomHelpMessage: '自动更新后是否重启云崽',
           component: 'Switch'
         },
+
         // ==================== 屏蔽图库更新 ====================
         {
           label: '屏蔽图库更新',
@@ -185,10 +193,14 @@ export function supportGuoba() {
         },
         {
           field: 'blockedGallery.cron',
-          label: '检查时间 (cron)',
-          bottomHelpMessage: 'cron 表达式，默认 40 5 * * * (每天5:40)',
-          component: 'Input',
-          componentProps: { placeholder: '40 5 * * *' }
+          label: '检查时间',
+          helpMessage: '使用可视化界面配置 cron 表达式，默认每天 5:40',
+          component: 'EasyCron',
+          required: true,
+          componentProps: {
+            defaultValue: '40 5 * * *',
+            placeholder: '40 5 * * *'
+          }
         },
         {
           field: 'blockedGallery.autoUpdate',
