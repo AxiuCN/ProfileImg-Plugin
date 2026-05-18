@@ -1,12 +1,19 @@
 body {
   transform: scale(1);
   width: 830px;
-  background: url("../common/theme/bg-01.jpg");
+  /* 移除 background 相关属性 */
 }
 .container {
-  background: url(../common/theme/main-01.png) top left no-repeat;
-  background-size: 100% auto;
   width: 830px;
+  background: url("../common/theme/bg-01.jpg") no-repeat;
+  background-size: cover; /* 或 100% auto，按你喜欢 */
+  background-position: top left;
+  /* 保留原有 main-01.png 的叠加背景 */
+  background-image: url(../common/theme/main-01.png), url("../common/theme/bg-01.jpg");
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% auto, cover; /* main-01 宽度撑满，bg-01 覆盖全区域 */
+  background-position: top left, top left;
+  /* 原有的其他 .container 属性保持不变 */
 }
 .label {
   font-family: Number, "微软雅黑", sans-serif;
