@@ -1,5 +1,5 @@
 export const helpCfg = {
-  title: '面板图图库管理器',
+  title: '#图库帮助',
   subTitle: 'ProfileImg-Plugin 帮助'
 }
 
