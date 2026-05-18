@@ -18,8 +18,6 @@ export function supportGuoba() {
       isV3: true,
       isV2: false,
       showInMenu: 'auto',
-      icon: 'mdi:image-multiple',
-      iconColor: '#d19f56',
       iconPath: path.join(pluginRoot, 'resources/image/icon.jpg'),
     },
     configInfo: {
