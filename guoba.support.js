@@ -18,7 +18,7 @@ export function supportGuoba() {
       isV3: true,
       isV2: false,
       showInMenu: 'auto',
-      iconPath: path.join(pluginRoot, 'resources/image/icon.jpg'),
+      iconPath: path.join(pluginRoot, 'resources/images/icon.jpg'),
     },
     configInfo: {
       schemas: [
