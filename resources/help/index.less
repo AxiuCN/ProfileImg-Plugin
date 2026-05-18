@@ -54,20 +54,23 @@ body {
   overflow: hidden;
   width: calc(100% + 30px);
   color: #fff;
+  table-layout: fixed;
 
   .tr {
     display: table-row;
   }
 
-  .td {
+  .td,
+  .th {
     font-size: 14px;
     display: table-cell;
     box-shadow: 0 0 1px 0 #888 inset;
     padding: 12px 0 12px 50px;
     line-height: 24px;
     position: relative;
-    width: 50%;
+    width: 33.33%;
     text-align: left;
+    vertical-align: top;
   }
 
   .tr:nth-child(odd) {
@@ -76,6 +79,14 @@ body {
 
   .tr:nth-child(even) {
     background: rgba(34, 41, 51, 0.3);
+  }
+
+  .tr:last-child .td {
+    padding-bottom: 12px;
+  }
+
+  .th {
+    background: rgba(34, 41, 51, 0.5);
   }
 }
 
