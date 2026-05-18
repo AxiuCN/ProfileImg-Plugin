@@ -3,138 +3,90 @@ import path from 'node:path'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
-const configExamplePath = path.join(pluginRoot, 'config', 'config.yaml.example')
+const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
 
-// ==================== 配置管理器 ====================
-class Config {
-  /**
-   * 读取配置（合并默认值与用户值）
-   */
-  getConfig() {
-    try {
-      if (!fs.existsSync(configPath)) {
-        return this.getDefault()
-      }
-      const content = fs.readFileSync(configPath, 'utf8')
-      return this._parseYaml(content)
-    } catch (e) {
-      logger.error('[ProfileImg-Plugin] 读取配置失败:', e)
-      return this.getDefault()
+// 默认值映射（模板变量名 → 默认值）
+const defaultValues = {
+  pluginSelf_enabled: true,
+  pluginSelf_cron: '0 0 5 * * *',
+  pluginSelf_autoUpdate: true,
+  pluginSelf_autoRestart: true,
+  mainGallery_enabled: true,
+  mainGallery_cron: '0 20 5 * * *',
+  mainGallery_autoUpdate: true,
+  mainGallery_autoRestart: false,
+  blockedGallery_enabled: true,
+  blockedGallery_cron: '0 40 5 * * *',
+  blockedGallery_autoUpdate: true,
+  blockedGallery_autoRestart: false
+}
+
+/**
+ * 读取默认配置模板
+ */
+function getTemplate() {
+  try {
+    if (fs.existsSync(defaultConfigPath)) {
+      return fs.readFileSync(defaultConfigPath, 'utf8')
     }
+    logger.error('[ProfileImg-Plugin] 默认配置模板不存在:', defaultConfigPath)
+  } catch (e) {
+    logger.error('[ProfileImg-Plugin] 读取默认配置模板失败:', e)
   }
+  return ''
+}
 
-  /**
-   * 从 config.yaml.example 读取默认配置
-   */
-  getDefault() {
-    if (fs.existsSync(configExamplePath)) {
-      try {
-        const content = fs.readFileSync(configExamplePath, 'utf8')
-        return this._parseYaml(content)
-      } catch (e) {
-        logger.error('[ProfileImg-Plugin] 读取默认配置失败:', e)
-      }
-    }
-    // 硬编码兜底
-    return {
-      update: {
-        pluginSelf: { enabled: true, cron: '0 0 5 * * *', autoUpdate: true, autoRestart: true },
-        mainGallery: { enabled: true, cron: '0 20 5 * * *', autoUpdate: true, autoRestart: false },
-        blockedGallery: { enabled: true, cron: '0 40 5 * * *', autoUpdate: true, autoRestart: false }
-      }
-    }
+/**
+ * 根据数据生成最终配置文件内容（变量替换）
+ * @param {Object} data 锅巴传来的扁平数据，如 { 'pluginSelf.enabled': true }
+ * @returns {string} 替换变量后的配置文本
+ */
+function generateConfig(data) {
+  const values = { ...defaultValues }
+  // 将锅巴的扁平 key 转为模板变量名（例如 'pluginSelf.enabled' → 'pluginSelf_enabled'）
+  for (const [key, val] of Object.entries(data)) {
+    const varName = key.replace('.', '_')
+    values[varName] = val
   }
+  const template = getTemplate()
+  // 替换 ${变量名} 占位符
+  return template.replace(/\${(\w+)}/g, (_, name) => (values[name] !== undefined ? values[name] : ''))
+}
 
-  /**
-   * 简易 YAML 解析（仅支持我们模板中的扁平嵌套结构）
-   */
-  _parseYaml(content) {
+/**
+ * 解析 YAML 获取当前用户配置（简易解析，仅支持本插件结构）
+ * @returns {Object} 包含 pluginSelf、mainGallery、blockedGallery 的配置对象
+ */
+function parseCurrentConfig() {
+  try {
+    if (!fs.existsSync(configPath)) return {}
+    const content = fs.readFileSync(configPath, 'utf8')
     const result = {}
     let currentModule = ''
     for (const line of content.split('\n')) {
       const trimmed = line.trim()
       if (!trimmed || trimmed.startsWith('#')) continue
-
-      // 检测模块名（如 pluginSelf:）
-      const moduleMatch = trimmed.match(/^(\w+):\s*$/)
-      if (moduleMatch && !trimmed.startsWith(' ') && !trimmed.startsWith('\t')) {
-        currentModule = moduleMatch[1]
-        if (!result[currentModule]) result[currentModule] = {}
-        continue
-      }
-
-      // 检测字段值（如 enabled: true）
-      if (currentModule) {
-        const fieldMatch = trimmed.match(/^(\w+):\s*(.+)$/)
-        if (fieldMatch) {
-          const key = fieldMatch[1]
-          let value = fieldMatch[2].trim()
-          // 去除引号
-          value = value.replace(/^["']|["']$/g, '')
-          // 转换布尔值
-          if (value === 'true') value = true
-          else if (value === 'false') value = false
-          result[currentModule][key] = value
+      if (/^\w+:\s*$/.test(trimmed)) {
+        currentModule = trimmed.slice(0, -1)
+        result[currentModule] = {}
+      } else if (currentModule) {
+        const m = trimmed.match(/^(\w+):\s*("?)(.+?)\2\s*$/)
+        if (m) {
+          let val = m[3]
+          if (val === 'true') val = true
+          else if (val === 'false') val = false
+          result[currentModule][m[1]] = val
         }
       }
     }
     return result
-  }
-
-  /**
-   * 保存配置（基于模板替换，保留注释）
-   */
-  setConfig(data) {
-    try {
-      const dirPath = path.dirname(configPath)
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true })
-      }
-
-      // 读取模板文件
-      let template = fs.readFileSync(configExamplePath, 'utf8')
-
-      // 定义替换规则：正则精确匹配模板中的值行，只替换值部分
-      const replacements = [
-        // ========== pluginSelf ==========
-        // enabled: true/false
-        { regex: /(pluginSelf:\n\s*#.*\n\s*enabled:\s*)(true|false)/, value: data['pluginSelf.enabled'] },
-        // cron: "..."（注意值带引号）
-        { regex: /(pluginSelf:[\s\S]*?cron:\s*)"[^"]*"/, value: `"${data['pluginSelf.cron']}"` },
-        // autoUpdate: true/false
-        { regex: /(pluginSelf:[\s\S]*?autoUpdate:\s*)(true|false)/, value: data['pluginSelf.autoUpdate'] },
-        // autoRestart: true/false
-        { regex: /(pluginSelf:[\s\S]*?autoRestart:\s*)(true|false)/, value: data['pluginSelf.autoRestart'] },
-
-        // ========== mainGallery ==========
-        { regex: /(mainGallery:\n\s*#.*\n\s*enabled:\s*)(true|false)/, value: data['mainGallery.enabled'] },
-        { regex: /(mainGallery:[\s\S]*?cron:\s*)"[^"]*"/, value: `"${data['mainGallery.cron']}"` },
-        { regex: /(mainGallery:[\s\S]*?autoUpdate:\s*)(true|false)/, value: data['mainGallery.autoUpdate'] },
-        { regex: /(mainGallery:[\s\S]*?autoRestart:\s*)(true|false)/, value: data['mainGallery.autoRestart'] },
-
-        // ========== blockedGallery ==========
-        { regex: /(blockedGallery:\n\s*#.*\n\s*enabled:\s*)(true|false)/, value: data['blockedGallery.enabled'] },
-        { regex: /(blockedGallery:[\s\S]*?cron:\s*)"[^"]*"/, value: `"${data['blockedGallery.cron']}"` },
-        { regex: /(blockedGallery:[\s\S]*?autoUpdate:\s*)(true|false)/, value: data['blockedGallery.autoUpdate'] },
-        { regex: /(blockedGallery:[\s\S]*?autoRestart:\s*)(true|false)/, value: data['blockedGallery.autoRestart'] },
-      ]
-
-      for (const rep of replacements) {
-        template = template.replace(rep.regex, `$1${rep.value}`)
-      }
-
-      fs.writeFileSync(configPath, template, 'utf8')
-      return true
-    } catch (e) {
-      logger.error('[ProfileImg-Plugin] 保存配置失败:', e)
-      return false
-    }
+  } catch (e) {
+    logger.error('[ProfileImg-Plugin] 解析当前配置失败:', e)
+    return {}
   }
 }
 
-const config = new Config()
-
-// ==================== 锅巴支持模块 ====================
+// 锅巴支持模块
 export function supportGuoba() {
   return {
     pluginInfo: {
@@ -151,7 +103,6 @@ export function supportGuoba() {
     },
     configInfo: {
       schemas: [
-        // ==================== 插件自身更新 ====================
         {
           label: '插件自身更新',
           component: 'SOFT_GROUP_BEGIN'
@@ -160,14 +111,12 @@ export function supportGuoba() {
           field: 'pluginSelf.enabled',
           label: '启用自动检查',
           bottomHelpMessage: '是否启用插件自身的自动检查更新',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'pluginSelf.cron',
           label: '检查时间',
           helpMessage: '自动检查更新的 cron 表达式（默认每天 5:00）',
-          bottomHelpMessage: '使用可视化界面配置，也可手动输入',
           component: 'EasyCron',
           required: true,
           componentProps: {
@@ -179,18 +128,14 @@ export function supportGuoba() {
           field: 'pluginSelf.autoUpdate',
           label: '自动更新',
           bottomHelpMessage: '检测到更新后是否自动下载覆盖',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'pluginSelf.autoRestart',
           label: '自动重启',
-          bottomHelpMessage: '自动更新后是否重启云崽（代码更新后需重启生效）',
-          component: 'Switch',
-          defaultValue: true
+          bottomHelpMessage: '自动更新后是否重启云崽',
+          component: 'Switch'
         },
-
-        // ==================== 主图库更新 ====================
         {
           label: '主图库更新',
           component: 'SOFT_GROUP_BEGIN'
@@ -199,14 +144,12 @@ export function supportGuoba() {
           field: 'mainGallery.enabled',
           label: '启用自动检查',
           bottomHelpMessage: '是否启用主图库的自动检查更新',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'mainGallery.cron',
           label: '检查时间',
           helpMessage: '自动检查更新的 cron 表达式（默认每天 5:20）',
-          bottomHelpMessage: '使用可视化界面配置，也可手动输入',
           component: 'EasyCron',
           required: true,
           componentProps: {
@@ -218,18 +161,14 @@ export function supportGuoba() {
           field: 'mainGallery.autoUpdate',
           label: '自动更新',
           bottomHelpMessage: '检测到更新后是否自动执行 git pull',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'mainGallery.autoRestart',
           label: '自动重启',
           bottomHelpMessage: '自动更新后是否重启云崽（主图库更新一般无需重启）',
-          component: 'Switch',
-          defaultValue: false
+          component: 'Switch'
         },
-
-        // ==================== 屏蔽图库更新 ====================
         {
           label: '屏蔽图库更新',
           component: 'SOFT_GROUP_BEGIN'
@@ -238,14 +177,12 @@ export function supportGuoba() {
           field: 'blockedGallery.enabled',
           label: '启用自动检查',
           bottomHelpMessage: '是否启用屏蔽图库的自动检查更新',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'blockedGallery.cron',
           label: '检查时间',
           helpMessage: '自动检查更新的 cron 表达式（默认每天 5:40）',
-          bottomHelpMessage: '使用可视化界面配置，也可手动输入',
           component: 'EasyCron',
           required: true,
           componentProps: {
@@ -257,42 +194,46 @@ export function supportGuoba() {
           field: 'blockedGallery.autoUpdate',
           label: '自动更新',
           bottomHelpMessage: '检测到更新后是否自动执行 git pull',
-          component: 'Switch',
-          defaultValue: true
+          component: 'Switch'
         },
         {
           field: 'blockedGallery.autoRestart',
           label: '自动重启',
           bottomHelpMessage: '自动更新后是否重启云崽（屏蔽图库更新无需重启）',
-          component: 'Switch',
-          defaultValue: false
+          component: 'Switch'
         },
       ],
       getConfigData() {
-        const defaults = config.getDefault().update || {}
-        const userConfig = config.getConfig().update || {}
+        // 读取当前用户配置，未设置的部分用默认值补齐
+        const userConfig = parseCurrentConfig().update || {}
+        const defPlugin = defaultValues
         return {
-          'pluginSelf.enabled': userConfig.pluginSelf?.enabled ?? defaults.pluginSelf?.enabled ?? true,
-          'pluginSelf.cron': userConfig.pluginSelf?.cron ?? defaults.pluginSelf?.cron ?? '0 0 5 * * *',
-          'pluginSelf.autoUpdate': userConfig.pluginSelf?.autoUpdate ?? defaults.pluginSelf?.autoUpdate ?? true,
-          'pluginSelf.autoRestart': userConfig.pluginSelf?.autoRestart ?? defaults.pluginSelf?.autoRestart ?? true,
-          'mainGallery.enabled': userConfig.mainGallery?.enabled ?? defaults.mainGallery?.enabled ?? true,
-          'mainGallery.cron': userConfig.mainGallery?.cron ?? defaults.mainGallery?.cron ?? '0 20 5 * * *',
-          'mainGallery.autoUpdate': userConfig.mainGallery?.autoUpdate ?? defaults.mainGallery?.autoUpdate ?? true,
-          'mainGallery.autoRestart': userConfig.mainGallery?.autoRestart ?? defaults.mainGallery?.autoRestart ?? false,
-          'blockedGallery.enabled': userConfig.blockedGallery?.enabled ?? defaults.blockedGallery?.enabled ?? true,
-          'blockedGallery.cron': userConfig.blockedGallery?.cron ?? defaults.blockedGallery?.cron ?? '0 40 5 * * *',
-          'blockedGallery.autoUpdate': userConfig.blockedGallery?.autoUpdate ?? defaults.blockedGallery?.autoUpdate ?? true,
-          'blockedGallery.autoRestart': userConfig.blockedGallery?.autoRestart ?? defaults.blockedGallery?.autoRestart ?? false,
+          'pluginSelf.enabled': userConfig.pluginSelf?.enabled ?? defPlugin.pluginSelf_enabled,
+          'pluginSelf.cron': userConfig.pluginSelf?.cron ?? defPlugin.pluginSelf_cron,
+          'pluginSelf.autoUpdate': userConfig.pluginSelf?.autoUpdate ?? defPlugin.pluginSelf_autoUpdate,
+          'pluginSelf.autoRestart': userConfig.pluginSelf?.autoRestart ?? defPlugin.pluginSelf_autoRestart,
+          'mainGallery.enabled': userConfig.mainGallery?.enabled ?? defPlugin.mainGallery_enabled,
+          'mainGallery.cron': userConfig.mainGallery?.cron ?? defPlugin.mainGallery_cron,
+          'mainGallery.autoUpdate': userConfig.mainGallery?.autoUpdate ?? defPlugin.mainGallery_autoUpdate,
+          'mainGallery.autoRestart': userConfig.mainGallery?.autoRestart ?? defPlugin.mainGallery_autoRestart,
+          'blockedGallery.enabled': userConfig.blockedGallery?.enabled ?? defPlugin.blockedGallery_enabled,
+          'blockedGallery.cron': userConfig.blockedGallery?.cron ?? defPlugin.blockedGallery_cron,
+          'blockedGallery.autoUpdate': userConfig.blockedGallery?.autoUpdate ?? defPlugin.blockedGallery_autoUpdate,
+          'blockedGallery.autoRestart': userConfig.blockedGallery?.autoRestart ?? defPlugin.blockedGallery_autoRestart,
         }
       },
       setConfigData(data, { Result }) {
-        const success = config.setConfig(data)
-        if (success) {
+        try {
+          const content = generateConfig(data)
+          const dir = path.dirname(configPath)
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+          fs.writeFileSync(configPath, content, 'utf8')
           return Result.ok({}, '保存成功~')
+        } catch (e) {
+          logger.error('[ProfileImg-Plugin] 保存配置失败:', e)
+          return Result.error('保存失败')
         }
-        return Result.error('保存失败')
-      }
-    }
+      },
+    },
   }
 }
