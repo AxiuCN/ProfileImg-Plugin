@@ -61,8 +61,12 @@ export class UploadWithCompress extends plugin {
     let addedCount = 0
     for (const img of imgSegments) {
       try {
-        // 下载图片（image 类型在 img.url，file 类型可能在 img.data.url）
-        const imgUrl = img.url || img.data?.url
+        // 构建下载链接（兼容多种协议端）
+        let imgUrl = img.url || img.data?.url
+        // 如果 url 为空，尝试用 file_id 作为 url（LLOneBot 等适配器支持）
+        if (!imgUrl && img.data?.file_id) {
+          imgUrl = img.data.file_id
+        }
         if (!imgUrl) continue
 
         const res = await fetch(imgUrl)
