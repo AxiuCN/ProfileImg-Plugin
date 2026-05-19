@@ -35,3 +35,12 @@ update:
     autoUpdate: ${blockedGallery_autoUpdate}
     # 自动更新后是否重启云崽（屏蔽图库更新无需重启，设为 false）
     autoRestart: ${blockedGallery_autoRestart}
+
+# ---------- 上传压缩设置 ----------
+upload:
+  # 是否在上传面板图时启用压缩（默认关闭）
+  enabled: ${upload_enabled}
+  # 压缩输出格式，可选 webp、jpeg、png
+  format: "${upload_format}"
+  # 目标压缩大小（单位：KB，默认 500）
+  maxSize: ${upload_maxSize}

@@ -19,12 +19,11 @@ const defaultValues = {
   blockedGallery_enabled: true,
   blockedGallery_cron: '0 40 5 * * *',
   blockedGallery_autoUpdate: true,
-  blockedGallery_autoRestart: false
+  blockedGallery_autoRestart: false,
+  upload_enabled: false,
+  upload_format: 'webp'
 }
 
-/**
- * 读取默认配置模板
- */
 function getTemplate() {
   try {
     if (fs.existsSync(defaultConfigPath)) {
@@ -37,27 +36,16 @@ function getTemplate() {
   return ''
 }
 
-/**
- * 根据数据生成最终配置文件内容（变量替换）
- * @param {Object} data 锅巴传来的扁平数据，如 { 'pluginSelf.enabled': true }
- * @returns {string} 替换变量后的配置文本
- */
 function generateConfig(data) {
   const values = { ...defaultValues }
-  // 将锅巴的扁平 key 转为模板变量名（例如 'pluginSelf.enabled' → 'pluginSelf_enabled'）
   for (const [key, val] of Object.entries(data)) {
     const varName = key.replace('.', '_')
     values[varName] = val
   }
   const template = getTemplate()
-  // 替换 ${变量名} 占位符
   return template.replace(/\${(\w+)}/g, (_, name) => (values[name] !== undefined ? values[name] : ''))
 }
 
-/**
- * 使用 YAML 库解析当前用户配置
- * @returns {Object} 完整的用户配置对象
- */
 function parseCurrentConfig() {
   try {
     if (fs.existsSync(configPath)) {
@@ -70,7 +58,6 @@ function parseCurrentConfig() {
   return {}
 }
 
-// 锅巴支持模块
 export function supportGuoba() {
   return {
     pluginInfo: {
@@ -186,24 +173,52 @@ export function supportGuoba() {
           bottomHelpMessage: '自动更新后是否重启云崽（屏蔽图库更新无需重启）',
           component: 'Switch'
         },
+        // ==================== 上传压缩设置 ====================
+        {
+          label: '上传压缩',
+          component: 'SOFT_GROUP_BEGIN'
+        },
+        {
+          field: 'upload.enabled',
+          label: '启用压缩',
+          bottomHelpMessage: '上传面板图时自动压缩（超过目标大小时生效）',
+          component: 'Switch'
+        },
+        {
+          field: 'upload.format',
+          label: '压缩格式',
+          bottomHelpMessage: '选择压缩后的图片格式，推荐 webp',
+          component: 'Select',
+          required: true,
+          componentProps: {
+            options: [
+              { label: 'WebP', value: 'webp' },
+              { label: 'JPEG', value: 'jpeg' },
+              { label: 'PNG', value: 'png' }
+            ],
+            placeholder: '请选择压缩格式'
+          }
+        },
       ],
       getConfigData() {
-        // 读取当前用户配置，未设置的部分用默认值补齐
-        const userConfig = parseCurrentConfig().update || {}
-        const defPlugin = defaultValues
+        const userConfig = parseCurrentConfig()
+        const update = userConfig.update || {}
+        const upload = userConfig.upload || {}
         return {
-          'pluginSelf.enabled': userConfig.pluginSelf?.enabled ?? defPlugin.pluginSelf_enabled,
-          'pluginSelf.cron': userConfig.pluginSelf?.cron ?? defPlugin.pluginSelf_cron,
-          'pluginSelf.autoUpdate': userConfig.pluginSelf?.autoUpdate ?? defPlugin.pluginSelf_autoUpdate,
-          'pluginSelf.autoRestart': userConfig.pluginSelf?.autoRestart ?? defPlugin.pluginSelf_autoRestart,
-          'mainGallery.enabled': userConfig.mainGallery?.enabled ?? defPlugin.mainGallery_enabled,
-          'mainGallery.cron': userConfig.mainGallery?.cron ?? defPlugin.mainGallery_cron,
-          'mainGallery.autoUpdate': userConfig.mainGallery?.autoUpdate ?? defPlugin.mainGallery_autoUpdate,
-          'mainGallery.autoRestart': userConfig.mainGallery?.autoRestart ?? defPlugin.mainGallery_autoRestart,
-          'blockedGallery.enabled': userConfig.blockedGallery?.enabled ?? defPlugin.blockedGallery_enabled,
-          'blockedGallery.cron': userConfig.blockedGallery?.cron ?? defPlugin.blockedGallery_cron,
-          'blockedGallery.autoUpdate': userConfig.blockedGallery?.autoUpdate ?? defPlugin.blockedGallery_autoUpdate,
-          'blockedGallery.autoRestart': userConfig.blockedGallery?.autoRestart ?? defPlugin.blockedGallery_autoRestart,
+          'pluginSelf.enabled': update.pluginSelf?.enabled ?? defaultValues.pluginSelf_enabled,
+          'pluginSelf.cron': update.pluginSelf?.cron ?? defaultValues.pluginSelf_cron,
+          'pluginSelf.autoUpdate': update.pluginSelf?.autoUpdate ?? defaultValues.pluginSelf_autoUpdate,
+          'pluginSelf.autoRestart': update.pluginSelf?.autoRestart ?? defaultValues.pluginSelf_autoRestart,
+          'mainGallery.enabled': update.mainGallery?.enabled ?? defaultValues.mainGallery_enabled,
+          'mainGallery.cron': update.mainGallery?.cron ?? defaultValues.mainGallery_cron,
+          'mainGallery.autoUpdate': update.mainGallery?.autoUpdate ?? defaultValues.mainGallery_autoUpdate,
+          'mainGallery.autoRestart': update.mainGallery?.autoRestart ?? defaultValues.mainGallery_autoRestart,
+          'blockedGallery.enabled': update.blockedGallery?.enabled ?? defaultValues.blockedGallery_enabled,
+          'blockedGallery.cron': update.blockedGallery?.cron ?? defaultValues.blockedGallery_cron,
+          'blockedGallery.autoUpdate': update.blockedGallery?.autoUpdate ?? defaultValues.blockedGallery_autoUpdate,
+          'blockedGallery.autoRestart': update.blockedGallery?.autoRestart ?? defaultValues.blockedGallery_autoRestart,
+          'upload.enabled': upload.enabled ?? defaultValues.upload_enabled,
+          'upload.format': upload.format ?? defaultValues.upload_format,
         }
       },
       setConfigData(data, { Result }) {
