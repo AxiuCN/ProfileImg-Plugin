@@ -31,24 +31,26 @@ export class UploadWithCompress extends plugin {
     const rawRole = e.msg.replace(/#|面板图|上传|添加/g, '').trim()
     const roleName = resolveRoleName(rawRole)
 
-    // 2. 获取图片：消息本身 + 引用消息
-    let imgSegments = e.message.filter(msg => msg.type === 'image')
+    // 2. 获取图片：消息本身 + 引用消息，支持 image 和文件型图片
+    const isImg = (msg) => {
+      if (msg.type === 'image') return true
+      if (msg.type === 'file' && /\.(webp|png|jpg|jpeg|gif)$/i.test(msg.data?.file || '')) return true
+      return false
+    }
+
+    let imgSegments = e.message.filter(isImg)
     if (imgSegments.length === 0) {
       const reply = await e.getReply?.()
-      if (reply) {
-        imgSegments = reply.message.filter(msg => msg.type === 'image')
-      }
+      if (reply) imgSegments = reply.message.filter(isImg)
     }
     if (imgSegments.length === 0) {
-      e.reply('[面板图图库管理器] 消息中未找到图片，请将图片与指令一同发送或引用一条图片消息。')
+      e.reply('[面板图图库管理器] 消息中未找到图片。')
       return true
     }
 
     // 3. 确保角色目录存在
     const mainDir = getMainDir(roleName)
-    if (!fs.existsSync(mainDir)) {
-      fs.mkdirSync(mainDir, { recursive: true })
-    }
+    if (!fs.existsSync(mainDir)) fs.mkdirSync(mainDir, { recursive: true })
 
     // 4. 读取上传配置（默认关闭压缩，格式默认 webp，目标大小默认 500KB）
     const config = getPluginConfig()
@@ -59,16 +61,17 @@ export class UploadWithCompress extends plugin {
     let addedCount = 0
     for (const img of imgSegments) {
       try {
-        // 下载图片
-        const res = await fetch(img.url)
-        if (!res.ok) {
-          logger.warn(`[PanelImgUpload] 下载失败: ${img.url}`)
-          continue
-        }
+        // 下载图片（image 类型在 img.url，file 类型可能在 img.data.url）
+        const imgUrl = img.url || img.data?.url
+        if (!imgUrl) continue
+
+        const res = await fetch(imgUrl)
+        if (!res.ok) continue
         const buffer = Buffer.from(await res.arrayBuffer())
 
-        // 准备文件名（保留原始名称，去除扩展名，添加数字后缀避免重复）
-        let baseName = img.file?.replace(/\.[^.]+$/, '') || Date.now().toString()
+        // 准备文件名（保留原始名称，去除扩展名，自动添加数字后缀避免重复）
+        const rawName = img.file || img.data?.file || ''
+        let baseName = rawName.replace(/\.[^.]+$/, '') || Date.now().toString()
         const ext = `.${format}`
         let filePath = path.join(mainDir, baseName + ext)
         let counter = 1
@@ -89,12 +92,7 @@ export class UploadWithCompress extends plugin {
             const { compressed } = await compressToTarget(buffer, targetBytes, format)
             if (compressed && compressed.length < buffer.length) {
               finalBuffer = compressed
-              logger.info(`[PanelImgUpload] 压缩成功: ${path.basename(filePath)} (${buffer.length} → ${compressed.length})`)
-            } else {
-              logger.info(`[PanelImgUpload] 压缩后体积未减小，保留原图: ${path.basename(filePath)}`)
             }
-          } else {
-            logger.info(`[PanelImgUpload] 原图已小于目标大小，无需压缩: ${path.basename(filePath)}`)
           }
         }
 
@@ -106,8 +104,10 @@ export class UploadWithCompress extends plugin {
       }
     }
 
+    // 6. 回复结果（@发送者 + 角色名 + 数量）
     if (addedCount > 0) {
-      e.reply(`[面板图图库管理器] 已为 ${roleName} 添加 ${addedCount} 张面板图`)
+      const senderName = (e.sender.card || e.sender.nickname || '').slice(0, 8)
+      e.reply([segment.at(e.user_id, senderName), ` 成功添加${addedCount}张${roleName}面板图。`])
     } else {
       e.reply('[面板图图库管理器] 添加失败，请稍后重试。')
     }
@@ -127,11 +127,7 @@ async function compressToTarget(inputBuffer, targetBytes, format) {
   // 用 quality=95 快速测试，缩小二分查找范围
   let low = 1, high = 100
   const fast = await encodeWithQuality(inputBuffer, format, 95)
-  if (fast.length <= targetBytes) {
-    low = 95
-  } else {
-    high = 95
-  }
+  if (fast.length <= targetBytes) { low = 95 } else { high = 95 }
 
   let bestQuality = low
   let bestBuffer = fast
@@ -141,9 +137,7 @@ async function compressToTarget(inputBuffer, targetBytes, format) {
     const quality = Math.floor((low + high) / 2)
     const buf = await encodeWithQuality(inputBuffer, format, quality)
     if (buf.length <= targetBytes) {
-      bestQuality = quality
-      bestBuffer = buf
-      low = quality + 1
+      bestQuality = quality; bestBuffer = buf; low = quality + 1
     } else {
       high = quality - 1
     }
@@ -151,10 +145,9 @@ async function compressToTarget(inputBuffer, targetBytes, format) {
   }
 
   // 只有压缩后体积确实减小才返回，否则保留原图
-  if (bestBuffer.length < inputBuffer.length) {
-    return { compressed: bestBuffer, size: bestBuffer.length }
-  }
-  return { compressed: null, size: inputBuffer.length }
+  return bestBuffer.length < inputBuffer.length
+    ? { compressed: bestBuffer, size: bestBuffer.length }
+    : { compressed: null, size: inputBuffer.length }
 }
 
 /**
@@ -166,15 +159,9 @@ async function compressToTarget(inputBuffer, targetBytes, format) {
  */
 async function encodeWithQuality(inputBuffer, format, quality) {
   const pipeline = sharp(inputBuffer)
-  if (format === 'jpeg') {
-    pipeline.jpeg({ quality })
-  } else if (format === 'webp') {
-    pipeline.webp({ quality })
-  } else if (format === 'png') {
-    pipeline.png({ quality, palette: true, compressionLevel: 9 })
-  } else {
-    // 默认使用 webp
-    pipeline.webp({ quality })
-  }
+  if (format === 'jpeg') pipeline.jpeg({ quality })
+  else if (format === 'webp') pipeline.webp({ quality })
+  else if (format === 'png') pipeline.png({ quality, palette: true, compressionLevel: 9 })
+  else pipeline.webp({ quality })
   return pipeline.toBuffer()
 }
