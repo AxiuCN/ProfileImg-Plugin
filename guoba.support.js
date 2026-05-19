@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import YAML from 'yaml'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
@@ -54,36 +55,19 @@ function generateConfig(data) {
 }
 
 /**
- * 解析 YAML 获取当前用户配置（简易解析，仅支持本插件结构）
- * @returns {Object} 包含 pluginSelf、mainGallery、blockedGallery 的配置对象
+ * 使用 YAML 库解析当前用户配置
+ * @returns {Object} 完整的用户配置对象
  */
 function parseCurrentConfig() {
   try {
-    if (!fs.existsSync(configPath)) return {}
-    const content = fs.readFileSync(configPath, 'utf8')
-    const result = {}
-    let currentModule = ''
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      if (/^\w+:\s*$/.test(trimmed)) {
-        currentModule = trimmed.slice(0, -1)
-        result[currentModule] = {}
-      } else if (currentModule) {
-        const m = trimmed.match(/^(\w+):\s*("?)(.+?)\2\s*$/)
-        if (m) {
-          let val = m[3]
-          if (val === 'true') val = true
-          else if (val === 'false') val = false
-          result[currentModule][m[1]] = val
-        }
-      }
+    if (fs.existsSync(configPath)) {
+      const content = fs.readFileSync(configPath, 'utf8')
+      return YAML.parse(content) || {}
     }
-    return result
   } catch (e) {
     logger.error('[ProfileImg-Plugin] 解析当前配置失败:', e)
-    return {}
   }
+  return {}
 }
 
 // 锅巴支持模块

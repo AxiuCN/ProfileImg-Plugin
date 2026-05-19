@@ -1,6 +1,6 @@
 # ==============================================================
 # ProfileImg-Plugin 配置文件
-# 修改后保存即可，无需重启机器人
+# 请将此文件复制为 config.yaml 并根据需要修改
 # ==============================================================
 update:
   # ---------- 插件自身更新设置 ----------
@@ -16,14 +16,22 @@ update:
 
   # ---------- 主图库更新设置 ----------
   mainGallery:
+    # 是否启用主图库的自动检查更新
     enabled: ${mainGallery_enabled}
+    # 自动检查更新的 cron 表达式（默认每天 5:20）
     cron: "${mainGallery_cron}"
+    # 是否在检测到更新后自动执行 git pull
     autoUpdate: ${mainGallery_autoUpdate}
+    # 自动更新后是否重启云崽（主图库更新一般无需重启，设为 false）
     autoRestart: ${mainGallery_autoRestart}
 
   # ---------- 屏蔽图库更新设置 ----------
   blockedGallery:
+    # 是否启用屏蔽图库的自动检查更新
     enabled: ${blockedGallery_enabled}
+    # 自动检查更新的 cron 表达式（默认每天 5:40）
     cron: "${blockedGallery_cron}"
+    # 是否在检测到更新后自动执行 git pull
     autoUpdate: ${blockedGallery_autoUpdate}
+    # 自动更新后是否重启云崽（屏蔽图库更新无需重启，设为 false）
     autoRestart: ${blockedGallery_autoRestart}
