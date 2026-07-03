@@ -11,3 +11,7 @@ Thumbs.db
 # 编辑器配置
 .vscode/
 .idea/
+
+# Claude Code 工作区
+.claude/
+CLAUDE.md

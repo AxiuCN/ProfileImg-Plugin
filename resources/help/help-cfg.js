@@ -19,9 +19,7 @@ export const helpList = [
       { icon: 87, title: '#主图库更新', desc: '拉取主图库最新版本' },
       { icon: 87, title: '#屏蔽图库更新', desc: '拉取屏蔽图库最新版本' },
       { icon: 88, title: '#主图库强制更新', desc: '强制同步主图库' },
-      { icon: 88, title: '#屏蔽图库强制更新', desc: '强制同步屏蔽图库' },
-      { icon: 31, title: '#管理器更新', desc: '检查并更新管理器自身' },
-      { icon: 31, title: '#管理器强制更新', desc: '强制更新管理器自身' }
+      { icon: 88, title: '#屏蔽图库强制更新', desc: '强制同步屏蔽图库' }
     ]
   },
   {

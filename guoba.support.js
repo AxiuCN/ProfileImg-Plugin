@@ -8,10 +8,6 @@ const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
 
 // 默认值映射（模板变量名 → 默认值）
 const defaultValues = {
-  pluginSelf_enabled: true,
-  pluginSelf_cron: '0 0 5 * * *',
-  pluginSelf_autoUpdate: true,
-  pluginSelf_autoRestart: true,
   mainGallery_enabled: true,
   mainGallery_cron: '0 20 5 * * *',
   mainGallery_autoUpdate: true,
@@ -21,7 +17,8 @@ const defaultValues = {
   blockedGallery_autoUpdate: true,
   blockedGallery_autoRestart: false,
   upload_enabled: false,
-  upload_format: 'webp'
+  upload_format: 'webp',
+  upload_maxSize: 500
 }
 
 function getTemplate() {
@@ -74,39 +71,6 @@ export function supportGuoba() {
     },
     configInfo: {
       schemas: [
-        {
-          label: '插件自身更新',
-          component: 'SOFT_GROUP_BEGIN'
-        },
-        {
-          field: 'pluginSelf.enabled',
-          label: '启用自动检查',
-          bottomHelpMessage: '是否启用插件自身的自动检查更新',
-          component: 'Switch'
-        },
-        {
-          field: 'pluginSelf.cron',
-          label: '检查时间',
-          helpMessage: '自动检查更新的 cron 表达式（默认每天 5:00）',
-          component: 'EasyCron',
-          required: true,
-          componentProps: {
-            defaultValue: '0 0 5 * * *',
-            placeholder: '0 0 5 * * *'
-          }
-        },
-        {
-          field: 'pluginSelf.autoUpdate',
-          label: '自动更新',
-          bottomHelpMessage: '检测到更新后是否自动下载覆盖',
-          component: 'Switch'
-        },
-        {
-          field: 'pluginSelf.autoRestart',
-          label: '自动重启',
-          bottomHelpMessage: '自动更新后是否重启云崽',
-          component: 'Switch'
-        },
         {
           label: '主图库更新',
           component: 'SOFT_GROUP_BEGIN'
@@ -199,16 +163,24 @@ export function supportGuoba() {
             placeholder: '请选择压缩格式'
           }
         },
+        {
+          field: 'upload.maxSize',
+          label: '目标大小（KB）',
+          bottomHelpMessage: '原图超过此大小时触发压缩，默认 500KB',
+          component: 'InputNumber',
+          componentProps: {
+            min: 1,
+            max: 10240,
+            defaultValue: 500,
+            placeholder: '500'
+          }
+        },
       ],
       getConfigData() {
         const userConfig = parseCurrentConfig()
         const update = userConfig.update || {}
         const upload = userConfig.upload || {}
         return {
-          'pluginSelf.enabled': update.pluginSelf?.enabled ?? defaultValues.pluginSelf_enabled,
-          'pluginSelf.cron': update.pluginSelf?.cron ?? defaultValues.pluginSelf_cron,
-          'pluginSelf.autoUpdate': update.pluginSelf?.autoUpdate ?? defaultValues.pluginSelf_autoUpdate,
-          'pluginSelf.autoRestart': update.pluginSelf?.autoRestart ?? defaultValues.pluginSelf_autoRestart,
           'mainGallery.enabled': update.mainGallery?.enabled ?? defaultValues.mainGallery_enabled,
           'mainGallery.cron': update.mainGallery?.cron ?? defaultValues.mainGallery_cron,
           'mainGallery.autoUpdate': update.mainGallery?.autoUpdate ?? defaultValues.mainGallery_autoUpdate,
@@ -219,6 +191,7 @@ export function supportGuoba() {
           'blockedGallery.autoRestart': update.blockedGallery?.autoRestart ?? defaultValues.blockedGallery_autoRestart,
           'upload.enabled': upload.enabled ?? defaultValues.upload_enabled,
           'upload.format': upload.format ?? defaultValues.upload_format,
+          'upload.maxSize': upload.maxSize ?? defaultValues.upload_maxSize,
         }
       },
       setConfigData(data, { Result }) {
