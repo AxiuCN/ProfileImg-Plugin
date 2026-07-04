@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { GIT_WORK_DIR, BLOCKED_GALLERY_PATH } from './constants.js'
+import { GIT_WORK_DIR, BLOCKED_GALLERY_PATH } from '../components/constants.js'
 
 /** 在主图库目录执行 Git 命令 */
 export function gitExec(command, timeout = 10000) {

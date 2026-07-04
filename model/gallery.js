@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { GALLERY_PATH, BLOCKED_GALLERY_PATH, GIT_WORK_DIR, BLOCKED_GIT_DIR } from './constants.js'
+import { GALLERY_PATH, BLOCKED_GALLERY_PATH, GIT_WORK_DIR, BLOCKED_GIT_DIR } from '../components/constants.js'
 
 /** 检查主图库是否就绪 */
 export function checkGallery() {

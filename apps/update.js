@@ -1,5 +1,5 @@
-import { checkGallery, checkBlockedGallery } from '../components/gallery.js'
-import { gitExec, gitExecBlocked, getRemoteSha, getRemoteShaBlocked, forceResetToRemote, forceResetBlocked } from '../components/git.js'
+import { checkGallery, checkBlockedGallery } from '../model/gallery.js'
+import { gitExec, gitExecBlocked, getRemoteSha, getRemoteShaBlocked, forceResetToRemote, forceResetBlocked } from '../model/git.js'
 import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 

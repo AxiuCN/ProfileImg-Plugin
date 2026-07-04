@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { GALLERY_PATH } from './constants.js'
+import { GALLERY_PATH } from '../components/constants.js'
 
 // 别名映射表，启动时从 miao-plugin 的 alias.js 构建
 let ALIAS_MAP = new Map()

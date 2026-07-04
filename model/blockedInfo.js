@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { BLOCKED_GALLERY_PATH, GALLERY_PATH } from './constants.js'
-import { getDirSize } from './format.js'
+import { BLOCKED_GALLERY_PATH, GALLERY_PATH } from '../components/constants.js'
+import { getDirSize } from '../components/format.js'
 
 /** 获取屏蔽图库统计信息 */
 export function getBlockedInfo() {

@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import { GALLERY_PATH, BLOCKED_GALLERY_PATH } from '../components/constants.js'
-import { checkGallery, checkBlockedGallery } from '../components/gallery.js'
+import { checkGallery, checkBlockedGallery } from '../model/gallery.js'
 import { formatSize, getDirSize, countImages } from '../components/format.js'
-import { getLocalVersion, getLocalVersionAt } from '../components/version.js'
-import { getBlockedInfo } from '../components/blockedInfo.js'
+import { getLocalVersion, getLocalVersionAt } from '../model/version.js'
+import { getBlockedInfo } from '../model/blockedInfo.js'
 
 export class Status extends plugin {
   constructor() {
