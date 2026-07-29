@@ -6,16 +6,16 @@ const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
 const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
 
-// 默认值映射（模板变量名 → 默认值）
+/** 默认值映射（模板变量名 → 默认值） */
 const defaultValues = {
-  mainGallery_enabled: true,
-  mainGallery_cron: '0 20 5 * * *',
-  mainGallery_autoUpdate: true,
-  mainGallery_autoRestart: false,
-  blockedGallery_enabled: true,
-  blockedGallery_cron: '0 40 5 * * *',
-  blockedGallery_autoUpdate: true,
-  blockedGallery_autoRestart: false,
+  gallery_repos_0_enabled: true,
+  gallery_repos_0_cron: '0 20 5 * * *',
+  gallery_repos_0_autoUpdate: true,
+  gallery_repos_0_autoRestart: false,
+  gallery_blocked_enabled: true,
+  gallery_blocked_cron: '0 40 5 * * *',
+  gallery_blocked_autoUpdate: true,
+  gallery_blocked_autoRestart: false,
   upload_enabled: false,
   upload_format: 'webp',
   upload_maxSize: 500
@@ -35,8 +35,9 @@ function getTemplate() {
 
 function generateConfig(data) {
   const values = { ...defaultValues }
+  // 将点分隔的字段名转换为下划线变量名
   for (const [key, val] of Object.entries(data)) {
-    const varName = key.replace('.', '_')
+    const varName = key.replace(/\./g, '_')
     values[varName] = val
   }
   const template = getTemplate()
@@ -60,7 +61,7 @@ export function supportGuoba() {
     pluginInfo: {
       name: 'profileimg-plugin',
       title: '面板图图库管理器',
-      description: '管理 miao-plugin 角色面板图库（主图库/屏蔽图库）',
+      description: '管理 miao-plugin 角色面板图库（主图库/屏蔽图库），支持多仓库、版权归属',
       author: ['阿修Axiu'],
       authorLink: ['https://github.com/AxiuCN'],
       link: 'https://github.com/AxiuCN/ProfileImg-Plugin',
@@ -71,18 +72,19 @@ export function supportGuoba() {
     },
     configInfo: {
       schemas: [
+        // ==================== 主图库更新 ====================
         {
-          label: '主图库更新',
+          label: '主图库更新（仓库 0）',
           component: 'SOFT_GROUP_BEGIN'
         },
         {
-          field: 'mainGallery.enabled',
+          field: 'gallery.repos.0.enabled',
           label: '启用自动检查',
           bottomHelpMessage: '是否启用主图库的自动检查更新',
           component: 'Switch'
         },
         {
-          field: 'mainGallery.cron',
+          field: 'gallery.repos.0.cron',
           label: '检查时间',
           helpMessage: '自动检查更新的 cron 表达式（默认每天 5:20）',
           component: 'EasyCron',
@@ -93,29 +95,30 @@ export function supportGuoba() {
           }
         },
         {
-          field: 'mainGallery.autoUpdate',
+          field: 'gallery.repos.0.autoUpdate',
           label: '自动更新',
           bottomHelpMessage: '检测到更新后是否自动执行 git pull',
           component: 'Switch'
         },
         {
-          field: 'mainGallery.autoRestart',
+          field: 'gallery.repos.0.autoRestart',
           label: '自动重启',
-          bottomHelpMessage: '自动更新后是否重启云崽（主图库更新一般无需重启）',
+          bottomHelpMessage: '自动更新后是否重启云崽（图库更新一般无需重启）',
           component: 'Switch'
         },
+        // ==================== 屏蔽图库更新 ====================
         {
           label: '屏蔽图库更新',
           component: 'SOFT_GROUP_BEGIN'
         },
         {
-          field: 'blockedGallery.enabled',
+          field: 'gallery.blocked.enabled',
           label: '启用自动检查',
           bottomHelpMessage: '是否启用屏蔽图库的自动检查更新',
           component: 'Switch'
         },
         {
-          field: 'blockedGallery.cron',
+          field: 'gallery.blocked.cron',
           label: '检查时间',
           helpMessage: '自动检查更新的 cron 表达式（默认每天 5:40）',
           component: 'EasyCron',
@@ -126,13 +129,13 @@ export function supportGuoba() {
           }
         },
         {
-          field: 'blockedGallery.autoUpdate',
+          field: 'gallery.blocked.autoUpdate',
           label: '自动更新',
           bottomHelpMessage: '检测到更新后是否自动执行 git pull',
           component: 'Switch'
         },
         {
-          field: 'blockedGallery.autoRestart',
+          field: 'gallery.blocked.autoRestart',
           label: '自动重启',
           bottomHelpMessage: '自动更新后是否重启云崽（屏蔽图库更新无需重启）',
           component: 'Switch'
@@ -178,17 +181,21 @@ export function supportGuoba() {
       ],
       getConfigData() {
         const userConfig = parseCurrentConfig()
-        const update = userConfig.update || {}
+        const gallery = userConfig.gallery || {}
+        const repos = gallery.repos || []
+        const repo0 = repos[0] || {}
+        const blocked = gallery.blocked || {}
         const upload = userConfig.upload || {}
+
         return {
-          'mainGallery.enabled': update.mainGallery?.enabled ?? defaultValues.mainGallery_enabled,
-          'mainGallery.cron': update.mainGallery?.cron ?? defaultValues.mainGallery_cron,
-          'mainGallery.autoUpdate': update.mainGallery?.autoUpdate ?? defaultValues.mainGallery_autoUpdate,
-          'mainGallery.autoRestart': update.mainGallery?.autoRestart ?? defaultValues.mainGallery_autoRestart,
-          'blockedGallery.enabled': update.blockedGallery?.enabled ?? defaultValues.blockedGallery_enabled,
-          'blockedGallery.cron': update.blockedGallery?.cron ?? defaultValues.blockedGallery_cron,
-          'blockedGallery.autoUpdate': update.blockedGallery?.autoUpdate ?? defaultValues.blockedGallery_autoUpdate,
-          'blockedGallery.autoRestart': update.blockedGallery?.autoRestart ?? defaultValues.blockedGallery_autoRestart,
+          'gallery.repos.0.enabled': repo0.enabled ?? defaultValues.gallery_repos_0_enabled,
+          'gallery.repos.0.cron': repo0.cron ?? defaultValues.gallery_repos_0_cron,
+          'gallery.repos.0.autoUpdate': repo0.autoUpdate ?? defaultValues.gallery_repos_0_autoUpdate,
+          'gallery.repos.0.autoRestart': repo0.autoRestart ?? defaultValues.gallery_repos_0_autoRestart,
+          'gallery.blocked.enabled': blocked.enabled ?? defaultValues.gallery_blocked_enabled,
+          'gallery.blocked.cron': blocked.cron ?? defaultValues.gallery_blocked_cron,
+          'gallery.blocked.autoUpdate': blocked.autoUpdate ?? defaultValues.gallery_blocked_autoUpdate,
+          'gallery.blocked.autoRestart': blocked.autoRestart ?? defaultValues.gallery_blocked_autoRestart,
           'upload.enabled': upload.enabled ?? defaultValues.upload_enabled,
           'upload.format': upload.format ?? defaultValues.upload_format,
           'upload.maxSize': upload.maxSize ?? defaultValues.upload_maxSize,

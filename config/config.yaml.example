@@ -1,35 +1,28 @@
 # ==============================================================
 # ProfileImg-Plugin 配置文件
-# 请将此文件复制为 config.yaml 并根据需要修改
 # ==============================================================
-update:
-  # ---------- 主图库更新设置 ----------
-  mainGallery:
-    # 是否启用主图库的自动检查更新
-    enabled: true
-    # 自动检查更新的 cron 表达式（默认每天 5:20）
-    cron: "0 20 5 * * *"
-    # 是否在检测到更新后自动执行 git pull
-    autoUpdate: true
-    # 自动更新后是否重启云崽（主图库更新一般无需重启，设为 false）
-    autoRestart: false
+gallery:
+  # ---------- 主图库仓库列表 ----------
+  # 至少需要一个 id=0 的默认仓库
+  repos:
+    - id: 0
+      name: "miao-plugin-ProfileImg"
+      remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg.git"
+      enabled: true
+      cron: "0 20 5 * * *"
+      autoUpdate: true
+      autoRestart: false
 
-  # ---------- 屏蔽图库更新设置 ----------
-  blockedGallery:
-    # 是否启用屏蔽图库的自动检查更新
+  # ---------- 屏蔽图库 ----------
+  blocked:
     enabled: true
-    # 自动检查更新的 cron 表达式（默认每天 5:40）
+    remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git"
     cron: "0 40 5 * * *"
-    # 是否在检测到更新后自动执行 git pull
     autoUpdate: true
-    # 自动更新后是否重启云崽（屏蔽图库更新无需重启，设为 false）
     autoRestart: false
 
 # ---------- 上传压缩设置 ----------
 upload:
-  # 是否在上传面板图时启用压缩（默认关闭）
   enabled: false
-  # 压缩输出格式，可选 webp、jpeg、png
   format: "webp"
-  # 目标压缩大小（单位：KB，默认 500）
   maxSize: 500

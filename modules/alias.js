@@ -1,8 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { GALLERY_PATH } from '../components/constants.js'
+import { DEFAULT_REPO_DIR, PROFILE_IMG_DIR } from '../components/constants.js'
+import { getRepoForChar } from '../model/mapJson.js'
+import { getMainDir } from '../model/blockedInfo.js'
 
-// 别名映射表，启动时从 miao-plugin 的 alias.js 构建
+/** 别名映射表，启动时从 miao-plugin 的 alias.js 构建 */
 let ALIAS_MAP = new Map()
 
 export function buildAliasMap() {
@@ -36,24 +38,72 @@ export function buildAliasMap() {
 }
 
 /**
+ * 收集所有仓库的 normal-character 目录下的角色名列表（去重）
+ * @returns {string[]}
+ */
+function getAllCharDirs() {
+  const allDirs = new Set()
+  // 扫描 ProfileImg 目录下的所有仓库
+  try {
+    if (fs.existsSync(PROFILE_IMG_DIR)) {
+      const repos = fs.readdirSync(PROFILE_IMG_DIR, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => path.join(PROFILE_IMG_DIR, d.name, 'normal-character'))
+      for (const normalDir of repos) {
+        if (!fs.existsSync(normalDir)) continue
+        const chars = fs.readdirSync(normalDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name)
+        for (const c of chars) allDirs.add(c)
+      }
+    }
+    // 也检查默认仓库（兼容 gallery 未完全初始化的情况）
+    const defaultNormal = path.join(DEFAULT_REPO_DIR, 'normal-character')
+    if (fs.existsSync(defaultNormal)) {
+      const chars = fs.readdirSync(defaultNormal, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name)
+      for (const c of chars) allDirs.add(c)
+    }
+  } catch (e) {
+    logger.warn('[ProfileImg-Plugin] 扫描角色目录失败:', e.message)
+  }
+  return [...allDirs]
+}
+
+/**
  * 解析角色名，支持别名
- * @param {string} input 用户输入的角色名
+ * 四级回退：精确匹配 → 别名 Map → 大小写不敏感 → 模糊匹配
+ * @param {string} input - 用户输入的角色名
  * @returns {string} 官方角色名，若解析失败则返回原输入
  */
 export function resolveRoleName(input) {
-  const charDir = path.join(GALLERY_PATH, input)
-  if (fs.existsSync(charDir)) return input
+  // 1. 通过 map.json 路由检查精确匹配（跨所有仓库）
+  const mainDir = getMainDir(input)
+  if (fs.existsSync(mainDir)) return input
+
+  // 2. 别名 Map 查找
   const lowerInput = input.toLowerCase()
-  if (ALIAS_MAP.has(lowerInput)) return ALIAS_MAP.get(lowerInput)
+  if (ALIAS_MAP.has(lowerInput)) {
+    const official = ALIAS_MAP.get(lowerInput)
+    // 验证官方名确实有目录存在
+    const officialDir = getMainDir(official)
+    if (fs.existsSync(officialDir)) return official
+  }
+
+  // 3. 大小写不敏感匹配（跨所有仓库扫描）
   try {
-    const charDirs = fs.readdirSync(GALLERY_PATH, { withFileTypes: true })
-      .filter(d => d.isDirectory() && d.name !== '.git')
-      .map(d => d.name)
+    const charDirs = getAllCharDirs()
     const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
     if (caseMatch) return caseMatch
+
+    // 4. 模糊匹配（唯一结果才返回）
     const partialMatches = charDirs.filter(dir => dir.includes(input))
     if (partialMatches.length === 1) return partialMatches[0]
-  } catch (e) {}
+  } catch (e) {
+    logger.warn('[ProfileImg-Plugin] 目录扫描失败:', e.message)
+  }
+
   logger.warn(`[ProfileImg-Plugin] 角色名解析失败，使用原始输入: "${input}"`)
   return input
 }

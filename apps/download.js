@@ -1,74 +1,59 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { execSync } from 'node:child_process'
-import { GIT_WORK_DIR, BLOCKED_GALLERY_PATH, MAIN_REPO_URL, BLOCKED_REPO_URL } from '../components/constants.js'
+import { installRepo } from '../model/git.js'
+import { getPluginConfig } from '../components/config.js'
+import { DEFAULT_REPO_DIR, DEFAULT_REPO_URL, BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir } from '../components/constants.js'
+import { checkProfileJunction } from '../model/gallery.js'
+import { notifyMaster } from '../components/notify.js'
 
-async function installGallery(repoUrl, targetDir, label, updateCmd) {
-  if (fs.existsSync(targetDir) && fs.existsSync(path.join(targetDir, '.git'))) {
-    return `[面板图图库管理器] ${label}已安装，请使用 ${updateCmd} 进行更新`
-  }
-  if (fs.existsSync(targetDir)) {
-    fs.rmSync(targetDir, { recursive: true, force: true })
-  }
-  try {
-    fs.mkdirSync(targetDir, { recursive: true })
-    execSync('git init --initial-branch=main', { cwd: targetDir, encoding: 'utf8', timeout: 10000 })
-    execSync(`git remote add origin ${repoUrl}`, { cwd: targetDir, encoding: 'utf8', timeout: 10000 })
-    execSync('git fetch origin main --depth 1', { cwd: targetDir, encoding: 'utf8', timeout: 60000 })
-    execSync('git reset --hard origin/main', { cwd: targetDir, encoding: 'utf8', timeout: 10000 })
-    return `[面板图图库管理器] ${label}安装成功！`
-  } catch (err) {
-    const errorMsg = err.stderr || err.stdout || err.message || '未知错误'
-    return `[面板图图库管理器] ${label}安装失败\n${errorMsg}`
-  }
-}
-
+/**
+ * 强制重新下载图库
+ * #强制下载主图库 — 删除现有仓库后重新 clone
+ */
 export class Download extends plugin {
   constructor() {
     super({
-      name: '[面板图图库管理器]安装',
-      dsc: '安装图库',
+      name: '[面板图图库管理器]强制下载',
+      dsc: '强制重新下载图库',
       event: 'message',
       priority: 5,
       rule: [
-        { reg: '^#下载主图库$', fnc: 'downloadMain', permission: 'master' },
-        { reg: '^#下载屏蔽图库$', fnc: 'downloadBlocked', permission: 'master' }
+        { reg: '^#强制下载主图库$', fnc: 'forceDownload', permission: 'master' },
+        { reg: '^#强制下载屏蔽图库$', fnc: 'forceDownloadBlocked', permission: 'master' }
       ]
     })
   }
 
-  async downloadMain(e) {
-    e.reply('[面板图图库管理器] 开始安装主图库，请稍候...')
-    const result = await installGallery(MAIN_REPO_URL, GIT_WORK_DIR, '主图库', '#主图库更新')
-    return e.reply(result)
+  async forceDownload(e) {
+    const jCheck = checkProfileJunction()
+    if (!jCheck.ok) {
+      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
+    }
+
+    const config = getPluginConfig()
+    const repos = config?.gallery?.repos || [{ id: 0, remoteUrl: DEFAULT_REPO_URL, enabled: true }]
+
+    e.reply('[面板图图库管理器] 开始强制重新下载主图库，请稍候...')
+
+    const results = []
+    for (const repo of repos) {
+      if (repo.enabled === false) continue
+      const repoDir = getRepoDir(repo.id)
+      const result = installRepo(repo.remoteUrl || DEFAULT_REPO_URL, repoDir)
+      results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+    }
+
+    const summary = results.join('\n')
+    notifyMaster('[面板图图库管理器] 主图库强制下载完成\n' + summary)
+    return e.reply('[面板图图库管理器] 主图库强制下载完成\n' + summary)
   }
 
-  async downloadBlocked(e) {
-    e.reply('[面板图图库管理器] 开始安装屏蔽图库，请稍候...')
-    if (!fs.existsSync(path.join(GIT_WORK_DIR, '.git'))) {
-      return e.reply('[面板图图库管理器] 主图库未初始化 Git，请先安装主图库')
+  async forceDownloadBlocked(e) {
+    const jCheck = checkProfileJunction()
+    if (!jCheck.ok) {
+      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
     }
 
-    // 如果已存在且是 Git 仓库，提示更新
-    if (fs.existsSync(BLOCKED_GALLERY_PATH) && fs.existsSync(path.join(BLOCKED_GALLERY_PATH, '.git'))) {
-      return e.reply('[面板图图库管理器] 屏蔽图库已安装，请使用 #屏蔽图库更新 进行更新')
-    }
-
-    // 如果存在但不是 Git 仓库（可能是旧残留），删除
-    if (fs.existsSync(BLOCKED_GALLERY_PATH)) {
-      fs.rmSync(BLOCKED_GALLERY_PATH, { recursive: true, force: true })
-    }
-
-    try {
-      execSync(`git clone --depth 1 ${BLOCKED_REPO_URL} "${BLOCKED_GALLERY_PATH}"`, {
-        cwd: GIT_WORK_DIR,
-        encoding: 'utf8',
-        timeout: 60000
-      })
-      return e.reply('[面板图图库管理器] 屏蔽图库安装成功！')
-    } catch (err) {
-      const errorMsg = err.stderr || err.stdout || err.message || '未知错误'
-      return e.reply('[面板图图库管理器] 屏蔽图库安装失败\n' + errorMsg)
-    }
+    e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库，请稍候...')
+    const result = installRepo(BLOCKED_REPO_URL, BLOCKED_REPO_DIR)
+    return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
   }
 }

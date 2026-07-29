@@ -1,35 +1,28 @@
 # ==============================================================
-# ProfileImg-Plugin 配置文件
-# 请将此文件复制为 config.yaml 并根据需要修改
+# ProfileImg-Plugin 配置文件模板（锅巴后台使用）
+# 变量格式：${变量名}，由锅巴表单数据替换
 # ==============================================================
-update:
-  # ---------- 主图库更新设置 ----------
-  mainGallery:
-    # 是否启用主图库的自动检查更新
-    enabled: ${mainGallery_enabled}
-    # 自动检查更新的 cron 表达式（默认每天 5:20）
-    cron: "${mainGallery_cron}"
-    # 是否在检测到更新后自动执行 git pull
-    autoUpdate: ${mainGallery_autoUpdate}
-    # 自动更新后是否重启云崽（主图库更新一般无需重启，设为 false）
-    autoRestart: ${mainGallery_autoRestart}
+gallery:
+  # ---------- 主图库仓库列表 ----------
+  repos:
+    - id: 0
+      name: "miao-plugin-ProfileImg"
+      remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg.git"
+      enabled: ${gallery_repos_0_enabled}
+      cron: "${gallery_repos_0_cron}"
+      autoUpdate: ${gallery_repos_0_autoUpdate}
+      autoRestart: ${gallery_repos_0_autoRestart}
 
-  # ---------- 屏蔽图库更新设置 ----------
-  blockedGallery:
-    # 是否启用屏蔽图库的自动检查更新
-    enabled: ${blockedGallery_enabled}
-    # 自动检查更新的 cron 表达式（默认每天 5:40）
-    cron: "${blockedGallery_cron}"
-    # 是否在检测到更新后自动执行 git pull
-    autoUpdate: ${blockedGallery_autoUpdate}
-    # 自动更新后是否重启云崽（屏蔽图库更新无需重启，设为 false）
-    autoRestart: ${blockedGallery_autoRestart}
+  # ---------- 屏蔽图库 ----------
+  blocked:
+    enabled: ${gallery_blocked_enabled}
+    remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git"
+    cron: "${gallery_blocked_cron}"
+    autoUpdate: ${gallery_blocked_autoUpdate}
+    autoRestart: ${gallery_blocked_autoRestart}
 
 # ---------- 上传压缩设置 ----------
 upload:
-  # 是否在上传面板图时启用压缩（默认关闭）
   enabled: ${upload_enabled}
-  # 压缩输出格式，可选 webp、jpeg、png
   format: "${upload_format}"
-  # 目标压缩大小（单位：KB，默认 500）
   maxSize: ${upload_maxSize}
