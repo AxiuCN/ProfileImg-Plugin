@@ -7,12 +7,13 @@ import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
 import { createCharJunction } from '../model/junction.js'
 import { getRepoCharDir, getRepoDir, PROFILE_DIR } from '../components/constants.js'
+import { escapeRegExp } from '../components/panelUtils.js'
 
 /**
  * 面板图上传（新版：含版权归属信息）
  *
- * 命名格式：<角色名><序号>_<原作者>_<来源>[_<二改情况>].webp
- * 示例：琴1_张三_米游社.webp、琴2_李四_lofter_AI扩图.webp
+ * 命名格式：<角色名>_<序号>_<原作者>_<来源>[_<二改情况>].扩展名
+ * 示例：琴_1_张三_米游社.webp、琴_2_李四_lofter_AI扩图.webp
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -94,9 +95,9 @@ export class UploadWithCompress extends plugin {
         if (!res.ok) continue
         const buffer = Buffer.from(await res.arrayBuffer())
 
-        // 生成文件名
+        // 生成文件名（角色名和序号之间用 _ 分隔，避免带数字角色名混淆）
         const modsPart = modifications ? `_${modifications}` : ''
-        const baseName = `${roleName}${nextNum}_${author}_${source}${modsPart}`
+        const baseName = `${roleName}_${nextNum}_${author}_${source}${modsPart}`
         const ext = `.${format}`
         let filePath = path.join(repoCharDir, baseName + ext)
         // 去重（极少情况）
@@ -155,7 +156,7 @@ export class UploadWithCompress extends plugin {
   }
 
   /**
-   * 计算下一个可用的序号
+   * 计算下一个可用的序号（扫描标准含版权格式）
    * @param {string} dir - 角色目录
    * @param {string} roleName - 角色名
    * @returns {number}
@@ -164,7 +165,7 @@ export class UploadWithCompress extends plugin {
     try {
       if (!fs.existsSync(dir)) return 1
       const files = fs.readdirSync(dir)
-      const pattern = new RegExp(`^${this._escapeRegExp(roleName)}(\\d+)_.+`)
+      const pattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)_.+`, 'i')
       let maxSeq = 0
       for (const file of files) {
         const m = file.match(pattern)
@@ -177,13 +178,6 @@ export class UploadWithCompress extends plugin {
     } catch {
       return 1
     }
-  }
-
-  /**
-   * 转义正则特殊字符（用于角色名中可能含有的特殊字符）
-   */
-  _escapeRegExp(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   /**
