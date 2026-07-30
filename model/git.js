@@ -4,13 +4,13 @@ import path from 'node:path'
 import { DEFAULT_REPO_DIR, BLOCKED_REPO_DIR } from '../components/constants.js'
 
 /* ==========================================================================
-   同步 Git 操作
+   同步 Git 操作（仅用于快速查询）
    ========================================================================== */
 
 /**
  * 在指定目录执行 Git 命令（同步）
- * @param {string} gitDir - Git 仓库目录（含 .git 的目录）
- * @param {string} command - Git 命令（不含 'git' 前缀，如 'pull origin main'）
+ * @param {string} gitDir - Git 仓库目录
+ * @param {string} command - Git 命令（不含 'git' 前缀）
  * @param {number} timeout - 超时毫秒
  * @returns {string} 命令输出（已 trim）
  */
@@ -20,14 +20,19 @@ export function gitExec(gitDir, command, timeout = 10000) {
 
 /**
  * 在指定目录执行 Git 命令（异步），不阻塞 Bot 主线程
+ * timeout=0 时不设超时（用于长时间下载）
  * @param {string} gitDir - Git 仓库目录
  * @param {string} command - Git 命令（不含 'git' 前缀）
- * @param {number} timeout - 超时毫秒
+ * @param {number} timeout - 超时毫秒，0 = 不限时
  * @returns {Promise<{ ok: boolean, stdout?: string, stderr?: string, error?: string }>}
  */
 export function gitExecAsync(gitDir, command, timeout = 120000) {
   return new Promise((resolve) => {
-    const child = exec(`git ${command}`, { cwd: gitDir, encoding: 'utf8', timeout },
+    const opts = { cwd: gitDir, encoding: 'utf8' }
+    if (timeout > 0) opts.timeout = timeout
+    // timeout=0 → exec 不设 timeout，不限时等待
+
+    const child = exec(`git ${command}`, opts,
       (error, stdout, stderr) => {
         if (error) {
           resolve({ ok: false, stdout: stdout?.trim(), stderr: stderr?.trim(), error: error.message })
@@ -35,9 +40,11 @@ export function gitExecAsync(gitDir, command, timeout = 120000) {
           resolve({ ok: true, stdout: stdout.trim(), stderr: stderr?.trim() })
         }
       })
-    // 额外的安全超时（exec 的 timeout 可能不触发回调）
-    const timer = setTimeout(() => { child.kill('SIGTERM') }, timeout + 5000)
-    child.on('close', () => clearTimeout(timer))
+    // 只有设置了超时的情况下才加安全定时器
+    if (timeout > 0) {
+      const timer = setTimeout(() => { child.kill('SIGTERM') }, timeout + 5000)
+      child.on('close', () => clearTimeout(timer))
+    }
   })
 }
 
@@ -46,16 +53,17 @@ export function gitExecAsync(gitDir, command, timeout = 120000) {
    ========================================================================== */
 
 /**
- * 安装（克隆/初始化）一个 Git 仓库到指定目录
- * git init → remote add → fetch --depth 1 → reset --hard
- * @param {string} repoUrl - 远程仓库 URL
- * @param {string} targetDir - 目标目录
- * @param {string} branch - 分支名，默认 'main'
- * @returns {{ ok: boolean, msg: string, existed: boolean }}
+ * 安装（克隆/初始化）一个 Git 仓库到指定目录（同步，仅用于简单检查场景）
+ * 长时间下载请用 installRepoAsync
  */
 export function installRepo(repoUrl, targetDir, branch = 'main') {
   if (fs.existsSync(path.join(targetDir, '.git'))) {
-    return { ok: true, msg: '仓库已安装', existed: true }
+    try {
+      gitExec(targetDir, 'rev-parse HEAD', 5000)
+      return { ok: true, msg: '仓库已安装', existed: true }
+    } catch {
+      // HEAD 无效，续传
+    }
   }
   try {
     if (fs.existsSync(targetDir)) {
@@ -73,31 +81,58 @@ export function installRepo(repoUrl, targetDir, branch = 'main') {
 }
 
 /**
- * 异步安装仓库（用于 #图库初始化 等场景）
+ * 异步安装仓库 — 不阻塞 Bot，不限时等待（适配大仓库/慢网络）
+ * 支持断点续装：.git 存在但 HEAD 无效时自动续传 fetch+reset
+ * @param {string} repoUrl - 远程仓库 URL
+ * @param {string} targetDir - 目标目录
+ * @param {string} branch - 分支名，默认 'main'
  * @returns {Promise<{ ok: boolean, msg: string, existed: boolean }>}
  */
 export async function installRepoAsync(repoUrl, targetDir, branch = 'main') {
-  if (fs.existsSync(path.join(targetDir, '.git'))) {
-    return { ok: true, msg: '仓库已安装', existed: true }
-  }
-  try {
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true })
-    }
-    fs.mkdirSync(targetDir, { recursive: true })
+  const hasGit = fs.existsSync(path.join(targetDir, '.git'))
 
-    let r = await gitExecAsync(targetDir, `init --initial-branch=${branch}`)
-    if (!r.ok) throw new Error(r.error)
-    r = await gitExecAsync(targetDir, `remote add origin ${repoUrl}`)
-    if (!r.ok) throw new Error(r.error)
-    r = await gitExecAsync(targetDir, `fetch origin ${branch} --depth 1`, 120000)
+  if (hasGit) {
+    try {
+      gitExec(targetDir, 'rev-parse HEAD', 5000)
+      return { ok: true, msg: '仓库已安装', existed: true }
+    } catch {
+      // .git 存在但 HEAD 无效 → 上次安装被中断，续传
+    }
+  }
+
+  const existed = hasGit
+
+  try {
+    if (!existed) {
+      if (fs.existsSync(targetDir)) {
+        fs.rmSync(targetDir, { recursive: true })
+      }
+      fs.mkdirSync(targetDir, { recursive: true })
+
+      let r = await gitExecAsync(targetDir, `init --initial-branch=${branch}`)
+      if (!r.ok) throw new Error(r.error)
+      r = await gitExecAsync(targetDir, `remote add origin ${repoUrl}`)
+      if (!r.ok) throw new Error(r.error)
+    }
+
+    // fetch 不设超时 — 大仓库可能下载数小时
+    let r = await gitExecAsync(targetDir, `fetch origin ${branch} --depth 1`, 0)
     if (!r.ok) throw new Error(r.error)
     r = await gitExecAsync(targetDir, `reset --hard origin/${branch}`)
     if (!r.ok) throw new Error(r.error)
 
-    return { ok: true, msg: '安装成功', existed: false }
+    return { ok: true, msg: existed ? '安装续传成功' : '安装成功', existed }
   } catch (e) {
-    return { ok: false, msg: `安装失败: ${e.message}`, existed: false }
+    // 超时/断网但数据可能已部分下载 → 提示重试
+    const objectsDir = path.join(targetDir, '.git', 'objects')
+    try {
+      const hasObjects = fs.existsSync(objectsDir) &&
+        fs.readdirSync(objectsDir).filter(d => d !== 'info' && d !== 'pack').length > 0
+      if (hasObjects) {
+        return { ok: false, msg: '下载中断（数据已部分缓存），请重新执行继续下载', existed: true }
+      }
+    } catch {}
+    return { ok: false, msg: `安装失败: ${e.message}`, existed }
   }
 }
 
@@ -105,12 +140,6 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main') {
    SHA / 版本查询
    ========================================================================== */
 
-/**
- * 获取远程最新 SHA
- * @param {string} gitDir - Git 仓库目录
- * @param {string} branch - 远程分支，默认 'main'
- * @returns {string|null}
- */
 export function getRemoteSha(gitDir, branch = 'main') {
   try {
     gitExec(gitDir, `fetch origin ${branch}`, 30000)
@@ -118,25 +147,25 @@ export function getRemoteSha(gitDir, branch = 'main') {
   } catch (e) { return null }
 }
 
-/**
- * 获取本地最新 SHA
- * @param {string} gitDir - Git 仓库目录
- * @returns {string|null}
- */
 export function getLocalSha(gitDir) {
   try {
     return gitExec(gitDir, 'rev-parse --short HEAD')
   } catch (e) { return null }
 }
 
-/**
- * 获取最新 commit 日期
- * @param {string} gitDir - Git 仓库目录
- * @returns {string|null}
- */
 export function getLastCommitDate(gitDir) {
   try {
     return gitExec(gitDir, 'log -1 --format=%ci')
+  } catch (e) { return null }
+}
+
+/** 异步获取远程 SHA */
+export async function getRemoteShaAsync(gitDir, branch = 'main') {
+  try {
+    let r = await gitExecAsync(gitDir, `fetch origin ${branch}`, 60000)
+    if (!r.ok) return null
+    r = await gitExecAsync(gitDir, `rev-parse --short origin/${branch}`)
+    return r.ok ? r.stdout : null
   } catch (e) { return null }
 }
 
@@ -144,12 +173,6 @@ export function getLastCommitDate(gitDir) {
    更新操作
    ========================================================================== */
 
-/**
- * Fast-forward 拉取更新
- * @param {string} gitDir - Git 仓库目录
- * @param {string} branch - 分支名，默认 'main'
- * @returns {{ ok: boolean, updated: boolean, msg: string }}
- */
 export function fastForwardPull(gitDir, branch = 'main') {
   try {
     const before = getLocalSha(gitDir)
@@ -161,18 +184,34 @@ export function fastForwardPull(gitDir, branch = 'main') {
   }
 }
 
-/**
- * 强制重置到远程
- * @param {string} gitDir - Git 仓库目录
- * @param {string} branch - 分支名，默认 'main'
- */
 export function forceReset(gitDir, branch = 'main') {
   gitExec(gitDir, `fetch origin ${branch}`, 30000)
   gitExec(gitDir, `reset --hard origin/${branch}`, 30000)
 }
 
+/** 异步 fast-forward 拉取 */
+export async function fastForwardPullAsync(gitDir, branch = 'main') {
+  try {
+    const before = getLocalSha(gitDir)
+    const r = await gitExecAsync(gitDir, `pull origin ${branch} --ff-only`, 60000)
+    if (!r.ok) throw new Error(r.error)
+    const after = getLocalSha(gitDir)
+    return { ok: true, updated: before !== after, msg: before !== after ? '已更新' : '已是最新' }
+  } catch (e) {
+    return { ok: false, updated: false, msg: e.message }
+  }
+}
+
+/** 异步强制重置到远程 */
+export async function forceResetAsync(gitDir, branch = 'main') {
+  let r = await gitExecAsync(gitDir, `fetch origin ${branch}`, 60000)
+  if (!r.ok) throw new Error(r.error)
+  r = await gitExecAsync(gitDir, `reset --hard origin/${branch}`)
+  if (!r.ok) throw new Error(r.error)
+}
+
 /* ==========================================================================
-   兼容性包装（保持旧 API 名称可用）
+   兼容性包装
    ========================================================================== */
 
 /** @deprecated 使用 gitExec(dir, command) 替代 */

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { installRepo } from '../model/git.js'
+import { installRepoAsync } from '../model/git.js'
 import { createCharJunction } from '../model/junction.js'
 import { loadMap, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
@@ -11,9 +11,9 @@ import {
 } from '../components/constants.js'
 
 /**
- * 图库下载管理
+ * 图库下载管理（全程异步，不阻塞 Bot）
  * #下载主图库 / #下载屏蔽图库 — 首次下载
- * #强制下载主图库 / #强制下载屏蔽图库 — 删除后重新 clone
+ * #强制下载主图库 / #强制下载屏蔽图库 — 重新下载
  */
 export class Download extends plugin {
   constructor() {
@@ -31,7 +31,7 @@ export class Download extends plugin {
     })
   }
 
-  /** 首次下载主图库（不强制删除已有仓库） */
+  /** 首次下载主图库 */
   async downloadMain(e) {
     const jCheck = checkProfileJunction()
     if (!jCheck.ok) {
@@ -39,17 +39,22 @@ export class Download extends plugin {
     }
 
     const activeIds = getActiveRepoIds()
-    e.reply('[面板图图库管理器] 开始下载主图库，请稍候...')
+    const total = activeIds.length
+    e.reply(`[面板图图库管理器] 开始下载主图库（${total} 个仓库，逐个通知进度）...`)
 
     const results = []
+    let completed = 0
     for (const repoId of activeIds) {
       const repo = getRepoConfig(repoId)
       const repoDir = getRepoDir(repoId)
-      const result = installRepo(repo.remoteUrl, repoDir)
+      const result = await installRepoAsync(repo.remoteUrl, repoDir)
+      completed++
       results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+      if (total > 1) {
+        e.reply(`[面板图图库管理器] 下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+      }
     }
 
-    // 下载后创建角色 junction
     const jCount = this._rebuildCharJunctions(activeIds)
 
     const summary = results.join('\n')
@@ -68,12 +73,12 @@ export class Download extends plugin {
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
-    e.reply('[面板图图库管理器] 开始下载屏蔽图库，请稍候...')
-    const result = installRepo(blockedUrl, BLOCKED_REPO_DIR)
+    e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
+    const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
     return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
   }
 
-  /** 强制重新下载主图库（installRepo 检测到已有 .git 会跳过，如需强制需手动删除） */
+  /** 强制重新下载主图库 */
   async forceDownload(e) {
     const jCheck = checkProfileJunction()
     if (!jCheck.ok) {
@@ -81,17 +86,25 @@ export class Download extends plugin {
     }
 
     const activeIds = getActiveRepoIds()
-    e.reply('[面板图图库管理器] 开始强制重新下载主图库，请稍候...')
+    const total = activeIds.length
+    e.reply(`[面板图图库管理器] 开始强制重新下载主图库（${total} 个仓库）...`)
 
     const results = []
+    let completed = 0
     for (const repoId of activeIds) {
       const repo = getRepoConfig(repoId)
       const repoDir = getRepoDir(repoId)
-      const result = installRepo(repo.remoteUrl, repoDir)
+      if (fs.existsSync(repoDir)) {
+        fs.rmSync(repoDir, { recursive: true, force: true })
+      }
+      const result = await installRepoAsync(repo.remoteUrl, repoDir)
+      completed++
       results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+      if (total > 1) {
+        e.reply(`[面板图图库管理器] 强制下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+      }
     }
 
-    // 下载后重建角色 junction
     const jCount = this._rebuildCharJunctions(activeIds)
 
     const summary = results.join('\n')
@@ -110,20 +123,20 @@ export class Download extends plugin {
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
-    e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库，请稍候...')
-    const result = installRepo(blockedUrl, BLOCKED_REPO_DIR)
+    e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库（后台执行）...')
+    if (fs.existsSync(BLOCKED_REPO_DIR)) {
+      fs.rmSync(BLOCKED_REPO_DIR, { recursive: true, force: true })
+    }
+    const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
     return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
   }
 
   /**
    * 重建所有角色 junction（下载完成后调用）
-   * @param {number[]} activeIds - 活跃仓库 ID 列表
-   * @returns {number} 创建的 junction 数量
    */
   _rebuildCharJunctions(activeIds) {
     let junctionCount = 0
 
-    // 从 map.json 读取角色→仓库映射
     const map = loadMap()
     for (const [charName, repoId] of Object.entries(map.mapping)) {
       const repoDir = getRepoDir(repoId)
@@ -132,7 +145,6 @@ export class Download extends plugin {
       if (nResult.ok || sResult.ok) junctionCount++
     }
 
-    // 扫描所有活跃仓库实际存在的角色目录（map.json 中可能没有，保底）
     for (const repoId of activeIds) {
       const repoDir = getRepoDir(repoId)
       try {
