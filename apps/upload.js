@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getRepoForChar, setRepoForChar } from '../model/mapJson.js'
-import { getMainDir } from '../model/blockedInfo.js'
 import { getPluginConfig } from '../components/config.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
@@ -10,10 +9,10 @@ import { getRepoCharDir, getRepoDir, PROFILE_DIR } from '../components/constants
 import { escapeRegExp } from '../components/panelUtils.js'
 
 /**
- * 面板图上传（新版：含版权归属信息）
+ * 面板图上传（版权信息可选）
  *
- * 命名格式：<角色名>_<序号>_<原作者>_<来源>[_<二改情况>].扩展名
- * 示例：琴_1_张三_米游社.webp、琴_2_李四_lofter_AI扩图.webp
+ * 含版权：角色名_n_作者_来源[_二改].扩展名 — #添加琴面板图 张三 米游社
+ * 无版权：角色名_n.扩展名 — #添加琴面板图
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -21,36 +20,57 @@ export class UploadWithCompress extends plugin {
   constructor() {
     super({
       name: '[面板图图库管理器]上传',
-      dsc: '上传面板图（支持版权归属）',
+      dsc: '上传面板图（版权信息可选）',
       event: 'message',
       priority: 1,
       rule: [
         {
-          // 新版格式：#添加琴面板图 张三 米游社 [AI扩图]
+          // 含版权：#添加琴面板图 张三 米游社 [AI扩图]
           reg: /^#?\s*(?:上传|添加)(.+?)(?:面板图)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/,
           fnc: 'uploadWithAttribution'
         },
         {
-          // 旧版兼容：#添加琴面板图（无版权信息，提示用户新格式）
+          // 无版权：#添加琴面板图
           reg: /^#?\s*(?:上传|添加)(.+)(?:面板图)\s*$/,
-          fnc: 'uploadLegacyHint'
+          fnc: 'uploadSimple'
         }
       ]
     })
   }
 
-  /**
-   * 新版上传：含版权归属信息
-   */
+  /** 含版权上传 */
   async uploadWithAttribution(e) {
     const match = e.msg.match(/^#?\s*(?:上传|添加)(.+?)(?:面板图)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/)
     if (!match) return true
 
-    const rawRole = match[1].trim()
-    const author = match[2].trim()
-    const source = match[3].trim()
-    const modifications = (match[4] || '').trim()
+    return this._doUpload(e, {
+      author: match[2].trim(),
+      source: match[3].trim(),
+      modifications: (match[4] || '').trim()
+    })
+  }
 
+  /** 无版权上传 */
+  async uploadSimple(e) {
+    // 只有纯 "#添加角色面板图"（无额外参数）才走这里
+    const msg = e.msg.replace(/^#/, '').replace(/^(上传|添加)/, '').replace(/面板图/, '').trim()
+    if (!msg) return true
+
+    return this._doUpload(e, {})
+  }
+
+  /**
+   * 统一上传逻辑
+   * @param {object} e - 消息事件
+   * @param {{ author?: string, source?: string, modifications?: string }} attribution
+   */
+  async _doUpload(e, attribution = {}) {
+    const { author, source, modifications } = attribution
+    const hasCopyright = !!(author && source)
+
+    // 解析角色名
+    const rawRole = e.msg.match(/(?:上传|添加)(.+?)(?:面板图)/)?.[1]?.trim()
+      || e.msg.replace(/#|面板图|上传|添加/g, '').trim()
     const roleName = resolveRoleName(rawRole)
 
     // 提取图片
@@ -67,13 +87,11 @@ export class UploadWithCompress extends plugin {
     // 确保目录存在
     if (!fs.existsSync(repoCharDir)) {
       fs.mkdirSync(repoCharDir, { recursive: true })
-      // 自动创建 character-level junction
       createCharJunction(roleName, 'normal', getRepoDir(repoId), PROFILE_DIR)
-      // 更新 map.json
       setRepoForChar(roleName, repoId)
     }
 
-    // 计算序号：扫描已有文件，取最大序号+1
+    // 计算序号：扫描所有标准格式文件
     const nextNum = this._getNextSeq(repoCharDir, roleName)
 
     // 读取上传配置
@@ -83,7 +101,6 @@ export class UploadWithCompress extends plugin {
     const format = uploadCfg.format || 'webp'
 
     let addedCount = 0
-    const addedFiles = []
 
     for (const img of imgSegments) {
       try {
@@ -95,12 +112,16 @@ export class UploadWithCompress extends plugin {
         if (!res.ok) continue
         const buffer = Buffer.from(await res.arrayBuffer())
 
-        // 生成文件名（角色名和序号之间用 _ 分隔，避免带数字角色名混淆）
-        const modsPart = modifications ? `_${modifications}` : ''
-        const baseName = `${roleName}_${nextNum}_${author}_${source}${modsPart}`
+        // 生成文件名
         const ext = `.${format}`
+        let baseName
+        if (hasCopyright) {
+          const modsPart = modifications ? `_${modifications}` : ''
+          baseName = `${roleName}_${nextNum}_${author}_${source}${modsPart}`
+        } else {
+          baseName = `${roleName}_${nextNum}`
+        }
         let filePath = path.join(repoCharDir, baseName + ext)
-        // 去重（极少情况）
         let counter = 1
         while (fs.existsSync(filePath)) {
           filePath = path.join(repoCharDir, `${baseName}_${counter}${ext}`)
@@ -121,7 +142,6 @@ export class UploadWithCompress extends plugin {
         }
 
         fs.writeFileSync(filePath, finalBuffer)
-        addedFiles.push(baseName + ext)
         addedCount++
         nextNum++
       } catch (err) {
@@ -131,10 +151,17 @@ export class UploadWithCompress extends plugin {
 
     if (addedCount > 0) {
       const senderName = (e.sender.card || e.sender.nickname || '').slice(0, 8)
-      e.reply([
-        segment.at(e.user_id, senderName),
-        ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，二改：${modifications}` : ''}）`
-      ])
+      if (hasCopyright) {
+        e.reply([
+          segment.at(e.user_id, senderName),
+          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，二改：${modifications}` : ''}）`
+        ])
+      } else {
+        e.reply([
+          segment.at(e.user_id, senderName),
+          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图`
+        ])
+      }
     } else {
       e.reply('[面板图图库管理器] 添加失败，请稍后重试。')
     }
@@ -142,21 +169,7 @@ export class UploadWithCompress extends plugin {
   }
 
   /**
-   * 旧版上传：提示用户新格式
-   */
-  async uploadLegacyHint(e) {
-    const rawRole = e.msg.replace(/#|面板图|上传|添加/g, '').trim()
-    e.reply([
-      '[面板图图库管理器] 请使用新版格式上传面板图：\n',
-      `#添加${rawRole || '角色名'}面板图 原作者 来源 [二改情况]\n`,
-      '示例：#添加琴面板图 张三 米游社\n',
-      '示例：#添加甘雨面板图 李四 lofter AI扩图'
-    ].join(''))
-    return true
-  }
-
-  /**
-   * 计算下一个可用的序号（扫描标准含版权格式）
+   * 计算下一个可用的序号（扫描所有标准格式：含版权 + 无版权）
    * @param {string} dir - 角色目录
    * @param {string} roleName - 角色名
    * @returns {number}
@@ -165,7 +178,9 @@ export class UploadWithCompress extends plugin {
     try {
       if (!fs.existsSync(dir)) return 1
       const files = fs.readdirSync(dir)
-      const pattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)_.+`, 'i')
+      const esc = escapeRegExp(roleName)
+      // 匹配 角色名_n_*（含版权）和 角色名_n.扩展名（无版权）
+      const pattern = new RegExp(`^${esc}_(\\d+)(?:_|\\.)`, 'i')
       let maxSeq = 0
       for (const file of files) {
         const m = file.match(pattern)

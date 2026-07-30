@@ -1,28 +1,79 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { installRepo } from '../model/git.js'
+import { createCharJunction } from '../model/junction.js'
+import { loadMap, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
-import { BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig } from '../components/constants.js'
-import { checkProfileJunction } from '../model/gallery.js'
 import { notifyMaster } from '../components/notify.js'
-import { getActiveRepoIds } from '../model/mapJson.js'
+import { checkProfileJunction } from '../model/gallery.js'
+import {
+  PROFILE_DIR, BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
+} from '../components/constants.js'
 
 /**
- * 强制重新下载图库
- * #强制下载主图库 — 删除现有仓库后重新 clone
+ * 图库下载管理
+ * #下载主图库 / #下载屏蔽图库 — 首次下载
+ * #强制下载主图库 / #强制下载屏蔽图库 — 删除后重新 clone
  */
 export class Download extends plugin {
   constructor() {
     super({
-      name: '[面板图图库管理器]强制下载',
-      dsc: '强制重新下载图库',
+      name: '[面板图图库管理器]下载',
+      dsc: '下载/强制下载图库',
       event: 'message',
       priority: 5,
       rule: [
+        { reg: '^#下载主图库$', fnc: 'downloadMain', permission: 'master' },
+        { reg: '^#下载屏蔽图库$', fnc: 'downloadBlocked', permission: 'master' },
         { reg: '^#强制下载主图库$', fnc: 'forceDownload', permission: 'master' },
         { reg: '^#强制下载屏蔽图库$', fnc: 'forceDownloadBlocked', permission: 'master' }
       ]
     })
   }
 
+  /** 首次下载主图库（不强制删除已有仓库） */
+  async downloadMain(e) {
+    const jCheck = checkProfileJunction()
+    if (!jCheck.ok) {
+      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
+    }
+
+    const activeIds = getActiveRepoIds()
+    e.reply('[面板图图库管理器] 开始下载主图库，请稍候...')
+
+    const results = []
+    for (const repoId of activeIds) {
+      const repo = getRepoConfig(repoId)
+      const repoDir = getRepoDir(repoId)
+      const result = installRepo(repo.remoteUrl, repoDir)
+      results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+    }
+
+    // 下载后创建角色 junction
+    const jCount = this._rebuildCharJunctions(activeIds)
+
+    const summary = results.join('\n')
+    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\njunction 数量：${jCount}`
+    notifyMaster(msg)
+    return e.reply(msg)
+  }
+
+  /** 首次下载屏蔽图库 */
+  async downloadBlocked(e) {
+    const jCheck = checkProfileJunction()
+    if (!jCheck.ok) {
+      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
+    }
+
+    const config = getPluginConfig()
+    const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
+
+    e.reply('[面板图图库管理器] 开始下载屏蔽图库，请稍候...')
+    const result = installRepo(blockedUrl, BLOCKED_REPO_DIR)
+    return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
+  }
+
+  /** 强制重新下载主图库（installRepo 检测到已有 .git 会跳过，如需强制需手动删除） */
   async forceDownload(e) {
     const jCheck = checkProfileJunction()
     if (!jCheck.ok) {
@@ -40,11 +91,16 @@ export class Download extends plugin {
       results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
     }
 
+    // 下载后重建角色 junction
+    const jCount = this._rebuildCharJunctions(activeIds)
+
     const summary = results.join('\n')
-    notifyMaster('[面板图图库管理器] 主图库强制下载完成\n' + summary)
-    return e.reply('[面板图图库管理器] 主图库强制下载完成\n' + summary)
+    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\njunction 数量：${jCount}`
+    notifyMaster(msg)
+    return e.reply(msg)
   }
 
+  /** 强制重新下载屏蔽图库 */
   async forceDownloadBlocked(e) {
     const jCheck = checkProfileJunction()
     if (!jCheck.ok) {
@@ -57,5 +113,50 @@ export class Download extends plugin {
     e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库，请稍候...')
     const result = installRepo(blockedUrl, BLOCKED_REPO_DIR)
     return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
+  }
+
+  /**
+   * 重建所有角色 junction（下载完成后调用）
+   * @param {number[]} activeIds - 活跃仓库 ID 列表
+   * @returns {number} 创建的 junction 数量
+   */
+  _rebuildCharJunctions(activeIds) {
+    let junctionCount = 0
+
+    // 从 map.json 读取角色→仓库映射
+    const map = loadMap()
+    for (const [charName, repoId] of Object.entries(map.mapping)) {
+      const repoDir = getRepoDir(repoId)
+      const nResult = createCharJunction(charName, 'normal', repoDir, PROFILE_DIR)
+      const sResult = createCharJunction(charName, 'super', repoDir, PROFILE_DIR)
+      if (nResult.ok || sResult.ok) junctionCount++
+    }
+
+    // 扫描所有活跃仓库实际存在的角色目录（map.json 中可能没有，保底）
+    for (const repoId of activeIds) {
+      const repoDir = getRepoDir(repoId)
+      try {
+        const repoNormal = path.join(repoDir, 'normal-character')
+        if (fs.existsSync(repoNormal)) {
+          const chars = fs.readdirSync(repoNormal, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+          for (const c of chars) {
+            createCharJunction(c.name, 'normal', repoDir, PROFILE_DIR)
+          }
+        }
+        const repoSuper = path.join(repoDir, 'super-character')
+        if (fs.existsSync(repoSuper)) {
+          const chars = fs.readdirSync(repoSuper, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+          for (const c of chars) {
+            createCharJunction(c.name, 'super', repoDir, PROFILE_DIR)
+          }
+        }
+      } catch (scanErr) {
+        logger.warn(`[ProfileImg-Plugin] 扫描仓库${repoId}角色目录失败:`, scanErr)
+      }
+    }
+
+    return junctionCount
   }
 }
