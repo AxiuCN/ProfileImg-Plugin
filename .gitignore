@@ -5,7 +5,7 @@ node_modules/
 config/config.yaml
 
 # 图库运行时目录（由 #图库初始化 创建）
-resources/gallery/
+resources/gallery/*
 
 # map.json 是持久化配置，纳入版本控制
 !resources/gallery/map.json
