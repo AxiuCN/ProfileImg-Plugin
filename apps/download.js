@@ -80,11 +80,6 @@ export class Download extends plugin {
 
   /** 首次下载屏蔽图库 */
   async downloadBlocked(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) {
-      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
-    }
-
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
@@ -154,11 +149,6 @@ export class Download extends plugin {
 
   /** 强制重新下载屏蔽图库 */
   async forceDownloadBlocked(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) {
-      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
-    }
-
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 

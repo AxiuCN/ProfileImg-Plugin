@@ -4,16 +4,31 @@ import { PROFILE_DIR, DEFAULT_REPO_DIR, BLOCKED_REPO_DIR, MIAO_PROFILE_LINK } fr
 import { isJunction } from './junction.js'
 
 /**
- * 检查 profile junction 是否就绪
- * 验证 miao-plugin/resources/profile → ProfileImg-Plugin/resources/gallery/profile 的 junction 链
+ * 检查初始化是否就绪
+ * 支持两种模式：
+ *   模式 A — MIAO_PROFILE_LINK 本身为 junction 指向 PROFILE_DIR
+ *   模式 B — MIAO_PROFILE_LINK 为真实目录，其下 normal-character / super-character 为 junction
  * @returns {{ ok: boolean, msg?: string }}
  */
 export function checkProfileJunction() {
   if (!fs.existsSync(MIAO_PROFILE_LINK)) {
     return { ok: false, msg: '[面板图图库管理器] profile 目录不存在，请发送 #图库初始化' }
   }
-  if (!isJunction(MIAO_PROFILE_LINK)) {
-    return { ok: false, msg: '[面板图图库管理器] profile 目录不是 junction，请发送 #图库初始化 重新设置' }
+
+  // 模式 A：根 junction
+  if (isJunction(MIAO_PROFILE_LINK)) {
+    if (!fs.existsSync(PROFILE_DIR)) {
+      return { ok: false, msg: '[面板图图库管理器] 图库目录不存在，请发送 #图库初始化' }
+    }
+    return { ok: true }
+  }
+
+  // 模式 B：子目录级 junction（MIAO_PROFILE_LINK 为真实目录，其子目录为 junction 指向 PROFILE_DIR）
+  for (const sub of ['normal-character', 'super-character']) {
+    const subPath = path.join(MIAO_PROFILE_LINK, sub)
+    if (!fs.existsSync(subPath) || !isJunction(subPath)) {
+      return { ok: false, msg: '[面板图图库管理器] 图库未正确初始化，请发送 #图库初始化' }
+    }
   }
   if (!fs.existsSync(PROFILE_DIR)) {
     return { ok: false, msg: '[面板图图库管理器] 图库目录不存在，请发送 #图库初始化' }
