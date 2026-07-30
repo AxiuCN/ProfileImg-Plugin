@@ -98,7 +98,14 @@ export class InitGallery extends plugin {
 
       // 2. 删除旧的 miao-plugin/resources/profile（若存在且非 junction）
       if (fs.existsSync(MIAO_PROFILE_LINK) && !isJunction(MIAO_PROFILE_LINK)) {
-        fs.rmSync(MIAO_PROFILE_LINK, { recursive: true, force: true })
+        try {
+          fs.chmodSync(MIAO_PROFILE_LINK, 0o777)
+          fs.rmSync(MIAO_PROFILE_LINK, { recursive: true, force: true })
+        } catch (rmErr) {
+          // Windows EPERM fallback: shell 命令强行删除
+          const { execSync } = await import('node:child_process')
+          execSync(`rmdir /s /q "${MIAO_PROFILE_LINK}"`, { stdio: 'pipe' })
+        }
       }
 
       // 3. 创建 profile junction
