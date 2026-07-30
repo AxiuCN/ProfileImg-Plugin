@@ -1,7 +1,82 @@
 import { execSync, exec } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DEFAULT_REPO_DIR, BLOCKED_REPO_DIR } from '../components/constants.js'
+
+/* ==========================================================================
+   操作锁 — 防止下载/更新并发操作同一仓库
+   ========================================================================== */
+
+/** 锁文件目录：data/git-locks/ */
+const LOCK_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'git-locks'
+)
+
+/** 各操作类型的过期阈值（毫秒） */
+const STALE_THRESHOLDS = {
+  download: 24 * 60 * 60 * 1000,  // 24h，大仓库克隆可能数小时
+  update: 10 * 60 * 1000,          // 10min，pull 正常几十秒
+  default: 30 * 60 * 1000          // 30min，兜底
+}
+
+function _ensureLockDir() {
+  if (!fs.existsSync(LOCK_DIR)) {
+    fs.mkdirSync(LOCK_DIR, { recursive: true })
+  }
+}
+
+/**
+ * 获取仓库操作锁（文件锁）
+ * @param {string} id - 仓库标识："0" / "1" / "blocked"
+ * @param {string} operation - 操作描述，用于日志和冲突提示
+ * @param {'download'|'update'|'default'} type - 操作类型，决定过期阈值
+ * @returns {{ ok: true, release: () => void } | { ok: false, msg: string }}
+ */
+export function acquireLock(id, operation, type = 'default') {
+  _ensureLockDir()
+  const lockFile = path.join(LOCK_DIR, `${id}.lock`)
+
+  if (fs.existsSync(lockFile)) {
+    const stat = fs.statSync(lockFile)
+    const age = Date.now() - stat.mtimeMs
+    const threshold = STALE_THRESHOLDS[type] || STALE_THRESHOLDS.default
+
+    if (age > threshold) {
+      logger.warn(`[ProfileImg-Plugin] 仓库${id}的锁文件已过期（${Math.round(age / 60000)}分钟），强制接管`)
+    } else {
+      try {
+        const info = JSON.parse(fs.readFileSync(lockFile, 'utf8'))
+        return { ok: false, msg: `仓库${id}正在${info.operation}，请稍后再试` }
+      } catch {
+        // 锁文件损坏，接管
+      }
+    }
+  }
+
+  fs.writeFileSync(lockFile, JSON.stringify({
+    id,
+    operation,
+    startTime: new Date().toISOString(),
+    pid: process.pid
+  }))
+
+  return {
+    ok: true,
+    release: () => {
+      try { fs.unlinkSync(lockFile) } catch {}
+    }
+  }
+}
+
+/**
+ * 强制释放锁（用于异常恢复）
+ * @param {string} id - 仓库标识
+ */
+export function releaseLock(id) {
+  const lockFile = path.join(LOCK_DIR, `${id}.lock`)
+  try { fs.unlinkSync(lockFile) } catch {}
+}
 
 /* ==========================================================================
    同步 Git 操作（仅用于快速查询）

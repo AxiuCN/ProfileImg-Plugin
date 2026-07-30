@@ -1,4 +1,4 @@
-import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync } from '../model/git.js'
+import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync, acquireLock } from '../model/git.js'
 import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/gallery.js'
 import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
@@ -58,7 +58,7 @@ export class Update extends plugin {
     if (tasks.length > 0) this.task = tasks
   }
 
-  /** 自动检查单个仓库（异步） */
+  /** 自动检查单个仓库（异步，有锁保护） */
   async _autoCheckRepo(repoId) {
     const repoCfg = getRepoConfig(repoId)
     if (repoCfg.autoUpdate === false) return
@@ -66,6 +66,9 @@ export class Update extends plugin {
     const repoDir = getRepoDir(repoId)
     const check = checkRepo(repoDir)
     if (!check.ok) return
+
+    const lock = acquireLock(String(repoId), '自动更新', 'update')
+    if (!lock.ok) return // cron 冲突时静默跳过，下轮再试
 
     try {
       const remoteSha = await getRemoteShaAsync(repoDir)
@@ -90,16 +93,21 @@ export class Update extends plugin {
       }
     } catch (err) {
       logger.error(`[面板图图库管理器] 仓库${repoId}自动检查更新失败:`, err)
+    } finally {
+      lock.release()
     }
   }
 
-  /** 自动检查屏蔽图库（异步） */
+  /** 自动检查屏蔽图库（异步，有锁保护） */
   async _autoCheckBlocked() {
     const blockedCfg = getPluginConfig()?.gallery?.blocked || {}
     if (blockedCfg.autoUpdate === false) return
 
     const check = checkBlockedGallery()
     if (!check.ok) return
+
+    const lock = acquireLock('blocked', '自动更新', 'update')
+    if (!lock.ok) return // cron 冲突时静默跳过
 
     try {
       const remoteSha = await getRemoteShaAsync(BLOCKED_REPO_DIR)
@@ -123,6 +131,8 @@ export class Update extends plugin {
       }
     } catch (err) {
       logger.error('[面板图图库管理器] 屏蔽图库自动检查更新失败:', err)
+    } finally {
+      lock.release()
     }
   }
 
@@ -142,11 +152,26 @@ export class Update extends plugin {
       const repoDir = getRepoDir(repo.id)
       const check = checkRepo(repoDir)
       if (!check.ok) { results.push(`仓库${repo.id}：${check.msg}`); completed++; continue }
-      const result = await fastForwardPullAsync(repoDir)
-      completed++
-      results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
-      if (total > 1) {
-        e.reply(`[面板图图库管理器] 更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+
+      const lock = acquireLock(String(repo.id), '更新主图库', 'update')
+      if (!lock.ok) {
+        completed++
+        results.push(`仓库${repo.id}(${repo.name || '默认'})：${lock.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${lock.msg}`)
+        }
+        continue
+      }
+
+      try {
+        const result = await fastForwardPullAsync(repoDir)
+        completed++
+        results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+        }
+      } finally {
+        lock.release()
       }
     }
     return e.reply('[面板图图库管理器] 主图库更新\n' + results.join('\n'))
@@ -166,6 +191,17 @@ export class Update extends plugin {
       const repoDir = getRepoDir(repo.id)
       const check = checkRepo(repoDir)
       if (!check.ok) { results.push(`仓库${repo.id}：${check.msg}`); completed++; continue }
+
+      const lock = acquireLock(String(repo.id), '强制更新主图库', 'update')
+      if (!lock.ok) {
+        completed++
+        results.push(`仓库${repo.id}(${repo.name || '默认'})：${lock.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 强制更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${lock.msg}`)
+        }
+        continue
+      }
+
       try {
         await forceResetAsync(repoDir)
         completed++
@@ -173,6 +209,8 @@ export class Update extends plugin {
       } catch (err) {
         completed++
         results.push(`仓库${repo.id}：强制更新失败 - ${err.message}`)
+      } finally {
+        lock.release()
       }
       if (total > 1) {
         e.reply(`[面板图图库管理器] 强制更新进度：${completed}/${total}\n仓库${repo.id}：${results[results.length - 1]}`)
@@ -185,13 +223,17 @@ export class Update extends plugin {
     const check = checkBlockedGallery()
     if (!check.ok) return e.reply(check.msg)
 
-    e.reply('[面板图图库管理器] 开始更新屏蔽图库...')
+    const lock = acquireLock('blocked', '更新屏蔽图库', 'update')
+    if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
 
     try {
+      e.reply('[面板图图库管理器] 开始更新屏蔽图库...')
       const result = await fastForwardPullAsync(BLOCKED_REPO_DIR)
       return e.reply('[面板图图库管理器] 屏蔽图库更新\n' + result.msg)
     } catch (err) {
       return e.reply('[面板图图库管理器] 屏蔽图库更新失败\n' + err.message)
+    } finally {
+      lock.release()
     }
   }
 
@@ -199,13 +241,17 @@ export class Update extends plugin {
     const check = checkBlockedGallery()
     if (!check.ok) return e.reply(check.msg)
 
-    e.reply('[面板图图库管理器] 开始强制更新屏蔽图库...')
+    const lock = acquireLock('blocked', '强制更新屏蔽图库', 'update')
+    if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
 
     try {
+      e.reply('[面板图图库管理器] 开始强制更新屏蔽图库...')
       await forceResetAsync(BLOCKED_REPO_DIR)
       return e.reply('[面板图图库管理器] 屏蔽图库强制更新成功')
     } catch (err) {
       return e.reply('[面板图图库管理器] 屏蔽图库强制更新失败\n' + err.message)
+    } finally {
+      lock.release()
     }
   }
 }

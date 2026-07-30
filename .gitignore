@@ -18,6 +18,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# 运行时锁文件
+data/
+
 # Claude Code 工作区
 .claude/
 CLAUDE.md

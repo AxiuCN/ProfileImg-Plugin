@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { installRepoAsync } from '../model/git.js'
+import { installRepoAsync, acquireLock } from '../model/git.js'
 import { createCharJunction } from '../model/junction.js'
 import { loadMap, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
@@ -47,11 +47,26 @@ export class Download extends plugin {
     for (const repoId of activeIds) {
       const repo = getRepoConfig(repoId)
       const repoDir = getRepoDir(repoId)
-      const result = await installRepoAsync(repo.remoteUrl, repoDir)
-      completed++
-      results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
-      if (total > 1) {
-        e.reply(`[面板图图库管理器] 下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+
+      const lock = acquireLock(String(repoId), '下载主图库', 'download')
+      if (!lock.ok) {
+        completed++
+        results.push(`仓库${repoId}(${repo.name || '默认'})：${lock.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${lock.msg}`)
+        }
+        continue
+      }
+
+      try {
+        const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        completed++
+        results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+        }
+      } finally {
+        lock.release()
       }
     }
 
@@ -73,9 +88,18 @@ export class Download extends plugin {
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
-    e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
-    const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
-    return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
+    const lock = acquireLock('blocked', '下载屏蔽图库', 'download')
+    if (!lock.ok) {
+      return e.reply(`[面板图图库管理器] ${lock.msg}`)
+    }
+
+    try {
+      e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
+      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
+      return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
+    } finally {
+      lock.release()
+    }
   }
 
   /** 强制重新下载主图库 */
@@ -94,14 +118,29 @@ export class Download extends plugin {
     for (const repoId of activeIds) {
       const repo = getRepoConfig(repoId)
       const repoDir = getRepoDir(repoId)
-      if (fs.existsSync(repoDir)) {
-        fs.rmSync(repoDir, { recursive: true, force: true })
+
+      const lock = acquireLock(String(repoId), '强制下载主图库', 'download')
+      if (!lock.ok) {
+        completed++
+        results.push(`仓库${repoId}(${repo.name || '默认'})：${lock.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 强制下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${lock.msg}`)
+        }
+        continue
       }
-      const result = await installRepoAsync(repo.remoteUrl, repoDir)
-      completed++
-      results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
-      if (total > 1) {
-        e.reply(`[面板图图库管理器] 强制下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+
+      try {
+        if (fs.existsSync(repoDir)) {
+          fs.rmSync(repoDir, { recursive: true, force: true })
+        }
+        const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        completed++
+        results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+        if (total > 1) {
+          e.reply(`[面板图图库管理器] 强制下载进度：${completed}/${total}\n仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
+        }
+      } finally {
+        lock.release()
       }
     }
 
@@ -123,12 +162,21 @@ export class Download extends plugin {
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
-    e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库（后台执行）...')
-    if (fs.existsSync(BLOCKED_REPO_DIR)) {
-      fs.rmSync(BLOCKED_REPO_DIR, { recursive: true, force: true })
+    const lock = acquireLock('blocked', '强制下载屏蔽图库', 'download')
+    if (!lock.ok) {
+      return e.reply(`[面板图图库管理器] ${lock.msg}`)
     }
-    const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
-    return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
+
+    try {
+      e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库（后台执行）...')
+      if (fs.existsSync(BLOCKED_REPO_DIR)) {
+        fs.rmSync(BLOCKED_REPO_DIR, { recursive: true, force: true })
+      }
+      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
+      return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
+    } finally {
+      lock.release()
+    }
   }
 
   /**
