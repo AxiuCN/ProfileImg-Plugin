@@ -7,12 +7,14 @@ import {
 } from '../components/constants.js'
 
 /**
- * #图库初始化 — 三步交互式初始化
+ * #图库初始化 — 两步交互式初始化
  *
  * 1. 检查是否已初始化（junction 存在且有效）
- * 2. 若 miao-plugin/resources/profile 为真实目录 → 提示用户备份/确认
- * 3. 确认后：删除旧目录 → 创建 junction → 初始化 map.json
+ * 2. 若 miao-plugin/resources/profile 为真实目录 → setContext 等待确认
+ * 3. 确认后（用户发送任意消息）：删除旧目录 → 创建 junction → 初始化 map.json
  * 4. 完成后提示用户执行 #下载主图库 / #下载屏蔽图库
+ *
+ * 确认机制使用框架内置 setContext，无需全局变量和全局 #确认/#取消 命令
  */
 export class InitGallery extends plugin {
   constructor() {
@@ -22,12 +24,9 @@ export class InitGallery extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: '^#图库初始化$', fnc: 'init', permission: 'master' },
-        { reg: '^#确认$', fnc: 'confirm', permission: 'master' },
-        { reg: '^#取消$', fnc: 'cancel', permission: 'master' }
+        { reg: '^#图库初始化$', fnc: 'init', permission: 'master' }
       ]
     })
-    Bot._initPendingConfirm = Bot._initPendingConfirm || new Map()
   }
 
   /** 第一步：检查状态，提示用户 */
@@ -44,7 +43,7 @@ export class InitGallery extends plugin {
     if (fs.existsSync(MIAO_PROFILE_LINK)) {
       const hasContent = fs.readdirSync(MIAO_PROFILE_LINK).length > 0
       if (hasContent) {
-        Bot._initPendingConfirm.set(e.user_id, { step: 'confirming' })
+        this.setContext('confirmInit')
         return e.reply([
           '图库初始化会将 plugin/miao-plugin/resources/profile 文件夹删除。\n',
           '若是想保留该目录下的面板图，请发送【#取消】后发送【#备份图库】；\n',
@@ -57,24 +56,19 @@ export class InitGallery extends plugin {
     return this._doInit(e)
   }
 
-  /** #确认 — 执行初始化 */
-  async confirm(e) {
-    const pending = Bot._initPendingConfirm.get(e.user_id)
-    if (pending?.step !== 'confirming') {
-      return e.reply('[面板图图库管理器] 没有待确认的初始化操作。')
+  /** 由 setContext 在用户确认后自动调用，检查消息内容决定是否执行 */
+  async confirmInit() {
+    const msg = this.e?.msg?.replace(/^#/, '') || ''
+    if (msg.startsWith('确认')) {
+      this.finish('confirmInit')
+      return this._doInit(this.e)
     }
-    Bot._initPendingConfirm.delete(e.user_id)
-    return this._doInit(e)
-  }
-
-  /** #取消 — 取消初始化 */
-  async cancel(e) {
-    const pending = Bot._initPendingConfirm.get(e.user_id)
-    if (pending?.step === 'confirming') {
-      Bot._initPendingConfirm.delete(e.user_id)
-      return e.reply('[面板图图库管理器] 图库初始化失败')
+    if (msg.startsWith('取消')) {
+      this.finish('confirmInit')
+      return this.e.reply('[面板图图库管理器] 图库初始化已取消')
     }
-    return e.reply('[面板图图库管理器] 没有待取消的初始化操作。')
+    // 不匹配确认/取消时放行，不阻塞其他插件
+    return 'continue'
   }
 
   /** 执行实际的初始化操作（只创建 junction，不下载仓库） */
@@ -118,6 +112,8 @@ export class InitGallery extends plugin {
       // 3. 初始化 map.json
       initMap()
 
+      // 延迟 2s 再发完成消息，避免"已完成"比"请稍候"先到
+      await new Promise(r => setTimeout(r, 2000))
       return e.reply([
         '[面板图图库管理器] 图库初始化已完成\n',
         '请发送 #下载主图库 下载主图库图片，\n',
