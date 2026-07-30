@@ -96,25 +96,38 @@ export class InitGallery extends plugin {
       if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true })
       if (!fs.existsSync(PROFILE_IMG_DIR)) fs.mkdirSync(PROFILE_IMG_DIR, { recursive: true })
 
-      // 2. 删除旧的 miao-plugin/resources/profile（若存在且非 junction）
+      // 2. 建立 miao-plugin/resources/profile 的连接
+      //    真实目录被 Yunzai 占用无法删除 → 只清理子目录，建子级 junction
       if (fs.existsSync(MIAO_PROFILE_LINK) && !isJunction(MIAO_PROFILE_LINK)) {
-        try {
-          fs.chmodSync(MIAO_PROFILE_LINK, 0o777)
-          fs.rmSync(MIAO_PROFILE_LINK, { recursive: true, force: true })
-        } catch (rmErr) {
-          // Windows EPERM fallback: shell 命令强行删除
-          const { execSync } = await import('node:child_process')
-          execSync(`rmdir /s /q "${MIAO_PROFILE_LINK}"`, { stdio: 'pipe' })
+        for (const sub of ['normal-character', 'super-character']) {
+          const subPath = path.join(MIAO_PROFILE_LINK, sub)
+          const target = path.join(PROFILE_DIR, sub)
+          if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true })
+          // 子目录若是真实目录则删/移，否则直接建 junction
+          if (fs.existsSync(subPath)) {
+            if (!isJunction(subPath)) {
+              try {
+                fs.rmSync(subPath, { recursive: true, force: true })
+              } catch {
+                const oldSub = subPath + '.old.' + Date.now()
+                fs.renameSync(subPath, oldSub)
+                setTimeout(() => {
+                  try { fs.rmSync(oldSub, { recursive: true, force: true }) } catch { /* ignore */ }
+                }, 3000)
+              }
+            }
+          }
+          ensureJunction(target, subPath)
+        }
+      } else if (!isJunction(MIAO_PROFILE_LINK)) {
+        // profile 目录不存在：直接创建顶层 junction
+        const jResult = ensureJunction(PROFILE_DIR, MIAO_PROFILE_LINK)
+        if (!jResult.ok) {
+          return e.reply('[面板图图库管理器] 创建 profile junction 失败: ' + (jResult.error || '未知错误'))
         }
       }
 
-      // 3. 创建 profile junction
-      const jResult = ensureJunction(PROFILE_DIR, MIAO_PROFILE_LINK)
-      if (!jResult.ok) {
-        return e.reply('[面板图图库管理器] 创建 profile junction 失败: ' + (jResult.error || '未知错误'))
-      }
-
-      // 4. 初始化 map.json
+      // 3. 初始化 map.json
       initMap()
 
       // 5. 下载所有活跃仓库（由 map.json 决定有哪些仓库，从 config 读取各仓库 URL）
