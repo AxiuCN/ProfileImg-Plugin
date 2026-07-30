@@ -31,7 +31,7 @@ export class InitGallery extends plugin {
       ]
     })
     // 简单的状态机：记录等待确认的用户
-    this._pendingConfirm = new Map()
+    Bot._initPendingConfirm = Bot._initPendingConfirm || new Map()
   }
 
   /** 第一步：检查状态，提示用户 */
@@ -51,7 +51,7 @@ export class InitGallery extends plugin {
     if (fs.existsSync(MIAO_PROFILE_LINK)) {
       const hasContent = fs.readdirSync(MIAO_PROFILE_LINK).length > 0
       if (hasContent) {
-        this._pendingConfirm.set(e.user_id, { step: 'confirming' })
+        Bot._initPendingConfirm.set(e.user_id, { step: 'confirming' })
         return e.reply([
           '图库初始化会将 plugin/miao-plugin/resources/profile 文件夹删除。\n',
           '若是想保留该目录下的面板图，请发送【#取消】后发送【#备份图库】；\n',
@@ -68,19 +68,19 @@ export class InitGallery extends plugin {
 
   /** #确认 — 执行初始化 */
   async confirm(e) {
-    const pending = this._pendingConfirm.get(e.user_id)
+    const pending = Bot._initPendingConfirm.get(e.user_id)
     if (pending?.step !== 'confirming') {
       return e.reply('[面板图图库管理器] 没有待确认的初始化操作。')
     }
-    this._pendingConfirm.delete(e.user_id)
+    Bot._initPendingConfirm.delete(e.user_id)
     return this._doInit(e)
   }
 
   /** #取消 — 取消初始化 */
   async cancel(e) {
-    const pending = this._pendingConfirm.get(e.user_id)
+    const pending = Bot._initPendingConfirm.get(e.user_id)
     if (pending?.step === 'confirming') {
-      this._pendingConfirm.delete(e.user_id)
+      Bot._initPendingConfirm.delete(e.user_id)
       return e.reply('[面板图图库管理器] 图库初始化失败')
     }
     return e.reply('[面板图图库管理器] 没有待取消的初始化操作。')
