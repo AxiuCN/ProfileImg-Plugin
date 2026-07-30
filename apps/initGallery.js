@@ -36,6 +36,7 @@ export class InitGallery extends plugin {
 
   /** 第一步：检查状态，提示用户 */
   async init(e) {
+    if (!e) return // 避免与 loader 生命周期 init 冲突（加载时无参调用）
     // 已经初始化过了
     if (isJunction(MIAO_PROFILE_LINK)) {
       const verify = fs.existsSync(PROFILE_DIR)
