@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 
 import { buildAliasMap } from './modules/alias.js'
 import { initMap } from './model/mapJson.js'
-import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK, DEFAULT_REPO_DIR } from './components/constants.js'
+import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
 import { isJunction, ensureJunction } from './model/junction.js'
 
 const __filename = fileURLToPath(import.meta.url)

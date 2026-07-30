@@ -135,3 +135,15 @@ export function getCharsInRepo(repoId) {
     .filter(([, id]) => id === repoId)
     .map(([name]) => name)
 }
+
+/**
+ * 从 map.json 提取所有活跃的仓库编号
+ * 仓库 0 始终包含（即使 map.json 为空，保底默认仓库）
+ * @returns {number[]} 已排序的仓库编号
+ */
+export function getActiveRepoIds() {
+  const map = loadMap()
+  const ids = new Set(Object.values(map.mapping))
+  ids.add(0)
+  return [...ids].sort((a, b) => a - b)
+}

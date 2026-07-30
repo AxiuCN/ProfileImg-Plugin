@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { getPluginConfig } from './config.js'
 
 const _cwd = process.cwd()
 
@@ -80,6 +81,35 @@ export function getProfileTypeDir(type) {
  */
 export function getRepoName(repoId) {
   return repoId === 0 ? 'miao-plugin-ProfileImg' : `miao-plugin-ProfileImg-${repoId}`
+}
+
+/**
+ * 获取指定仓库的配置元数据
+ * map.json 决定有哪些仓库，config 只提供每个仓库的元数据补丁
+ * config 中未配置的 repoId 回退到默认值
+ * @param {number} repoId - 仓库编号
+ * @returns {{ id: number, name: string, remoteUrl: string, enabled: boolean, cron: string|null, autoUpdate: boolean, autoRestart: boolean }}
+ */
+export function getRepoConfig(repoId) {
+  const config = getPluginConfig()
+  const repos = config?.gallery?.repos
+
+  // 从数组中查找匹配的 repo
+  if (Array.isArray(repos)) {
+    const found = repos.find(r => r.id === repoId)
+    if (found) return found
+  }
+
+  // 默认值（用于 config 中未显式配置的仓库）
+  return {
+    id: repoId,
+    name: getRepoName(repoId),
+    remoteUrl: repoId === 0 ? DEFAULT_REPO_URL : '',
+    enabled: true,
+    cron: repoId === 0 ? '0 20 5 * * *' : null,
+    autoUpdate: true,
+    autoRestart: false
+  }
 }
 
 /* ==========================================================================

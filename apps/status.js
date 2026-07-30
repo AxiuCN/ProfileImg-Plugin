@@ -3,9 +3,8 @@ import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/g
 import { formatSize, getDirSize, countImages } from '../components/format.js'
 import { getLocalVersionAt } from '../model/version.js'
 import { getBlockedInfo } from '../model/blockedInfo.js'
-import { getPluginConfig } from '../components/config.js'
-import { DEFAULT_REPO_DIR, DEFAULT_REPO_URL, BLOCKED_REPO_DIR, getRepoDir, PROFILE_DIR } from '../components/constants.js'
-import { getRepoForChar, getAllChars, getCharsInRepo } from '../model/mapJson.js'
+import { getRepoConfig, getRepoDir, BLOCKED_REPO_DIR } from '../components/constants.js'
+import { getRepoForChar, getAllChars, getCharsInRepo, getActiveRepoIds } from '../model/mapJson.js'
 
 export class Status extends plugin {
   constructor() {
@@ -22,14 +21,9 @@ export class Status extends plugin {
     })
   }
 
-  /** 获取启用的仓库列表 */
-  _getEnabledRepos() {
-    const config = getPluginConfig()
-    const repos = config?.gallery?.repos
-    if (!repos || repos.length === 0) {
-      return [{ id: 0, name: '默认主图库', remoteUrl: DEFAULT_REPO_URL }]
-    }
-    return repos.filter(r => r.enabled !== false)
+  /** 获取所有活跃仓库的配置（由 map.json 决定） */
+  _getActiveRepos() {
+    return getActiveRepoIds().map(id => getRepoConfig(id))
   }
 
   /** 统计单个仓库的 info */
@@ -60,7 +54,7 @@ export class Status extends plugin {
     if (!jCheck.ok) return e.reply(jCheck.msg)
 
     let msg = '[面板图图库管理器] 主图库\n'
-    const repos = this._getEnabledRepos()
+    const repos = this._getActiveRepos()
     let totalChars = 0, totalImgs = 0, totalSize = 0
 
     for (const repo of repos) {
@@ -116,7 +110,7 @@ export class Status extends plugin {
     // 主图库
     const jCheck = checkProfileJunction()
     if (jCheck.ok) {
-      const repos = this._getEnabledRepos()
+      const repos = this._getActiveRepos()
       let totalChars = 0, totalImgs = 0, totalSize = 0
       for (const repo of repos) {
         const repoDir = getRepoDir(repo.id)

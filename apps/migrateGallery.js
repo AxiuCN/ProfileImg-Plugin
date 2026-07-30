@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PROFILE_DIR, BACKUP_DIR, DEFAULT_REPO_DIR, MIAO_PROFILE_LINK, getRepoDir } from '../components/constants.js'
+import { PROFILE_DIR, BACKUP_DIR, MIAO_PROFILE_LINK, getRepoDir } from '../components/constants.js'
 import { isJunction, createCharJunction } from '../model/junction.js'
 import { loadMap, setRepoForChars } from '../model/mapJson.js'
 import { notifyMaster } from '../components/notify.js'

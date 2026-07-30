@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { installRepoAsync, installRepo } from '../model/git.js'
 import { isJunction, ensureJunction, createCharJunction } from '../model/junction.js'
-import { initMap, loadMap, getAllChars } from '../model/mapJson.js'
+import { initMap, loadMap, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
 import { notifyMaster } from '../components/notify.js'
 import {
   GALLERY_ROOT, PROFILE_DIR, MIAO_PROFILE_LINK, PROFILE_IMG_DIR,
-  DEFAULT_REPO_DIR, DEFAULT_REPO_URL, BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir
+  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
 } from '../components/constants.js'
 
 /**
@@ -109,30 +109,31 @@ export class InitGallery extends plugin {
       // 4. 初始化 map.json
       initMap()
 
-      // 5. 下载默认主图库（同步，因为后续需要依赖）
+      // 5. 下载所有活跃仓库（由 map.json 决定有哪些仓库，从 config 读取各仓库 URL）
+      const activeIds = getActiveRepoIds()
       const config = getPluginConfig()
-      const repos = config?.gallery?.repos || [{ id: 0, remoteUrl: DEFAULT_REPO_URL, enabled: true }]
 
       let dlMsg = ''
-      for (const repo of repos) {
-        if (repo.enabled === false) continue
-        const repoDir = getRepoDir(repo.id)
-        const result = installRepo(repo.remoteUrl || DEFAULT_REPO_URL, repoDir)
-        dlMsg += `仓库${repo.id}(${repo.name || '默认'})：${result.msg}\n`
+      for (const repoId of activeIds) {
+        const repo = getRepoConfig(repoId)
+        const repoDir = getRepoDir(repoId)
+        const result = installRepo(repo.remoteUrl, repoDir)
+        dlMsg += `仓库${repoId}(${repo.name || '默认'})：${result.msg}\n`
         if (!result.ok) {
           return e.reply(`[面板图图库管理器] 图库初始化失败\n${dlMsg}`)
         }
       }
 
       // 6. 下载屏蔽图库
-      if (config?.gallery?.blocked?.enabled !== false) {
-        // 确保 blocked-character 目录下的 normal-character / super-character 子目录存在
+      const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
+      {
+        // 确保 blocked-character 目录下的子目录存在
         const blockedNormal = path.join(PROFILE_DIR, 'normal-character')
         const blockedSuper = path.join(PROFILE_DIR, 'super-character')
         if (!fs.existsSync(blockedNormal)) fs.mkdirSync(blockedNormal, { recursive: true })
         if (!fs.existsSync(blockedSuper)) fs.mkdirSync(blockedSuper, { recursive: true })
 
-        installRepo(BLOCKED_REPO_URL, BLOCKED_REPO_DIR)
+        installRepo(blockedUrl, BLOCKED_REPO_DIR)
         dlMsg += '屏蔽图库：安装完成\n'
       }
 
@@ -146,26 +147,29 @@ export class InitGallery extends plugin {
         if (nResult.ok || sResult.ok) junctionCount++
       }
 
-      // 8. 也扫描默认仓库实际存在的角色（map.json 中可能没有）
-      try {
-        const defaultNormal = path.join(DEFAULT_REPO_DIR, 'normal-character')
-        if (fs.existsSync(defaultNormal)) {
-          const chars = fs.readdirSync(defaultNormal, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-          for (const c of chars) {
-            createCharJunction(c.name, 'normal', DEFAULT_REPO_DIR, PROFILE_DIR)
+      // 8. 扫描所有活跃仓库实际存在的角色目录（map.json 中可能没有，保底）
+      for (const repoId of activeIds) {
+        const repoDir = getRepoDir(repoId)
+        try {
+          const repoNormal = path.join(repoDir, 'normal-character')
+          if (fs.existsSync(repoNormal)) {
+            const chars = fs.readdirSync(repoNormal, { withFileTypes: true })
+              .filter(d => d.isDirectory())
+            for (const c of chars) {
+              createCharJunction(c.name, 'normal', repoDir, PROFILE_DIR)
+            }
           }
-        }
-        const defaultSuper = path.join(DEFAULT_REPO_DIR, 'super-character')
-        if (fs.existsSync(defaultSuper)) {
-          const chars = fs.readdirSync(defaultSuper, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-          for (const c of chars) {
-            createCharJunction(c.name, 'super', DEFAULT_REPO_DIR, PROFILE_DIR)
+          const repoSuper = path.join(repoDir, 'super-character')
+          if (fs.existsSync(repoSuper)) {
+            const chars = fs.readdirSync(repoSuper, { withFileTypes: true })
+              .filter(d => d.isDirectory())
+            for (const c of chars) {
+              createCharJunction(c.name, 'super', repoDir, PROFILE_DIR)
+            }
           }
+        } catch (scanErr) {
+          logger.warn(`[ProfileImg-Plugin] 扫描仓库${repoId}角色目录失败:`, scanErr)
         }
-      } catch (scanErr) {
-        logger.warn('[ProfileImg-Plugin] 扫描默认仓库角色失败:', scanErr)
       }
 
       notifyMaster('[面板图图库管理器] 图库初始化已完成\n' + dlMsg + `junction 数量：${junctionCount}`)

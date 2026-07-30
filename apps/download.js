@@ -1,8 +1,9 @@
 import { installRepo } from '../model/git.js'
 import { getPluginConfig } from '../components/config.js'
-import { DEFAULT_REPO_DIR, DEFAULT_REPO_URL, BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir } from '../components/constants.js'
+import { BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { checkProfileJunction } from '../model/gallery.js'
 import { notifyMaster } from '../components/notify.js'
+import { getActiveRepoIds } from '../model/mapJson.js'
 
 /**
  * 强制重新下载图库
@@ -28,17 +29,15 @@ export class Download extends plugin {
       return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
     }
 
-    const config = getPluginConfig()
-    const repos = config?.gallery?.repos || [{ id: 0, remoteUrl: DEFAULT_REPO_URL, enabled: true }]
-
+    const activeIds = getActiveRepoIds()
     e.reply('[面板图图库管理器] 开始强制重新下载主图库，请稍候...')
 
     const results = []
-    for (const repo of repos) {
-      if (repo.enabled === false) continue
-      const repoDir = getRepoDir(repo.id)
-      const result = installRepo(repo.remoteUrl || DEFAULT_REPO_URL, repoDir)
-      results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+    for (const repoId of activeIds) {
+      const repo = getRepoConfig(repoId)
+      const repoDir = getRepoDir(repoId)
+      const result = installRepo(repo.remoteUrl, repoDir)
+      results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
     }
 
     const summary = results.join('\n')
@@ -52,8 +51,11 @@ export class Download extends plugin {
       return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
     }
 
+    const config = getPluginConfig()
+    const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
+
     e.reply('[面板图图库管理器] 开始强制重新下载屏蔽图库，请稍候...')
-    const result = installRepo(BLOCKED_REPO_URL, BLOCKED_REPO_DIR)
+    const result = installRepo(blockedUrl, BLOCKED_REPO_DIR)
     return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
   }
 }

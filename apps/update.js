@@ -2,7 +2,8 @@ import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/g
 import { gitExec, getRemoteSha, getLocalSha, fastForwardPull, forceReset } from '../model/git.js'
 import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
-import { DEFAULT_REPO_DIR, BLOCKED_REPO_DIR, DEFAULT_REPO_URL, getRepoDir } from '../components/constants.js'
+import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
+import { getActiveRepoIds } from '../model/mapJson.js'
 
 /**
  * 多仓库图库更新（手动 + cron 自动）
@@ -24,24 +25,19 @@ export class Update extends plugin {
     this._registerCronTasks()
   }
 
-  /** 获取配置中启用的仓库列表 */
-  _getEnabledRepos() {
-    const config = getPluginConfig()
-    const repos = config?.gallery?.repos
-    if (!repos || repos.length === 0) {
-      return [{ id: 0, name: '默认主图库', remoteUrl: DEFAULT_REPO_URL, autoUpdate: true, autoRestart: false }]
-    }
-    return repos.filter(r => r.enabled !== false)
+  /** 获取所有活跃仓库的配置（由 map.json 决定有哪些仓库） */
+  _getActiveRepos() {
+    return getActiveRepoIds().map(id => getRepoConfig(id))
   }
 
-  /** 注册 cron 自动检查任务 */
+  /** 注册 cron 自动检查任务（仅对 autoUpdate 启用的仓库） */
   _registerCronTasks() {
     const config = getPluginConfig()
-    const repos = this._getEnabledRepos()
+    const repos = this._getActiveRepos()
     const tasks = []
 
     for (const repo of repos) {
-      if (repo.cron) {
+      if (repo.autoUpdate !== false && repo.cron) {
         tasks.push({
           name: `图库仓库${repo.id}自动检查更新`,
           cron: repo.cron,
@@ -67,9 +63,8 @@ export class Update extends plugin {
 
   /** 自动检查单个仓库 */
   async _autoCheckRepo(repoId) {
-    const repos = this._getEnabledRepos()
-    const repoCfg = repos.find(r => r.id === repoId)
-    if (!repoCfg || repoCfg.autoUpdate === false) return
+    const repoCfg = getRepoConfig(repoId)
+    if (repoCfg.autoUpdate === false) return
 
     const repoDir = getRepoDir(repoId)
     const check = checkRepo(repoDir)
@@ -104,9 +99,8 @@ export class Update extends plugin {
 
   /** 自动检查屏蔽图库 */
   async _autoCheckBlocked() {
-    const config = getPluginConfig()
-    const blockedCfg = config?.gallery?.blocked || {}
-    if (blockedCfg.enabled === false) return
+    const blockedCfg = getPluginConfig()?.gallery?.blocked || {}
+    if (blockedCfg.autoUpdate === false) return
 
     const check = checkBlockedGallery()
     if (!check.ok) return
@@ -143,7 +137,7 @@ export class Update extends plugin {
     if (!jCheck.ok) return e.reply(jCheck.msg)
 
     const results = []
-    for (const repo of this._getEnabledRepos()) {
+    for (const repo of this._getActiveRepos()) {
       const repoDir = getRepoDir(repo.id)
       const check = checkRepo(repoDir)
       if (!check.ok) { results.push(`仓库${repo.id}：${check.msg}`); continue }
@@ -158,7 +152,7 @@ export class Update extends plugin {
     if (!jCheck.ok) return e.reply(jCheck.msg)
 
     const results = []
-    for (const repo of this._getEnabledRepos()) {
+    for (const repo of this._getActiveRepos()) {
       const repoDir = getRepoDir(repo.id)
       const check = checkRepo(repoDir)
       if (!check.ok) { results.push(`仓库${repo.id}：${check.msg}`); continue }

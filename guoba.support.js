@@ -9,10 +9,12 @@ const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
 /** 默认值映射（模板变量名 → 默认值） */
 const defaultValues = {
   gallery_repos_0_enabled: true,
+  gallery_repos_0_remoteUrl: 'https://github.com/AxiuCN/miao-plugin-ProfileImg.git',
   gallery_repos_0_cron: '0 20 5 * * *',
   gallery_repos_0_autoUpdate: true,
   gallery_repos_0_autoRestart: false,
   gallery_blocked_enabled: true,
+  gallery_blocked_remoteUrl: 'https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git',
   gallery_blocked_cron: '0 40 5 * * *',
   gallery_blocked_autoUpdate: true,
   gallery_blocked_autoRestart: false,
@@ -74,14 +76,23 @@ export function supportGuoba() {
       schemas: [
         // ==================== 主图库更新 ====================
         {
-          label: '主图库更新（仓库 0）',
+          label: '主图库（仓库 0）',
           component: 'SOFT_GROUP_BEGIN'
         },
         {
           field: 'gallery.repos.0.enabled',
           label: '启用自动检查',
-          bottomHelpMessage: '是否启用主图库的自动检查更新',
+          bottomHelpMessage: '检测到新版本时是否推送通知，关闭后仍可手动更新',
           component: 'Switch'
+        },
+        {
+          field: 'gallery.repos.0.remoteUrl',
+          label: '远程仓库地址',
+          bottomHelpMessage: 'Git 仓库 URL（更换源或自定义镜像）',
+          component: 'Input',
+          componentProps: {
+            placeholder: 'https://github.com/...'
+          }
         },
         {
           field: 'gallery.repos.0.cron',
@@ -114,8 +125,17 @@ export function supportGuoba() {
         {
           field: 'gallery.blocked.enabled',
           label: '启用自动检查',
-          bottomHelpMessage: '是否启用屏蔽图库的自动检查更新',
+          bottomHelpMessage: '检测到新版本时是否推送通知，关闭后仍可手动更新',
           component: 'Switch'
+        },
+        {
+          field: 'gallery.blocked.remoteUrl',
+          label: '远程仓库地址',
+          bottomHelpMessage: 'Git 仓库 URL（更换源或自定义镜像）',
+          component: 'Input',
+          componentProps: {
+            placeholder: 'https://github.com/...'
+          }
         },
         {
           field: 'gallery.blocked.cron',
@@ -189,10 +209,12 @@ export function supportGuoba() {
 
         return {
           'gallery.repos.0.enabled': repo0.enabled ?? defaultValues.gallery_repos_0_enabled,
+          'gallery.repos.0.remoteUrl': repo0.remoteUrl ?? defaultValues.gallery_repos_0_remoteUrl,
           'gallery.repos.0.cron': repo0.cron ?? defaultValues.gallery_repos_0_cron,
           'gallery.repos.0.autoUpdate': repo0.autoUpdate ?? defaultValues.gallery_repos_0_autoUpdate,
           'gallery.repos.0.autoRestart': repo0.autoRestart ?? defaultValues.gallery_repos_0_autoRestart,
           'gallery.blocked.enabled': blocked.enabled ?? defaultValues.gallery_blocked_enabled,
+          'gallery.blocked.remoteUrl': blocked.remoteUrl ?? defaultValues.gallery_blocked_remoteUrl,
           'gallery.blocked.cron': blocked.cron ?? defaultValues.gallery_blocked_cron,
           'gallery.blocked.autoUpdate': blocked.autoUpdate ?? defaultValues.gallery_blocked_autoUpdate,
           'gallery.blocked.autoRestart': blocked.autoRestart ?? defaultValues.gallery_blocked_autoRestart,
