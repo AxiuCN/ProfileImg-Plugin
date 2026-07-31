@@ -4,13 +4,16 @@ import { PROFILE_DIR } from '../components/constants.js'
 import { isJunction } from './junction.js'
 
 /**
- * 聚合层硬链接管理
+ * 聚合层符号链接管理
  *
  * 架构：gallery/profile/{normal,super}-character/角色/ 是真实目录，
- * 目录内每个文件是指向各来源仓库源文件的 hard link。
+ * 目录内每个文件是指向各来源仓库源文件的 Windows 文件符号链接（mklink）。
  *
- * miao-plugin 通过 junction 读到 gallery/profile/，再读到聚合目录内的 hard link，
+ * miao-plugin 通过 junction 读到 gallery/profile/，再读到聚合目录内的符号链接，
  * 从而看到所有仓库的面板图（同一角色可横跨多个仓库）。
+ *
+ * 符号链接指向"路径"而非 inode：git 更新源文件（临时文件+rename）后自动跟随新内容，
+ * 不会像硬链接那样因 inode 替换而残留为孤儿复制。
  *
  * 屏蔽（.bak）：将聚合链接改名为 xxx.webp.bak → miao-plugin 正则不匹配 → 不可见。
  */
@@ -52,7 +55,8 @@ function ensureRealRoleDir(type, roleName) {
 }
 
 /**
- * 创建单张图的聚合硬链接
+ * 创建单张图的聚合符号链接（mklink）
+ * 存量兼容：聚合目录中已存在的旧硬链接 / git 更新后残留的孤立复制会被删除重建
  * @param {string} sourceFile - 源文件绝对路径
  * @param {string} linkName - 聚合目录内的链接文件名
  * @param {'normal'|'super'} type - 类型
@@ -61,11 +65,21 @@ function ensureRealRoleDir(type, roleName) {
  */
 export function createPanelLink(sourceFile, linkName, type, roleName) {
   try {
-    if (!fs.existsSync(sourceFile)) return { ok: false, error: '源文件不存在' }
+    const sourceAbs = path.resolve(sourceFile)
+    if (!fs.existsSync(sourceAbs)) return { ok: false, error: '源文件不存在' }
     const linkDir = ensureRealRoleDir(type, roleName)
     const linkPath = path.join(linkDir, linkName)
-    if (fs.existsSync(linkPath)) return { ok: true } // 已存在，跳过
-    fs.linkSync(sourceFile, linkPath)
+
+    // lstatSync 不跟随链接，能识别悬空符号链接（existsSync 对悬空链接返回 false）
+    const existing = fs.lstatSync(linkPath, { throwIfNoEntry: false })
+    if (existing) {
+      // 已是符号链接 → 保持（git 更新源文件后自动指向新内容，天然自愈）
+      if (existing.isSymbolicLink()) return { ok: true }
+      // 旧硬链接 / git pull 残留的孤立复制 → 删除后重建为符号链接
+      fs.unlinkSync(linkPath)
+    }
+
+    fs.symlinkSync(sourceAbs, linkPath, 'file')
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e.message }
@@ -82,7 +96,8 @@ export function createPanelLink(sourceFile, linkName, type, roleName) {
 export function removePanelLink(linkName, type, roleName) {
   try {
     const linkPath = path.join(getAggRoleDir(type, roleName), linkName)
-    if (!fs.existsSync(linkPath)) return { ok: true }
+    // lstatSync 判断（符号链接可能悬空，existsSync 会误判为不存在而漏删）
+    if (!fs.lstatSync(linkPath, { throwIfNoEntry: false })) return { ok: true }
     fs.unlinkSync(linkPath)
     return { ok: true }
   } catch (e) {
@@ -101,7 +116,8 @@ export function hidePanelLink(linkName, type, roleName) {
   try {
     const linkDir = ensureRealRoleDir(type, roleName)
     const src = path.join(linkDir, linkName)
-    if (!fs.existsSync(src)) return { ok: false, error: '链接不存在' }
+    // lstatSync 判断（悬空符号链接也能被改名屏蔽）
+    if (!fs.lstatSync(src, { throwIfNoEntry: false })) return { ok: false, error: '链接不存在' }
     fs.renameSync(src, src + '.bak')
     return { ok: true }
   } catch (e) {
@@ -121,7 +137,7 @@ export function showPanelLink(linkName, type, roleName) {
     if (!linkName.endsWith('.bak')) return { ok: false, error: '非屏蔽链接' }
     const linkDir = ensureRealRoleDir(type, roleName)
     const src = path.join(linkDir, linkName)
-    if (!fs.existsSync(src)) return { ok: false, error: '链接不存在' }
+    if (!fs.lstatSync(src, { throwIfNoEntry: false })) return { ok: false, error: '链接不存在' }
     fs.renameSync(src, src.slice(0, -4))
     return { ok: true }
   } catch (e) {
@@ -144,7 +160,9 @@ export function clearAggRoleDir(type, roleName) {
 
 /**
  * 重建单个仓库的角色聚合链接
- * 先清空聚合角色目录，再遍历仓库角色目录建链接
+ * 修复多仓库误删：不再清空整个聚合角色目录，只处理属于当前仓库的条目
+ * ① 清理指向当前仓库但源已不存在的聚合链接（悬空/失效，含 .bak 屏蔽条目）
+ * ② 对当前仓库每个源文件确保链接（createPanelLink 内部自愈存量硬链接/孤立复制）
  * @param {object} repo - 仓库对象（buildRepos 产物）
  * @param {string} roleName - 角色名
  * @param {'normal'|'super'} type
@@ -155,12 +173,30 @@ export function rebuildLinks(repo, roleName, type) {
     const sourceDir = path.join(repo.dir, `${type}-character`, roleName)
     if (!fs.existsSync(sourceDir)) return { ok: true, count: 0 }
 
-    clearAggRoleDir(type, roleName)
+    const linkDir = ensureRealRoleDir(type, roleName)
+    const repoRoot = path.resolve(repo.dir).toLowerCase()
+    const currentFiles = new Set(
+      fs.readdirSync(sourceDir).filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))
+    )
 
-    const files = fs.readdirSync(sourceDir)
-      .filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))
+    // ① 清理当前仓库遗留的失效链接（其他仓库的条目不动）
+    for (const f of fs.readdirSync(linkDir)) {
+      // .bak 屏蔽条目按原名判断（源仍存在则保留）
+      const bareName = f.endsWith('.bak') ? f.slice(0, -4) : f
+      if (currentFiles.has(bareName)) continue
+      try {
+        const linkPath = path.join(linkDir, f)
+        const st = fs.lstatSync(linkPath)
+        if (!st.isSymbolicLink()) continue // 非符号链接条目不主动删（避免误判其他仓库硬链接）
+        const target = path.resolve(fs.readlinkSync(linkPath)).toLowerCase()
+        if (!target.startsWith(repoRoot + path.sep)) continue // 属于其他仓库，跳过
+        fs.unlinkSync(linkPath)
+      } catch { /* lstat/readlink 失败忽略 */ }
+    }
+
+    // ② 为当前仓库每个源文件确保链接（已是符号链接则跳过）
     let count = 0
-    for (const f of files) {
+    for (const f of currentFiles) {
       const r = createPanelLink(path.join(sourceDir, f), f, type, roleName)
       if (r.ok) count++
     }
