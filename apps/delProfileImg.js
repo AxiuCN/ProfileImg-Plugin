@@ -1,16 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveRoleName } from '../modules/alias.js'
-import { getMainDir } from '../model/blockedInfo.js'
-import { getRepoForChar } from '../model/mapJson.js'
-import { removeCharJunction } from '../model/junction.js'
-import { PROFILE_DIR } from '../components/constants.js'
-import { sortPanelFiles } from '../components/panelUtils.js'
+import { buildRepos } from '../model/repoRegistry.js'
+import { findByDisplayN } from '../components/panelUtils.js'
+import { removePanelLink, hidePanelLink } from '../model/linkAggregator.js'
 
 /**
  * 删除面板图 — 接管 miao-plugin 的 #删除xxx面板图N
  * 优先级 1，高于 miao-plugin 默认优先级
- * 序号 N 对应文件名中的 n（角色名_n_...），非数组下标
+ * 序号 N 为聚合层 display n（主图库真实 n / 第三方虚拟 n）
+ *
+ * 删除逻辑：
+ *   主图库 → 删源文件 + 删聚合链接
+ *   第三方/default/迁移 → 聚合链接改 .bak（隐藏，源文件不动）
  */
 export class DelProfileImg extends plugin {
   constructor() {
@@ -33,53 +35,22 @@ export class DelProfileImg extends plugin {
     const roleName = resolveRoleName(match[1].trim())
     const n = parseInt(match[2], 10)
 
-    const charDir = getMainDir(roleName)
-    if (!fs.existsSync(charDir)) {
-      return e.reply(`[面板图图库管理器]\n角色${roleName}暂无面板图`)
-    }
-
-    // 读取并排序所有图片文件
-    const imgNames = fs.readdirSync(charDir)
-      .filter(f => /\.(png|webp|jpg|jpeg|gif)$/i.test(f))
-
-    if (imgNames.length === 0) {
-      return e.reply(`[面板图图库管理器]\n角色${roleName}暂无面板图`)
-    }
-
-    const sorted = sortPanelFiles(imgNames, roleName)
-
-    // 按 n 查找目标文件
-    let targetFile = null
-    let nonStdIdx = 0
-    for (const item of sorted) {
-      if (item.parsed.isStandard) {
-        if (item.parsed.seq === n) { targetFile = item.name; break }
-      } else {
-        if (100001 + nonStdIdx === n) { targetFile = item.name; break }
-        nonStdIdx++
-      }
-    }
-
-    if (!targetFile) {
-      return e.reply(`[面板图图库管理器]\n序号无效，当前有${sorted.length}张图`)
+    const repos = buildRepos()
+    const target = findByDisplayN(roleName, n, 'normal', repos)
+    if (!target) {
+      return e.reply(`[面板图图库管理器]\n序号无效，角色${roleName}没有第${n}张图`)
     }
 
     try {
-      fs.unlinkSync(path.join(charDir, targetFile))
-
-      // 如果删除后角色目录为空，清理 junction 和空目录
-      const remaining = fs.readdirSync(charDir).filter(
-        f => /\.(png|webp|jpg|jpeg|gif)$/i.test(f)
-      )
-      if (remaining.length === 0) {
-        removeCharJunction(roleName, 'normal', PROFILE_DIR)
-        removeCharJunction(roleName, 'super', PROFILE_DIR)
-        if (fs.readdirSync(charDir).length === 0) {
-          fs.rmdirSync(charDir)
-        }
+      if (target.repo.type === 'main') {
+        // 主图库：删源文件 + 删聚合链接
+        fs.unlinkSync(target.sourceFile)
+        removePanelLink(target.name, 'normal', roleName)
+        return e.reply(`[面板图图库管理器]\n已删除${roleName}第${n}张面板图(${target.name})`)
       }
-
-      return e.reply(`[面板图图库管理器]\n已删除${roleName}第${n}张面板图(${targetFile})`)
+      // 非主图库：聚合链接改 .bak 隐藏
+      hidePanelLink(target.name, 'normal', roleName)
+      return e.reply(`[面板图图库管理器]\n已隐藏${roleName}第${n}张面板图(${target.name})`)
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 删除面板图失败:', err)
       return e.reply('[面板图图库管理器] 删除失败: ' + err.message)

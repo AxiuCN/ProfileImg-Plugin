@@ -1,13 +1,14 @@
 import fs from 'node:fs'
-import path from 'node:path'
-import { installRepoAsync, acquireLock } from '../model/git.js'
-import { createCharJunction } from '../model/junction.js'
-import { loadMap, getActiveRepoIds } from '../model/mapJson.js'
+import { installRepoAsync, getLocalSha, acquireLock } from '../model/git.js'
+import { syncRepoLinks } from '../model/linkAggregator.js'
+import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
 import { notifyMaster } from '../components/notify.js'
 import { checkProfileJunction } from '../model/gallery.js'
+import { buildRepos } from '../model/repoRegistry.js'
+import { setRepoVersion } from '../model/repoVersions.js'
 import {
-  PROFILE_DIR, BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
+  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
 } from '../components/constants.js'
 
 /**
@@ -60,6 +61,10 @@ export class Download extends plugin {
 
       try {
         const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        if (result.ok) {
+          const sha = getLocalSha(repoDir)
+          if (sha) setRepoVersion(repoId, sha)
+        }
         completed++
         results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
         if (total > 1) {
@@ -70,10 +75,10 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._rebuildCharJunctions(activeIds)
+    const jCount = this._rebuildAllLinks(activeIds)
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\njunction 数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\n聚合链接数量：${jCount}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -129,6 +134,10 @@ export class Download extends plugin {
           fs.rmSync(repoDir, { recursive: true, force: true })
         }
         const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        if (result.ok) {
+          const sha = getLocalSha(repoDir)
+          if (sha) setRepoVersion(repoId, sha)
+        }
         completed++
         results.push(`仓库${repoId}(${repo.name || '默认'})：${result.msg}`)
         if (total > 1) {
@@ -139,10 +148,10 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._rebuildCharJunctions(activeIds)
+    const jCount = this._rebuildAllLinks(activeIds)
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\njunction 数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\n聚合链接数量：${jCount}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -170,43 +179,21 @@ export class Download extends plugin {
   }
 
   /**
-   * 重建所有角色 junction（下载完成后调用）
+   * 重建所有仓库的聚合硬链接（下载完成后调用）
+   * 只重建当前下载的仓库，增量更新，不遍历全部仓库
+   * @param {number[]} activeIds - 下载的仓库编号
+   * @returns {number} 聚合链接总数
    */
-  _rebuildCharJunctions(activeIds) {
-    let junctionCount = 0
-
-    const map = loadMap()
-    for (const [charName, repoId] of Object.entries(map.mapping)) {
-      const repoDir = getRepoDir(repoId)
-      const nResult = createCharJunction(charName, 'normal', repoDir, PROFILE_DIR)
-      const sResult = createCharJunction(charName, 'super', repoDir, PROFILE_DIR)
-      if (nResult.ok || sResult.ok) junctionCount++
+  _rebuildAllLinks(activeIds) {
+    const repos = buildRepos()
+    const targetRepos = repos.filter(r =>
+      r.type === 'main' && activeIds.includes(r.repoId)
+    )
+    let total = 0
+    for (const repo of targetRepos) {
+      const r = syncRepoLinks(repo)
+      if (r.ok) total += r.count
     }
-
-    for (const repoId of activeIds) {
-      const repoDir = getRepoDir(repoId)
-      try {
-        const repoNormal = path.join(repoDir, 'normal-character')
-        if (fs.existsSync(repoNormal)) {
-          const chars = fs.readdirSync(repoNormal, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-          for (const c of chars) {
-            createCharJunction(c.name, 'normal', repoDir, PROFILE_DIR)
-          }
-        }
-        const repoSuper = path.join(repoDir, 'super-character')
-        if (fs.existsSync(repoSuper)) {
-          const chars = fs.readdirSync(repoSuper, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-          for (const c of chars) {
-            createCharJunction(c.name, 'super', repoDir, PROFILE_DIR)
-          }
-        }
-      } catch (scanErr) {
-        logger.warn(`[ProfileImg-Plugin] 扫描仓库${repoId}角色目录失败:`, scanErr)
-      }
-    }
-
-    return junctionCount
+    return total
   }
 }

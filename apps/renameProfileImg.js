@@ -1,12 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveRoleName } from '../modules/alias.js'
-import { getMainDir } from '../model/blockedInfo.js'
-import { escapeRegExp } from '../components/panelUtils.js'
+import { buildRepos } from '../model/repoRegistry.js'
+import { findByDisplayN, escapeRegExp } from '../components/panelUtils.js'
+import { createPanelLink, removePanelLink } from '../model/linkAggregator.js'
 
 /**
  * #重命名角色名N 作者 来源 [二改情况]
- * 修改面板图的版权归属信息（重命名文件），N 为文件名中的序号
+ * 修改面板图的版权归属信息（重命名文件），N 为聚合层 display n
+ * 仅作用于主图库文件（可 push），第三方/default/迁移不可重命名
  */
 export class RenameProfileImg extends plugin {
   constructor() {
@@ -33,28 +35,21 @@ export class RenameProfileImg extends plugin {
     const modifications = (match[5] || '').trim()
 
     const roleName = resolveRoleName(rawRole)
-    const charDir = getMainDir(roleName)
 
-    if (!fs.existsSync(charDir)) {
-      return e.reply(`[面板图图库管理器]\n角色${roleName}暂无面板图`)
+    const repos = buildRepos()
+    const target = findByDisplayN(roleName, seqNum, 'normal', repos)
+    if (!target) {
+      return e.reply(`[面板图图库管理器]\n角色${roleName}没有序号为${seqNum}的面板图`)
+    }
+    if (target.repo.type !== 'main') {
+      return e.reply('[面板图图库管理器]\n仅主图库的面板图可重命名')
     }
 
-    // 扫描角色目录，匹配标准含版权格式：角色名_n_作者_来源[_二改].扩展名
-    const pattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)_.+\\.(webp|png|jpg|jpeg|gif)$`, 'i')
-    const files = fs.readdirSync(charDir).filter(f => pattern.test(f))
-
-    if (files.length === 0) {
-      return e.reply(`[面板图图库管理器]\n角色${roleName}暂无标准格式的面板图可重命名`)
-    }
-
-    // 按 n 查找目标文件
-    const oldFile = files.find(f => {
-      const m = f.match(pattern)
-      return m && parseInt(m[1], 10) === seqNum
-    })
-
-    if (!oldFile) {
-      return e.reply(`[面板图图库管理器]\n未找到序号为${seqNum}的面板图，当前有${files.length}张标准格式图`)
+    const oldFile = target.name
+    // 仅标准含版权格式可重命名
+    const stdPattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)_.+\\.(webp|png|jpg|jpeg|gif)$`, 'i')
+    if (!stdPattern.test(oldFile)) {
+      return e.reply(`[面板图图库管理器]\n${oldFile} 不是标准含版权格式，无法重命名`)
     }
 
     const oldExt = path.extname(oldFile)
@@ -66,7 +61,12 @@ export class RenameProfileImg extends plugin {
     }
 
     try {
-      fs.renameSync(path.join(charDir, oldFile), path.join(charDir, newFile))
+      // 重命名源文件 + 重建聚合链接
+      const oldPath = target.sourceFile
+      const newPath = path.join(path.dirname(oldPath), newFile)
+      fs.renameSync(oldPath, newPath)
+      removePanelLink(oldFile, 'normal', roleName)
+      createPanelLink(newPath, newFile, 'normal', roleName)
       return e.reply(`[面板图图库管理器]\n已将${roleName}序号${seqNum}重命名\n原文件：${oldFile}\n新文件：${newFile}`)
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 重命名失败:', err)

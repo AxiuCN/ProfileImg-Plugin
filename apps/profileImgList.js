@@ -1,8 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getMainDir, getBlockedDir } from '../model/blockedInfo.js'
+import { getRoleAggregated, getBlockedAggregated } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
-import { sortPanelFiles } from '../components/panelUtils.js'
 
 /**
  * 面板图列表 — 接管 miao-plugin 的 #xxx面板图列表 + 屏蔽列表
@@ -22,7 +21,7 @@ export class ProfileImgList extends plugin {
     })
   }
 
-  /** 主图库列表 */
+  /** 主图库列表（聚合所有仓库） */
   async mainList(e) {
     const roleName = resolveRoleName(
       e.msg.replace(/#|面板图列表/g, '').trim()
@@ -32,8 +31,11 @@ export class ProfileImgList extends plugin {
       return e.reply('[面板图图库管理器]\n请输入正确的角色名')
     }
 
-    const charDir = getMainDir(roleName)
-    return this._renderList(e, charDir, roleName, 'main')
+    const aggregated = getRoleAggregated(roleName, 'normal')
+    if (aggregated.length === 0) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」暂无面板图`)
+    }
+    return this._renderList(e, roleName, aggregated, 'main')
   }
 
   /** 屏蔽图库列表 */
@@ -41,35 +43,21 @@ export class ProfileImgList extends plugin {
     let roleName = e.msg.replace(/^#/, '').replace(/面板图屏蔽列表$/, '').trim()
     if (!roleName) return e.reply('[面板图图库管理器]\n请输入正确的角色名')
     roleName = resolveRoleName(roleName)
-    const charDir = getBlockedDir(roleName)
-    return this._renderList(e, charDir, roleName, 'blocked')
+
+    const blocked = getBlockedAggregated(roleName)
+    if (blocked.length === 0) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」暂无屏蔽面板图`)
+    }
+    return this._renderList(e, roleName, blocked, 'blocked')
   }
 
   /**
    * 渲染列表的共用逻辑
+   * @param {string} roleName - 角色名
+   * @param {Array} items - [{ name, displayN, filePath }]
    * @param {'main'|'blocked'} mode - 主图库还是屏蔽图库
    */
-  async _renderList(e, charDir, roleName, mode) {
-    if (!fs.existsSync(charDir)) {
-      const hint = mode === 'main'
-        ? `角色「${roleName}」暂无面板图`
-        : `角色「${roleName}」暂无屏蔽面板图`
-      return e.reply(`[面板图图库管理器]\n${hint}`)
-    }
-
-    const imgFiles = fs.readdirSync(charDir)
-      .filter(f => /\.(png|webp|jpg|jpeg|gif)$/i.test(f))
-
-    if (imgFiles.length === 0) {
-      const hint = mode === 'main'
-        ? `角色「${roleName}」暂无面板图`
-        : `角色「${roleName}」的屏蔽文件夹为空`
-      return e.reply(`[面板图图库管理器]\n${hint}`)
-    }
-
-    // 排序：标准文件按 n 升序，非标准按字母序
-    const sorted = sortPanelFiles(imgFiles, roleName)
-
+  async _renderList(e, roleName, items, mode) {
     // 构建合并转发消息
     const forwardItems = []
 
@@ -78,22 +66,15 @@ export class ProfileImgList extends plugin {
       ? `可输入【#删除${roleName}面板图(序列号)】进行删除`
       : `可输入【#启用${roleName}面板图(序列号)】进行恢复`
     forwardItems.push({
-      message: `当前查看的是${roleName}面板图，共${sorted.length}张，${action}`
+      message: `当前查看的是${roleName}面板图，共${items.length}张，${action}`
     })
 
     // 后续：n. 文件名 + 图片
-    let nonStdIdx = 0
-    for (const item of sorted) {
-      let displayN
-      if (item.parsed.isStandard) {
-        displayN = item.parsed.seq
-      } else {
-        displayN = 100001 + nonStdIdx
-        nonStdIdx++
-      }
-      const filePath = path.join(charDir, item.name)
+    for (const item of items) {
+      const filePath = item.filePath
+        || (item.sourceFile)
       forwardItems.push({
-        message: `${displayN}. ${item.name}` + segment.image('file://' + filePath)
+        message: `${item.displayN}. ${item.name}` + segment.image('file://' + filePath)
       })
     }
 

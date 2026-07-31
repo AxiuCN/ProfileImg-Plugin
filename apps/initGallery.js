@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { isJunction, ensureJunction } from '../model/junction.js'
 import { initMap } from '../model/mapJson.js'
+import { ensureRealTypeDir } from '../model/linkAggregator.js'
 import {
   GALLERY_ROOT, PROFILE_DIR, MIAO_PROFILE_LINK, PROFILE_IMG_DIR,
 } from '../components/constants.js'
@@ -80,6 +81,10 @@ export class InitGallery extends plugin {
       if (!fs.existsSync(GALLERY_ROOT)) fs.mkdirSync(GALLERY_ROOT, { recursive: true })
       if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true })
       if (!fs.existsSync(PROFILE_IMG_DIR)) fs.mkdirSync(PROFILE_IMG_DIR, { recursive: true })
+
+      // 1b. 聚合类型目录（normal-character / super-character）为真实目录（非 junction）
+      ensureRealTypeDir('normal')
+      ensureRealTypeDir('super')
 
       // 2. 建立 miao-plugin/resources/profile 的连接
       if (fs.existsSync(MIAO_PROFILE_LINK) && !isJunction(MIAO_PROFILE_LINK)) {

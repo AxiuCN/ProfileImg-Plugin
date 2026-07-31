@@ -14,6 +14,19 @@ gallery:
       autoUpdate: true
       autoRestart: false
 
+  # ---------- default 图库 ----------
+  # 手动添加面板图的默认存放目录（非 git，本地维护）
+  # 留空 → 手动添加按 map.json 路由到主图库
+  # 若指向 miao-plugin-ProfileImg 目录 → 手动添加按 map.json 分类到各主仓库
+  defaultDir: ""
+
+  # ---------- 第三方图库（只读，pull 同步） ----------
+  # 同角色可横跨多个图库；display n 从 500001 起按仓库序号分段
+  thirdParty:
+    # - name: "xxx-fan-repo"
+    #   dir: "plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/xxx-fan-repo"
+    #   remoteUrl: "https://github.com/xxx/xxx.git"
+
   # ---------- 屏蔽图库 ----------
   blocked:
     enabled: true

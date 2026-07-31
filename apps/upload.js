@@ -1,11 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getRepoForChar, setRepoForChar } from '../model/mapJson.js'
+import { getRepoForChar } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
-import { createCharJunction } from '../model/junction.js'
-import { getRepoCharDir, getRepoDir, PROFILE_DIR } from '../components/constants.js'
+import { createPanelLink } from '../model/linkAggregator.js'
+import { buildRepos, getRepoRoleDir, SEGMENTS } from '../model/repoRegistry.js'
 import { escapeRegExp } from '../components/panelUtils.js'
 
 /**
@@ -13,6 +13,10 @@ import { escapeRegExp } from '../components/panelUtils.js'
  *
  * 含版权：角色名_n_作者_来源[_二改].扩展名 — #添加琴面板图 张三 米游社
  * 无版权：角色名_n.扩展名 — #添加琴面板图
+ *
+ * 写入目标：
+ *   - 默认写入 default 图库（锅巴配置目录），n 从 20001 起
+ *   - 若 default 图库路径指向主图库（miao-plugin-ProfileImg），按 map.json 分类到各主仓库
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -80,19 +84,18 @@ export class UploadWithCompress extends plugin {
       return true
     }
 
-    // 确定目标仓库和路径
-    const repoId = getRepoForChar(roleName)
-    const repoCharDir = path.join(getRepoCharDir(repoId, 'normal'), roleName)
+    // 确定目标仓库（default 图库 / 主图库按 map.json 路由）和角色目录
+    const repos = buildRepos()
+    const targetRepo = this._getUploadRepo(roleName, repos)
+    const repoCharDir = getRepoRoleDir(targetRepo, 'normal', roleName)
 
     // 确保目录存在
     if (!fs.existsSync(repoCharDir)) {
       fs.mkdirSync(repoCharDir, { recursive: true })
-      createCharJunction(roleName, 'normal', getRepoDir(repoId), PROFILE_DIR)
-      setRepoForChar(roleName, repoId)
     }
 
-    // 计算序号：扫描所有标准格式文件
-    const nextNum = this._getNextSeq(repoCharDir, roleName)
+    // 计算序号：扫描目标仓库角色目录下的所有标准格式文件
+    const nextNum = this._getNextSeq(repoCharDir, roleName, targetRepo.type)
 
     // 读取上传配置
     const config = getPluginConfig()
@@ -142,6 +145,8 @@ export class UploadWithCompress extends plugin {
         }
 
         fs.writeFileSync(filePath, finalBuffer)
+        // 建聚合硬链接（供 miao-plugin 通过聚合目录读取）
+        createPanelLink(filePath, path.basename(filePath), 'normal', roleName)
         addedCount++
         nextNum++
       } catch (err) {
@@ -170,13 +175,16 @@ export class UploadWithCompress extends plugin {
 
   /**
    * 计算下一个可用的序号（扫描所有标准格式：含版权 + 无版权）
+   * default 图库从段位起点（20001）开始，主图库从 1 开始
    * @param {string} dir - 角色目录
    * @param {string} roleName - 角色名
+   * @param {string} repoType - 仓库类型（'default' | 其他）
    * @returns {number}
    */
-  _getNextSeq(dir, roleName) {
+  _getNextSeq(dir, roleName, repoType = 'main') {
+    const floor = repoType === 'default' ? SEGMENTS.default.start : 1
     try {
-      if (!fs.existsSync(dir)) return 1
+      if (!fs.existsSync(dir)) return floor
       const files = fs.readdirSync(dir)
       const esc = escapeRegExp(roleName)
       // 匹配 角色名_n_*（含版权）和 角色名_n.扩展名（无版权）
@@ -189,10 +197,39 @@ export class UploadWithCompress extends plugin {
           if (seq > maxSeq) maxSeq = seq
         }
       }
-      return maxSeq + 1
+      return Math.max(maxSeq + 1, floor)
     } catch {
-      return 1
+      return floor
     }
+  }
+
+  /**
+   * 确定上传目标仓库
+   * - default 图库路径已配置且不指向主图库 → 写 default 图库
+   * - default 图库指向 miao-plugin-ProfileImg（主图库）→ 按 map.json 路由到主仓库
+   * - 未配置 default → 按 map.json 路由到主仓库（兼容旧行为）
+   * @param {string} roleName - 角色名
+   * @param {Array} repos - 仓库注册表
+   * @returns {object} 目标仓库对象
+   */
+  _getUploadRepo(roleName, repos) {
+    const config = getPluginConfig()
+    const defaultDir = config?.gallery?.defaultDir
+    const defaultRepo = repos.find(r => r.type === 'default')
+
+    // 有 default 图库且配置了路径 → 写 default（除非指向主图库）
+    if (defaultRepo && defaultDir) {
+      const mainRepo0 = repos.find(r => r.type === 'main' && r.repoId === 0)
+      const isMainDir = mainRepo0 && path.resolve(defaultDir) === path.resolve(mainRepo0.dir)
+      if (!isMainDir) return defaultRepo
+      // default 指向主图库 → 走 map.json 路由
+      const repoId = getRepoForChar(roleName)
+      return repos.find(r => r.type === 'main' && r.repoId === repoId) || defaultRepo
+    }
+
+    // 无 default 配置 → map.json 路由主仓库
+    const repoId = getRepoForChar(roleName)
+    return repos.find(r => r.type === 'main' && r.repoId === repoId) || repos.find(r => r.type === 'main')
   }
 
   /**

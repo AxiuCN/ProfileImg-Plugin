@@ -20,7 +20,8 @@ const defaultValues = {
   gallery_blocked_autoRestart: false,
   upload_enabled: false,
   upload_format: 'webp',
-  upload_maxSize: 500
+  upload_maxSize: 500,
+  gallery_defaultDir: ''
 }
 
 function getTemplate() {
@@ -116,6 +117,20 @@ export function supportGuoba() {
           label: '自动重启',
           bottomHelpMessage: '自动更新后是否重启云崽（图库更新一般无需重启）',
           component: 'Switch'
+        },
+        // ==================== default 图库 ====================
+        {
+          label: 'default 图库',
+          component: 'SOFT_GROUP_BEGIN'
+        },
+        {
+          field: 'gallery.defaultDir',
+          label: '手动添加存放目录',
+          bottomHelpMessage: '手动添加面板图的默认存放位置（非 git）。留空按 map.json 路由主图库；指向 miao-plugin-ProfileImg 时按 map.json 分类到各主仓库',
+          component: 'Input',
+          componentProps: {
+            placeholder: '留空或填写目录绝对路径'
+          }
         },
         // ==================== 屏蔽图库更新 ====================
         {
@@ -213,6 +228,7 @@ export function supportGuoba() {
           'gallery.repos.0.cron': repo0.cron ?? defaultValues.gallery_repos_0_cron,
           'gallery.repos.0.autoUpdate': repo0.autoUpdate ?? defaultValues.gallery_repos_0_autoUpdate,
           'gallery.repos.0.autoRestart': repo0.autoRestart ?? defaultValues.gallery_repos_0_autoRestart,
+          'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.blocked.enabled': blocked.enabled ?? defaultValues.gallery_blocked_enabled,
           'gallery.blocked.remoteUrl': blocked.remoteUrl ?? defaultValues.gallery_blocked_remoteUrl,
           'gallery.blocked.cron': blocked.cron ?? defaultValues.gallery_blocked_cron,

@@ -19,6 +19,9 @@ export const MIAO_PROFILE_LINK = path.join(_cwd, 'plugins/miao-plugin/resources/
 /** 面板图仓库目录：gallery/ProfileImg/ */
 export const PROFILE_IMG_DIR = path.join(GALLERY_ROOT, 'ProfileImg')
 
+/** 迁移图库目录（Profile-old，普通目录，无 git） */
+export const OLD_REPO_DIR = path.join(PROFILE_IMG_DIR, 'Profile-old')
+
 /** 备份目录 */
 export const BACKUP_DIR = path.join(GALLERY_ROOT, 'backup')
 

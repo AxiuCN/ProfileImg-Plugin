@@ -4,6 +4,9 @@ import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
+import { buildRepos } from '../model/repoRegistry.js'
+import { syncRepoLinks } from '../model/linkAggregator.js'
+import { setRepoVersion } from '../model/repoVersions.js'
 
 /**
  * 多仓库图库更新（手动 + cron 自动，全程异步不阻塞 Bot）
@@ -27,6 +30,16 @@ export class Update extends plugin {
 
   _getActiveRepos() {
     return getActiveRepoIds().map(id => getRepoConfig(id))
+  }
+
+  /** 更新后同步聚合硬链接（仅该仓库）+ 记录版本 */
+  _syncLinksForRepoId(repoId) {
+    const repo = buildRepos().find(r => r.type === 'main' && r.repoId === repoId)
+    if (repo) {
+      syncRepoLinks(repo)
+      const sha = getLocalSha(repo.dir)
+      if (sha) setRepoVersion(repoId, sha)
+    }
   }
 
   _registerCronTasks() {
@@ -79,6 +92,7 @@ export class Update extends plugin {
       if (repoCfg.autoUpdate !== false) {
         try {
           const result = await fastForwardPullAsync(repoDir)
+          this._syncLinksForRepoId(repoId)
           const msg = `[面板图图库管理器] 仓库${repoId}自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}`
           notifyMaster(msg)
           if (repoCfg.autoRestart) {
@@ -165,6 +179,7 @@ export class Update extends plugin {
 
       try {
         const result = await fastForwardPullAsync(repoDir)
+        this._syncLinksForRepoId(repo.id)
         completed++
         results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
         if (total > 1) {
@@ -204,6 +219,7 @@ export class Update extends plugin {
 
       try {
         await forceResetAsync(repoDir)
+        this._syncLinksForRepoId(repo.id)
         completed++
         results.push(`仓库${repo.id}：强制更新成功`)
       } catch (err) {
