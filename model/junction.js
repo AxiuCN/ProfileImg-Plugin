@@ -1,5 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { getRepoForChar } from './mapJson.js'
+import { getRepoDir, PROFILE_DIR } from '../components/constants.js'
 
 /**
  * Junction（目录符号链接）管理工具
@@ -134,6 +136,18 @@ export function createCharJunction(charName, type, repoDataDir, profileDir) {
   }
 
   return ensureJunction(target, link)
+}
+
+/**
+ * 按 map.json 路由创建角色级 junction（常用便捷封装）
+ * @param {string} charName - 角色名
+ * @param {'normal'|'super'} type - 'normal' | 'super'
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export function ensureCharJunction(charName, type) {
+  const repoId = getRepoForChar(charName)
+  const repoDir = getRepoDir(repoId)
+  return createCharJunction(charName, type, repoDir, PROFILE_DIR)
 }
 
 /**

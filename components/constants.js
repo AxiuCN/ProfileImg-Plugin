@@ -19,14 +19,20 @@ export const MIAO_PROFILE_LINK = path.join(_cwd, 'plugins/miao-plugin/resources/
 /** 面板图仓库目录：gallery/ProfileImg/ */
 export const PROFILE_IMG_DIR = path.join(GALLERY_ROOT, 'ProfileImg')
 
-/** 迁移图库目录（Profile-old，普通目录，无 git） */
-export const OLD_REPO_DIR = path.join(PROFILE_IMG_DIR, 'Profile-old')
-
 /** 备份目录 */
 export const BACKUP_DIR = path.join(GALLERY_ROOT, 'backup')
 
 /** map.json 路径 */
 export const MAP_JSON_PATH = path.join(GALLERY_ROOT, 'map.json')
+
+/** 插件配置目录 */
+export const CONFIG_DIR = path.join(_cwd, 'plugins/ProfileImg-Plugin/config')
+
+/** gallery_config.yaml（第三方图库配置，运行时）路径 */
+export const GALLERY_CONFIG_PATH = path.join(CONFIG_DIR, 'gallery_config.yaml')
+
+/** gallery_config.yaml.example（参考模板）路径 */
+export const GALLERY_CONFIG_EXAMPLE_PATH = path.join(CONFIG_DIR, 'gallery_config.yaml.example')
 
 /* ==========================================================================
    仓库路径
@@ -114,33 +120,3 @@ export function getRepoConfig(repoId) {
     autoRestart: false
   }
 }
-
-/* ==========================================================================
-   兼容性导出（逐步废弃）
-   以下导出仅为减少一次性改动量，新代码应使用上面的函数。
-   ========================================================================== */
-
-/**
- * @deprecated 使用 getRepoCharDir(0, 'normal') 替代
- */
-export const GALLERY_PATH = path.join(DEFAULT_REPO_DIR, 'normal-character')
-
-/**
- * @deprecated 使用 BLOCKED_REPO_DIR 替代
- */
-export const BLOCKED_GALLERY_PATH = BLOCKED_REPO_DIR
-
-/**
- * @deprecated 使用 DEFAULT_REPO_DIR 替代
- */
-export const GIT_WORK_DIR = DEFAULT_REPO_DIR
-
-/**
- * @deprecated 使用 BLOCKED_REPO_DIR 替代
- */
-export const BLOCKED_GIT_DIR = path.join(BLOCKED_REPO_DIR, '.git')
-
-/**
- * @deprecated 使用 DEFAULT_REPO_URL 替代
- */
-export const MAIN_REPO_URL = DEFAULT_REPO_URL

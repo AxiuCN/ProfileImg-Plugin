@@ -1,18 +1,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { BLOCKED_REPO_DIR, PROFILE_DIR } from '../components/constants.js'
+import { BLOCKED_REPO_DIR } from '../components/constants.js'
+import { getRepoForChar } from './mapJson.js'
+import { getRepoDir } from '../components/constants.js'
 import { getDirSize } from '../components/format.js'
-import { buildRepos } from './repoRegistry.js'
-import { getAggregatedFiles, sortPanelFiles } from '../components/panelUtils.js'
+import { sortPanelFiles, listRoleFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
 
-/** .bak 隐藏文件在屏蔽列表中的 displayN 起始（blocked-character 用 1~9999） */
-export const BAK_DISPLAY_BASE = 10000
+/** 非标准文件在屏蔽列表中的 display n 兜底池（不与任何段位冲突） */
+export const BAK_DISPLAY_BASE = 9999999
 
 /**
- * 屏蔽图库统计 + 多仓库聚合路由
+ * 屏蔽图库统计 + 角色面板图查询
  *
- * getMainDir 已废弃：聚合层不再有"单一主目录"，
- * 改用 getAggregatedFiles 遍历所有仓库。
+ * 新架构：聚合层为角色级 junction，直接读主仓库角色目录，
+ * 不再遍历多仓库注册表。
  */
 
 /**
@@ -35,14 +36,16 @@ export function getBlockedInfo() {
 }
 
 /**
- * 获取角色的聚合目录列表（遍历所有仓库，分配全局 display n）
+ * 获取角色的面板图列表（直接读主仓库角色目录）
  * @param {string} roleName - 角色名
  * @param {'normal'|'super'} type - 图库类型，默认 'normal'
- * @returns {Array} getAggregatedFiles 结果
+ * @returns {Array} listRoleFiles 结果（含 name/displayN/source/filePath）
  */
-export function getRoleAggregated(roleName, type = 'normal') {
-  const repos = buildRepos()
-  return getAggregatedFiles(roleName, type, repos)
+export function getRoleFiles(roleName, type = 'normal') {
+  const repoId = getRepoForChar(roleName)
+  const repoDir = getRepoDir(repoId)
+  const roleDir = path.join(repoDir, `${type}-character`, roleName)
+  return listRoleFiles(roleDir, roleName)
 }
 
 /**
@@ -55,12 +58,12 @@ export function getBlockedDir(roleName) {
 }
 
 /**
- * 获取角色的屏蔽聚合列表（供屏蔽列表显示）
+ * 获取角色的屏蔽聚合列表（供屏蔽列表显示 / 启用）
  * 包含两类：
- *   blocked-character 文件（主图库屏蔽移入）→ displayN = 文件内 n（1~9999）
- *   聚合目录 .bak 文件（非主图库隐藏）    → displayN = BAK_DISPLAY_BASE + idx
+ *   blocked-character 目录文件（主图库屏蔽移入）→ displayN = 文件内 n（1~9999）
+ *   主仓库角色目录 .bak 文件（default/第三方 屏蔽）→ displayN = 真实 n（10001+）
  * @param {string} roleName - 角色名
- * @returns {Array<{ name: string, displayN: number, isBak: boolean, filePath: string }>}
+ * @returns {Array<{ name: string, displayN: number, isBak: boolean, source: string, filePath: string }>}
  */
 export function getBlockedAggregated(roleName) {
   const result = []
@@ -76,23 +79,29 @@ export function getBlockedAggregated(roleName) {
         name: item.name,
         displayN: item.parsed.isStandard ? item.parsed.seq : (BAK_DISPLAY_BASE + result.length),
         isBak: false,
+        source: item.parsed.isStandard ? resolveNRange(item.parsed.seq).source : 'unknown',
         filePath: path.join(blockedDir, item.name)
       })
     }
   }
 
-  // 2. 聚合目录 .bak 文件
-  const aggDir = path.join(PROFILE_DIR, 'normal-character', roleName)
-  if (fs.existsSync(aggDir)) {
-    const baks = fs.readdirSync(aggDir)
+  // 2. 主仓库角色目录 .bak 文件（default / 第三方 屏蔽）
+  const repoId = getRepoForChar(roleName)
+  const repoDir = getRepoDir(repoId)
+  const mainRoleDir = path.join(repoDir, 'normal-character', roleName)
+  if (fs.existsSync(mainRoleDir)) {
+    const baks = fs.readdirSync(mainRoleDir)
       .filter(f => f.endsWith('.bak'))
       .sort()
     for (const f of baks) {
+      const bareName = f.slice(0, -4)
+      const parsed = parseFilename(bareName, roleName)
       result.push({
-        name: f.slice(0, -4),
-        displayN: BAK_DISPLAY_BASE + result.length,
+        name: bareName,
+        displayN: parsed.isStandard ? parsed.seq : (BAK_DISPLAY_BASE + result.length),
         isBak: true,
-        filePath: path.join(aggDir, f)
+        source: parsed.isStandard ? resolveNRange(parsed.seq).source : 'unknown',
+        filePath: path.join(mainRoleDir, f)
       })
     }
   }

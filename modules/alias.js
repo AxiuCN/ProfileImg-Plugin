@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getRepoForChar } from '../model/mapJson.js'
-import { buildRepos, getRepoRoleDir } from '../model/repoRegistry.js'
+import { getRepoForChar, getActiveRepoIds } from '../model/mapJson.js'
+import { getRepoDir } from '../components/constants.js'
+import { getDefaultDir } from '../model/galleryConfig.js'
 
 /** 别名映射表，启动时从 miao-plugin 的 alias.js 构建 */
 let ALIAS_MAP = new Map()
@@ -37,20 +38,29 @@ export function buildAliasMap() {
 }
 
 /**
- * 收集所有仓库的 normal-character 目录下的角色名列表（去重）
- * 遍历 buildRepos() 全部仓库（主/迁移/default/第三方），与聚合架构一致
+ * 收集所有主仓库 + default 图库的 normal-character 角色名列表（去重）
  * @returns {string[]}
  */
 function getAllCharDirs() {
   const allDirs = new Set()
   try {
-    for (const repo of buildRepos()) {
-      const normalDir = path.join(repo.dir, 'normal-character')
+    for (const repoId of getActiveRepoIds()) {
+      const normalDir = path.join(getRepoDir(repoId), 'normal-character')
       if (!fs.existsSync(normalDir)) continue
       const chars = fs.readdirSync(normalDir, { withFileTypes: true })
         .filter(d => d.isDirectory())
         .map(d => d.name)
       for (const c of chars) allDirs.add(c)
+    }
+    const defaultDir = getDefaultDir()
+    if (defaultDir) {
+      const normalDir = path.join(defaultDir, 'normal-character')
+      if (fs.existsSync(normalDir)) {
+        const chars = fs.readdirSync(normalDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name)
+        for (const c of chars) allDirs.add(c)
+      }
     }
   } catch (e) {
     logger.warn('[ProfileImg-Plugin] 扫描角色目录失败:', e.message)
@@ -59,13 +69,16 @@ function getAllCharDirs() {
 }
 
 /**
- * 判断角色是否有面板图目录（任一仓库存在 normal-character/<角色名>）
+ * 判断角色是否有面板图目录（主仓库按 map.json 路由 / default 图库）
  * @param {string} roleName - 角色名
  * @returns {boolean}
  */
 function roleDirExists(roleName) {
-  const repos = buildRepos()
-  return repos.some(repo => fs.existsSync(getRepoRoleDir(repo, 'normal', roleName)))
+  const repoId = getRepoForChar(roleName)
+  if (fs.existsSync(path.join(getRepoDir(repoId), 'normal-character', roleName))) return true
+  const defaultDir = getDefaultDir()
+  if (defaultDir && fs.existsSync(path.join(defaultDir, 'normal-character', roleName))) return true
+  return false
 }
 
 /**

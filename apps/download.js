@@ -1,12 +1,11 @@
 import fs from 'node:fs'
 import { installRepoAsync, getLocalSha, acquireLock } from '../model/git.js'
-import { syncRepoLinks } from '../model/linkAggregator.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig } from '../components/config.js'
 import { notifyMaster } from '../components/notify.js'
 import { checkProfileJunction } from '../model/gallery.js'
-import { buildRepos } from '../model/repoRegistry.js'
 import { setRepoVersion } from '../model/repoVersions.js'
+import { ensureAllCharJunctions } from '../model/copier.js'
 import {
   BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
 } from '../components/constants.js'
@@ -75,10 +74,10 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._rebuildAllLinks(activeIds)
+    const jCount = this._ensureJunctions(activeIds)
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\n聚合链接数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\n角色 junction 数量：${jCount}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -148,10 +147,10 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._rebuildAllLinks(activeIds)
+    const jCount = this._ensureJunctions(activeIds)
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\n聚合链接数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\n角色 junction 数量：${jCount}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -179,21 +178,11 @@ export class Download extends plugin {
   }
 
   /**
-   * 重建所有仓库的聚合硬链接（下载完成后调用）
-   * 只重建当前下载的仓库，增量更新，不遍历全部仓库
+   * 确保所有仓库的角色级 junction 存在（下载完成后调用）
    * @param {number[]} activeIds - 下载的仓库编号
-   * @returns {number} 聚合链接总数
+   * @returns {number} 角色级 junction 数量
    */
-  _rebuildAllLinks(activeIds) {
-    const repos = buildRepos()
-    const targetRepos = repos.filter(r =>
-      r.type === 'main' && activeIds.includes(r.repoId)
-    )
-    let total = 0
-    for (const repo of targetRepos) {
-      const r = syncRepoLinks(repo)
-      if (r.ok) total += r.count
-    }
-    return total
+  _ensureJunctions(activeIds) {
+    return ensureAllCharJunctions(activeIds)
   }
 }

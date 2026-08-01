@@ -10,7 +10,7 @@ export const helpList = [
     list: [
       { icon: 87, title: '#图库初始化', desc: '初始化图库（创建 junction + 下载仓库）' },
       { icon: 88, title: '#备份图库', desc: '备份旧 miao-plugin/resources/profile 数据' },
-      { icon: 89, title: '#迁移图库', desc: '将备份数据迁移到新仓库结构' }
+      { icon: 89, title: '#迁移图库', desc: '将备份数据迁入 default 图库并复制到主图库' }
     ]
   },
   {
@@ -26,6 +26,7 @@ export const helpList = [
     auth: 'master',
     list: [
       { icon: 87, title: '#主图库更新', desc: '拉取所有主图库仓库最新版本' },
+      { icon: 87, title: '#更新第三方图库', desc: '更新第三方图库并复制新图到主图库' },
       { icon: 87, title: '#屏蔽图库更新', desc: '拉取屏蔽图库最新版本' },
       { icon: 88, title: '#主图库强制更新', desc: '强制同步所有主图库仓库' },
       { icon: 88, title: '#屏蔽图库强制更新', desc: '强制同步屏蔽图库' },

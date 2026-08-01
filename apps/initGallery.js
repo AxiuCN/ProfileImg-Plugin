@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { isJunction, ensureJunction } from '../model/junction.js'
 import { initMap } from '../model/mapJson.js'
-import { ensureRealTypeDir } from '../model/linkAggregator.js'
+import { ensureGalleryConfigFile } from '../components/config.js'
+import { ensureAllCharJunctions } from '../model/copier.js'
 import {
   GALLERY_ROOT, PROFILE_DIR, MIAO_PROFILE_LINK, PROFILE_IMG_DIR,
 } from '../components/constants.js'
@@ -12,7 +13,7 @@ import {
  *
  * 1. 检查是否已初始化（junction 存在且有效）
  * 2. 若 miao-plugin/resources/profile 为真实目录 → setContext 等待确认
- * 3. 确认后（用户发送任意消息）：删除旧目录 → 创建 junction → 初始化 map.json
+ * 3. 确认后：建第一层 junction + 类型目录（真实） + 角色级 junction
  * 4. 完成后提示用户执行 #下载主图库 / #下载屏蔽图库
  *
  * 确认机制使用框架内置 setContext，无需全局变量和全局 #确认/#取消 命令
@@ -72,6 +73,21 @@ export class InitGallery extends plugin {
     return 'continue'
   }
 
+  /** 确保聚合类型目录为真实目录（junction 的宿主，非 junction 本身） */
+  _ensureTypeDir(type) {
+    const typeDir = path.join(PROFILE_DIR, `${type}-character`)
+    if (isJunction(typeDir)) {
+      try { fs.rmSync(typeDir, { recursive: false }) } catch { /* ignore */ }
+    }
+    if (!fs.existsSync(typeDir)) fs.mkdirSync(typeDir, { recursive: true })
+    return typeDir
+  }
+
+  /** 扫描所有活跃主仓库，为每个已有角色创建角色级 junction */
+  _ensureCharJunctions() {
+    return ensureAllCharJunctions()
+  }
+
   /** 执行实际的初始化操作（只创建 junction，不下载仓库） */
   async _doInit(e) {
     e.reply('[面板图图库管理器] 开始图库初始化，请稍候...')
@@ -82,11 +98,11 @@ export class InitGallery extends plugin {
       if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true })
       if (!fs.existsSync(PROFILE_IMG_DIR)) fs.mkdirSync(PROFILE_IMG_DIR, { recursive: true })
 
-      // 1b. 聚合类型目录（normal-character / super-character）为真实目录（非 junction）
-      ensureRealTypeDir('normal')
-      ensureRealTypeDir('super')
+      // 2. 聚合类型目录（normal-character / super-character）为真实目录（junction 宿主）
+      this._ensureTypeDir('normal')
+      this._ensureTypeDir('super')
 
-      // 2. 建立 miao-plugin/resources/profile 的连接
+      // 3. 建立 miao-plugin/resources/profile 的连接（第一层 junction）
       if (fs.existsSync(MIAO_PROFILE_LINK) && !isJunction(MIAO_PROFILE_LINK)) {
         for (const sub of ['normal-character', 'super-character']) {
           const subPath = path.join(MIAO_PROFILE_LINK, sub)
@@ -114,13 +130,18 @@ export class InitGallery extends plugin {
         }
       }
 
-      // 3. 初始化 map.json
+      // 4. 初始化 map.json + gallery_config.yaml
       initMap()
+      ensureGalleryConfigFile()
+
+      // 5. 为已下载主仓库的角色创建角色级 junction
+      const junctionCount = this._ensureCharJunctions()
 
       // 延迟 2s 再发完成消息，避免"已完成"比"请稍候"先到
       await new Promise(r => setTimeout(r, 2000))
       return e.reply([
-        '[面板图图库管理器] 图库初始化已完成\n',
+        `[面板图图库管理器] 图库初始化已完成\n`,
+        `角色级 junction 数量：${junctionCount}\n`,
         '请发送 #下载主图库 下载主图库图片，\n',
         '发送 #下载屏蔽图库 下载屏蔽图库。'
       ].join(''))

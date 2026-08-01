@@ -1,18 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getBlockedDir, getBlockedAggregated } from '../model/blockedInfo.js'
+import { getBlockedDir, getBlockedAggregated, getRoleFiles } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
-import { buildRepos } from '../model/repoRegistry.js'
-import { findByDisplayN, escapeRegExp } from '../components/panelUtils.js'
-import { hidePanelLink, showPanelLink, createPanelLink } from '../model/linkAggregator.js'
+import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import { getRepoForChar } from '../model/mapJson.js'
+import { getRepoDir } from '../components/constants.js'
 
 /**
  * 屏蔽/启用面板图
  *
- * 分两类屏蔽：
- *   主图库 → 源文件移入 blocked-character（可 push），移入/移出时按空位重排 n
- *   第三方/default/迁移 → 聚合链接改 .bak（隐藏，源文件不动）
+ * 分两类屏蔽（按 n 段位）：
+ *   main(1~9999)      → 源文件移入 blocked-character（可 push），按空位重排 n
+ *   default/第三方     → 主仓库副本改 .bak（隐藏）
  */
 export class MoveBlockImg extends plugin {
   constructor() {
@@ -36,19 +35,22 @@ export class MoveBlockImg extends plugin {
     roleName = resolveRoleName(roleName)
     const n = parseInt(match[2]) || 1
 
-    const repos = buildRepos()
-    const target = findByDisplayN(roleName, n, 'normal', repos)
+    const files = getRoleFiles(roleName, 'normal')
+    const target = files.find(f => f.displayN === n)
     if (!target) {
       return e.reply(`[面板图图库管理器]\n序号无效，角色${roleName}没有第${n}张图`)
     }
 
-    if (target.repo.type === 'main') {
+    const { source } = resolveNRange(n)
+    if (source === 'main') {
       return this._blockMain(e, roleName, target)
     }
-    // 非主图库：聚合链接改 .bak
-    const r = hidePanelLink(target.name, 'normal', roleName)
-    if (!r.ok) return e.reply(`[面板图图库管理器] 屏蔽失败: ${r.error}`)
-    return e.reply(`[面板图图库管理器]\n已隐藏${roleName}第${n}张图(${target.name})`)
+    if (source === 'unknown') {
+      return e.reply('[面板图图库管理器]\n该文件不符合命名规范，无法屏蔽')
+    }
+    // default / 第三方：主仓库副本改 .bak
+    fs.renameSync(target.filePath, target.filePath + '.bak')
+    return e.reply(`[面板图图库管理器]\n已屏蔽${roleName}第${n}张图(${target.name})`)
   }
 
   /** 主图库屏蔽：移入 blocked-character，按空位重排 n */
@@ -61,11 +63,7 @@ export class MoveBlockImg extends plugin {
     const gapN = this._findFirstGap(blockedDir, roleName)
     const newName = `${roleName}_${gapN}${suffix}`
 
-    const srcFile = target.sourceFile
-    const destFile = path.join(blockedDir, newName)
-    fs.renameSync(srcFile, destFile)
-    // 删除聚合链接（源文件已移走，链接指向的 inode 数据仍在聚合目录，需手动移除）
-    removePanelLink(target.name, 'normal', roleName)
+    fs.renameSync(target.filePath, path.join(blockedDir, newName))
     return e.reply(`[面板图图库管理器]\n已将${roleName}的第${target.displayN}张图移入屏蔽图库(${newName})`)
   }
 
@@ -85,9 +83,8 @@ export class MoveBlockImg extends plugin {
     }
 
     if (target.isBak) {
-      // 非主图库：.bak 改回原名
-      const r = showPanelLink(target.name + '.bak', 'normal', roleName)
-      if (!r.ok) return e.reply(`[面板图图库管理器] 启用失败: ${r.error}`)
+      // default / 第三方：.bak 去后缀
+      fs.renameSync(target.filePath, target.filePath.slice(0, -4))
       return e.reply(`[面板图图库管理器]\n已恢复${roleName}第${n}张隐藏图(${target.name})`)
     }
     return this._unblockMain(e, roleName, target)
@@ -99,20 +96,16 @@ export class MoveBlockImg extends plugin {
     if (!fs.existsSync(blockedDir)) return e.reply(`[面板图图库管理器]\n角色${roleName}暂无屏蔽面板图`)
 
     const suffix = this._extractSuffix(target.name, roleName)
-    const mainRepos = buildRepos().filter(r => r.type === 'main')
-    if (mainRepos.length === 0) return e.reply('[面板图图库管理器] 主图库未配置')
 
-    // 主图库角色目录（map.json 路由，fallback 仓库 0）
+    // 主图库角色目录（map.json 路由）
     const repoId = getRepoForChar(roleName)
-    const mainRepo = mainRepos.find(r => r.repoId === repoId) || mainRepos[0]
-    const mainDir = path.join(mainRepo.dir, 'normal-character', roleName)
+    const mainDir = path.join(getRepoDir(repoId), 'normal-character', roleName)
     if (!fs.existsSync(mainDir)) fs.mkdirSync(mainDir, { recursive: true })
 
     const gapN = this._findFirstGap(mainDir, roleName)
     const newName = `${roleName}_${gapN}${suffix}`
 
     fs.renameSync(path.join(blockedDir, target.name), path.join(mainDir, newName))
-    createPanelLink(path.join(mainDir, newName), newName, 'normal', roleName)
     return e.reply(`[面板图图库管理器]\n已将${roleName}的屏蔽图移回主图库(${newName})`)
   }
 

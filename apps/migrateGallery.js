@@ -1,24 +1,26 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { BACKUP_DIR, MIAO_PROFILE_LINK, OLD_REPO_DIR } from '../components/constants.js'
+import { BACKUP_DIR, MIAO_PROFILE_LINK } from '../components/constants.js'
 import { isJunction } from '../model/junction.js'
 import { notifyMaster } from '../components/notify.js'
 import { parseFilename } from '../components/panelUtils.js'
-import { syncRepoLinks } from '../model/linkAggregator.js'
-import { buildRepos } from '../model/repoRegistry.js'
+import { getDefaultDir } from '../model/galleryConfig.js'
+import { copyDefaultToMain } from '../model/copier.js'
+
+const IMG_RE = /\.(webp|png|jpg|jpeg|gif)$/i
 
 /**
- * #迁移图库 — 将 backup 中的旧图库数据迁移到 Profile-old
- * 前置条件：图库已初始化，backup 目录存在
+ * #迁移图库 — 将 backup 中的旧图库数据迁入 default 图库，再复制到主图库
+ * 前置条件：图库已初始化，backup 目录存在，已配置 default 图库
  *
- * 迁移目标：Profile-old（普通目录，无 git，独立于主图库）
- * 复制完成后，所有文件重命名为 角色名_n.扩展名（n 从 10001 起）
+ * 迁移目标：default 图库（普通目录）→ 复制到主仓库（本地默认图库前缀）
+ * 不再创建 Profile-old 目录
  */
 export class MigrateGallery extends plugin {
   constructor() {
     super({
       name: '[面板图图库管理器]迁移',
-      dsc: '将备份图库迁移到 Profile-old',
+      dsc: '将备份图库迁移到 default 图库并复制到主图库',
       event: 'message',
       priority: 5,
       rule: [
@@ -38,14 +40,22 @@ export class MigrateGallery extends plugin {
       return e.reply('[面板图图库管理器] 图库尚未初始化，请先执行 #图库初始化。')
     }
 
+    const defaultDir = getDefaultDir()
+    if (!defaultDir) {
+      return e.reply('[面板图图库管理器] 未配置 default 图库（config/gallery_config.yaml 的 default.dir），无法迁移。')
+    }
+
     e.reply('[面板图图库管理器] 开始迁移图库，请稍候...')
 
     try {
       let migratedChars = 0
       let migratedImgs = 0
       let renamedImgs = 0
+      let copiedToMain = 0
 
       const types = ['normal-character', 'super-character']
+
+      // ========== 第一阶段：复制 backup → default 图库 ==========
       for (const type of types) {
         const backupTypeDir = path.join(backupProfile, type)
         if (!fs.existsSync(backupTypeDir)) continue
@@ -55,22 +65,19 @@ export class MigrateGallery extends plugin {
 
         for (const charDir of chars) {
           const charName = charDir.name
-          const targetDir = path.join(OLD_REPO_DIR, type, charName)
+          const targetDir = path.join(defaultDir, type, charName)
           const sourceDir = path.join(backupTypeDir, charName)
 
-          // 确保目标目录存在
           if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true })
           }
 
-          // 复制图片文件
           const files = fs.readdirSync(sourceDir, { withFileTypes: true })
-            .filter(f => f.isFile() && /\.(webp|png|jpg|jpeg|gif)$/i.test(f.name))
+            .filter(f => f.isFile() && IMG_RE.test(f.name))
 
           for (const file of files) {
             const src = path.join(sourceDir, file.name)
             const dest = path.join(targetDir, file.name)
-            // 不覆盖已有文件
             if (!fs.existsSync(dest)) {
               fs.copyFileSync(src, dest)
               migratedImgs++
@@ -80,22 +87,20 @@ export class MigrateGallery extends plugin {
         }
       }
 
-      // 第二遍遍历：重命名迁移文件为 角色名_n.扩展名（n 从 10001 起）
+      // ========== 第二阶段：default 图库内重命名非标准文件为 角色_n.ext ==========
       for (const type of types) {
-        const oldTypeDir = path.join(OLD_REPO_DIR, type)
-        if (!fs.existsSync(oldTypeDir)) continue
+        const defaultTypeDir = path.join(defaultDir, type)
+        if (!fs.existsSync(defaultTypeDir)) continue
 
-        const chars = fs.readdirSync(oldTypeDir, { withFileTypes: true })
+        const chars = fs.readdirSync(defaultTypeDir, { withFileTypes: true })
           .filter(d => d.isDirectory())
 
         for (const charDir of chars) {
           const charName = charDir.name
-          const targetDir = path.join(oldTypeDir, charName)
+          const targetDir = path.join(defaultTypeDir, charName)
           if (!fs.existsSync(targetDir)) continue
 
-          // 扫描该角色目录下所有图片文件，找最大已有 n
-          const imgNames = fs.readdirSync(targetDir)
-            .filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))
+          const imgNames = fs.readdirSync(targetDir).filter(f => IMG_RE.test(f))
 
           let maxSeq = 0
           for (const fname of imgNames) {
@@ -103,17 +108,14 @@ export class MigrateGallery extends plugin {
             if (parsed.isStandard && parsed.seq > maxSeq) maxSeq = parsed.seq
           }
 
-          // 对需要重命名的文件（非标准 + 标准但 seq < 10001 的无版权文件）进行重命名
-          let nextSeq = Math.max(maxSeq + 1, 10001)
+          let nextSeq = maxSeq + 1
           for (const fname of imgNames) {
             const parsed = parseFilename(fname, charName)
-            // 跳过已有标准命名且段位在 10001+ 的文件
-            if (parsed.isStandard && parsed.seq >= 10001) continue
-            if (parsed.isStandard && parsed.hasCopyright) continue
+            // 标准命名（含版权/无版权）保留原名
+            if (parsed.isStandard) continue
 
             const ext = path.extname(fname)
             let newName = `${charName}_${nextSeq}${ext}`
-            // 去重
             let counter = 1
             while (fs.existsSync(path.join(targetDir, newName))) {
               newName = `${charName}_${nextSeq}_${counter}${ext}`
@@ -128,17 +130,29 @@ export class MigrateGallery extends plugin {
         }
       }
 
-      // 重建 Profile-old 的聚合链接
-      const oldRepo = buildRepos().find(r => r.type === 'old')
-      let linkCount = 0
-      if (oldRepo) {
-        const r = syncRepoLinks(oldRepo)
-        if (r.ok) linkCount = r.count
+      // ========== 第三阶段：复制 default → 主仓库（本地默认图库前缀） ==========
+      for (const type of ['normal', 'super']) {
+        const defaultTypeDir = path.join(defaultDir, `${type}-character`)
+        if (!fs.existsSync(defaultTypeDir)) continue
+
+        const chars = fs.readdirSync(defaultTypeDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+
+        for (const charDir of chars) {
+          const charName = charDir.name
+          const roleDir = path.join(defaultTypeDir, charName)
+          if (!fs.existsSync(roleDir)) continue
+          const files = fs.readdirSync(roleDir).filter(f => IMG_RE.test(f))
+          for (const f of files) {
+            const r = copyDefaultToMain(path.join(roleDir, f), charName, type)
+            if (r.ok) copiedToMain++
+          }
+        }
       }
 
       const msg = `原图库迁移已完成，共迁移 ${migratedChars} 个角色 / ${migratedImgs} 张图片\n` +
-        `重命名：${renamedImgs} / 聚合链接：${linkCount}\n` +
-        `目标目录：Profile-old（普通目录，无 git，不参与 push）\n` +
+        `重命名：${renamedImgs} / 复制到主图库：${copiedToMain}\n` +
+        `目标：default 图库（本地默认图库前缀）\n` +
         `你可以手动删除 ProfileImg-Plugin/resources/gallery/backup 的原图库备份。`
       notifyMaster(msg)
       return e.reply(msg)

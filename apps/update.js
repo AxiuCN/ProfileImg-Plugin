@@ -4,9 +4,9 @@ import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
-import { buildRepos } from '../model/repoRegistry.js'
-import { syncRepoLinks } from '../model/linkAggregator.js'
 import { setRepoVersion } from '../model/repoVersions.js'
+import { getThirdPartyRepos } from '../model/galleryConfig.js'
+import { syncThirdPartyRepo, ensureAllCharJunctions } from '../model/copier.js'
 
 /**
  * 多仓库图库更新（手动 + cron 自动，全程异步不阻塞 Bot）
@@ -22,7 +22,8 @@ export class Update extends plugin {
         { reg: '^#主图库更新$', fnc: 'updateMain', permission: 'master' },
         { reg: '^#主图库强制更新$', fnc: 'forceUpdateMain', permission: 'master' },
         { reg: '^#屏蔽图库更新$', fnc: 'updateBlocked', permission: 'master' },
-        { reg: '^#屏蔽图库强制更新$', fnc: 'forceUpdateBlocked', permission: 'master' }
+        { reg: '^#屏蔽图库强制更新$', fnc: 'forceUpdateBlocked', permission: 'master' },
+        { reg: '^#更新第三方图库$', fnc: 'updateThirdParty', permission: 'master' }
       ]
     })
     this._registerCronTasks()
@@ -32,14 +33,11 @@ export class Update extends plugin {
     return getActiveRepoIds().map(id => getRepoConfig(id))
   }
 
-  /** 更新后同步聚合硬链接（仅该仓库）+ 记录版本 */
-  _syncLinksForRepoId(repoId) {
-    const repo = buildRepos().find(r => r.type === 'main' && r.repoId === repoId)
-    if (repo) {
-      syncRepoLinks(repo)
-      const sha = getLocalSha(repo.dir)
-      if (sha) setRepoVersion(repoId, sha)
-    }
+  /** 更新后确保该仓库已有角色创建角色级 junction + 记录版本 */
+  _syncAfterRepoUpdate(repoId) {
+    ensureAllCharJunctions([repoId])
+    const sha = getLocalSha(getRepoDir(repoId))
+    if (sha) setRepoVersion(repoId, sha)
   }
 
   _registerCronTasks() {
@@ -92,7 +90,7 @@ export class Update extends plugin {
       if (repoCfg.autoUpdate !== false) {
         try {
           const result = await fastForwardPullAsync(repoDir)
-          this._syncLinksForRepoId(repoId)
+          this._syncAfterRepoUpdate(repoId)
           const msg = `[面板图图库管理器] 仓库${repoId}自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}`
           notifyMaster(msg)
           if (repoCfg.autoRestart) {
@@ -152,6 +150,42 @@ export class Update extends plugin {
 
   // ========== 手动更新命令（全异步） ==========
 
+  /** #更新第三方图库 — pull 各第三方仓库后复制新图到主图库 */
+  async updateThirdParty(e) {
+    const tps = getThirdPartyRepos().filter(tp => tp.enabled)
+    if (tps.length === 0) {
+      return e.reply('[面板图图库管理器] 未配置启用的第三方图库（config/gallery_config.yaml）')
+    }
+
+    e.reply(`[面板图图库管理器] 开始更新 ${tps.length} 个第三方图库...`)
+    const results = []
+
+    for (const tp of tps) {
+      const check = checkRepo(tp.dir)
+      if (!check.ok) {
+        results.push(`图库「${tp.name}」：${check.msg}`)
+        continue
+      }
+
+      const lock = acquireLock(`tp-${tp.idx}`, '更新第三方图库', 'update')
+      if (!lock.ok) {
+        results.push(`图库「${tp.name}」：${lock.msg}`)
+        continue
+      }
+
+      try {
+        const result = await fastForwardPullAsync(tp.dir)
+        const sync = syncThirdPartyRepo(tp, tp.idx)
+        results.push(`图库「${tp.name}」：${result.msg}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+      } catch (err) {
+        results.push(`图库「${tp.name}」：更新失败 - ${err.message}`)
+      } finally {
+        lock.release()
+      }
+    }
+    return e.reply('[面板图图库管理器] 第三方图库更新\n' + results.join('\n'))
+  }
+
   async updateMain(e) {
     const jCheck = checkProfileJunction()
     if (!jCheck.ok) return e.reply(jCheck.msg)
@@ -179,7 +213,7 @@ export class Update extends plugin {
 
       try {
         const result = await fastForwardPullAsync(repoDir)
-        this._syncLinksForRepoId(repo.id)
+        this._syncAfterRepoUpdate(repo.id)
         completed++
         results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
         if (total > 1) {
@@ -219,7 +253,7 @@ export class Update extends plugin {
 
       try {
         await forceResetAsync(repoDir)
-        this._syncLinksForRepoId(repo.id)
+        this._syncAfterRepoUpdate(repo.id)
         completed++
         results.push(`仓库${repo.id}：强制更新成功`)
       } catch (err) {

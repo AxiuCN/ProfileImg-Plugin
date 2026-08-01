@@ -1,6 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { getRoleAggregated, getBlockedAggregated } from '../model/blockedInfo.js'
+import { getRoleFiles, getBlockedAggregated } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
 
 /**
@@ -21,7 +19,7 @@ export class ProfileImgList extends plugin {
     })
   }
 
-  /** 主图库列表（聚合所有仓库） */
+  /** 主图库列表（读主仓库角色目录） */
   async mainList(e) {
     const roleName = resolveRoleName(
       e.msg.replace(/#|面板图列表/g, '').trim()
@@ -31,11 +29,11 @@ export class ProfileImgList extends plugin {
       return e.reply('[面板图图库管理器]\n请输入正确的角色名')
     }
 
-    const aggregated = getRoleAggregated(roleName, 'normal')
-    if (aggregated.length === 0) {
+    const files = getRoleFiles(roleName, 'normal')
+    if (files.length === 0) {
       return e.reply(`[面板图图库管理器]\n角色「${roleName}」暂无面板图`)
     }
-    return this._renderList(e, roleName, aggregated, 'main')
+    return this._renderList(e, roleName, files, 'main')
   }
 
   /** 屏蔽图库列表 */

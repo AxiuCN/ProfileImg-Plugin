@@ -147,3 +147,24 @@ export function getActiveRepoIds() {
   ids.add(0)
   return [...ids].sort((a, b) => a - b)
 }
+
+/**
+ * 为角色自动分配主仓库（首次出现时调用）
+ * 策略：选择当前角色数最少的活跃仓库，负载均衡
+ * @param {string} charName - 角色名
+ * @returns {number} 分配的仓库编号
+ */
+export function autoAssignRepo(charName) {
+  const activeIds = getActiveRepoIds()
+  let bestId = DEFAULT_REPO
+  let bestCount = Infinity
+  for (const id of activeIds) {
+    const count = getCharsInRepo(id).length
+    if (count < bestCount) {
+      bestCount = count
+      bestId = id
+    }
+  }
+  setRepoForChar(charName, bestId)
+  return bestId
+}

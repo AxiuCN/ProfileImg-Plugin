@@ -14,12 +14,8 @@ gallery:
       autoUpdate: ${gallery_repos_0_autoUpdate}
       autoRestart: ${gallery_repos_0_autoRestart}
 
-  # ---------- default 图库 ----------
-  # 手动添加面板图默认存放目录（非 git）。留空按 map.json 路由主图库
-  defaultDir: "${gallery_defaultDir}"
-
-  # ---------- 第三方图库（只读） ----------
-  thirdParty: ${gallery_thirdParty}
+  # ---------- default / 第三方图库 ----------
+  # 在 config/gallery_config.yaml 中配置（default 图库路径、第三方图库列表）
 
   # ---------- 屏蔽图库 ----------
   blocked:

@@ -3,9 +3,8 @@ import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/g
 import { formatSize, getDirSize, countImages } from '../components/format.js'
 import { getLocalVersionAt } from '../model/version.js'
 import { getBlockedInfo } from '../model/blockedInfo.js'
-import { BLOCKED_REPO_DIR } from '../components/constants.js'
-import { buildRepos } from '../model/repoRegistry.js'
-import { getCharsInRepo } from '../model/mapJson.js'
+import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
+import { getActiveRepoIds, getCharsInRepo } from '../model/mapJson.js'
 
 export class Status extends plugin {
   constructor() {
@@ -50,22 +49,23 @@ export class Status extends plugin {
     if (!jCheck.ok) return e.reply(jCheck.msg)
 
     let msg = '[面板图图库管理器] 主图库\n'
-    const repos = buildRepos().filter(r => r.type === 'main')
+    const repoIds = getActiveRepoIds()
     let totalChars = 0, totalImgs = 0, totalSize = 0
 
-    for (const repo of repos) {
-      const repoDir = repo.dir
+    for (const repoId of repoIds) {
+      const repoDir = getRepoDir(repoId)
+      const repoName = getRepoConfig(repoId).name || `仓库${repoId}`
       const check = checkRepo(repoDir)
       if (!check.ok) {
-        msg += `\n仓库${repo.name}：${check.msg}\n`
+        msg += `\n仓库${repoName}：${check.msg}\n`
         continue
       }
       const stats = this._getRepoStats(repoDir)
       const superStats = this._getSuperStats(repoDir)
-      const charCount = repo.repoId !== undefined ? (getCharsInRepo(repo.repoId).length || stats.charCount) : stats.charCount
+      const charCount = getCharsInRepo(repoId).length || stats.charCount
       const ver = getLocalVersionAt(repoDir)
 
-      msg += `\n仓库${repo.name}：\n`
+      msg += `\n仓库${repoName}：\n`
       msg += `  角色数：${charCount}（普通${stats.charCount} / 彩蛋${superStats.charCount}）\n`
       msg += `  图片数：${stats.imageCount + superStats.imageCount}\n`
       msg += `  大小：${formatSize(stats.totalSize)}\n`
@@ -76,7 +76,7 @@ export class Status extends plugin {
       totalSize += stats.totalSize
     }
 
-    if (repos.length > 1) {
+    if (repoIds.length > 1) {
       msg += `\n合计：${totalChars}角色 / ${totalImgs}图片 / ${formatSize(totalSize)}\n`
     }
     return e.reply(msg)
@@ -106,20 +106,20 @@ export class Status extends plugin {
     // 主图库
     const jCheck = checkProfileJunction()
     if (jCheck.ok) {
-      const repos = buildRepos().filter(r => r.type === 'main')
+      const repoIds = getActiveRepoIds()
       let totalChars = 0, totalImgs = 0, totalSize = 0
-      for (const repo of repos) {
-        const repoDir = repo.dir
+      for (const repoId of repoIds) {
+        const repoDir = getRepoDir(repoId)
         const check = checkRepo(repoDir)
         if (!check.ok) continue
         const stats = this._getRepoStats(repoDir)
         const superStats = this._getSuperStats(repoDir)
-        totalChars += repo.repoId !== undefined ? (getCharsInRepo(repo.repoId).length || stats.charCount) : stats.charCount
+        totalChars += getCharsInRepo(repoId).length || stats.charCount
         totalImgs += stats.imageCount + superStats.imageCount
         totalSize += stats.totalSize
       }
       msg += '\n主图库：\n'
-      msg += `  仓库数：${repos.length}\n`
+      msg += `  仓库数：${repoIds.length}\n`
       msg += '  角色数：' + totalChars + '\n'
       msg += '  图片数：' + totalImgs + '\n'
       msg += '  大小：' + formatSize(totalSize) + '\n'

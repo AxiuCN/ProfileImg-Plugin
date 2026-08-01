@@ -4,15 +4,29 @@
  *
  * 标准命名格式：
  *   含版权：角色名_n_作者_来源[_二改].扩展名
- *   无版权：角色名_n.扩展名（迁移图库生成，n >= 10001）
+ *   无版权：角色名_n.扩展名
+ *   第三方复制：角色名_n_第三方图库_图库名_图原名.扩展名（n 在第三方段位）
+ *   default 复制：角色名_n_本地默认图库_默认_图原名.扩展名（n 在 default 段位）
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { SEGMENTS, THIRD_PARTY_SLOT } from '../model/repoRegistry.js'
 
-/** 非标准文件在 main/old/default 仓库内的 display n 兜底池（不与真实 n 冲突） */
-const NON_STANDARD_POOL = 900000
+/* ==========================================================================
+   序号段位 — n 编码来源（见计划 §序号段位设计）
+   ========================================================================== */
+
+export const SEGMENTS = {
+  main:   { start: 1,      end: 9999 },   // 主图库原始文件
+  default:{ start: 10001,  end: 99999 },  // default 图库复制文件
+  thirdBase: 100000                        // 第三方 tp-i 起始 = thirdBase + i*100000 + 1
+}
+
+/** 每个第三方仓库的序号容量 */
+export const THIRD_PARTY_SLOT = 100000
+
+/** 非标准文件在列表中的 display n 兜底池（不与任何段位冲突） */
+const NON_STANDARD_POOL = 9999999
 
 /**
  * 转义正则特殊字符（用于角色名可能含有的 . ( ) [ ] 等字符）
@@ -32,14 +46,14 @@ export function escapeRegExp(str) {
 export function parseFilename(filename, roleName) {
   const esc = escapeRegExp(roleName)
 
-  // 标准含版权：角色名_n_作者_来源[_二改].扩展名
+  // 标准含版权：角色名_n_作者_来源[_二改].扩展名（含第三方/default 复制前缀）
   const withCopyright = new RegExp(`^${esc}_(\\d+)_.+\\.[^.]+$`, 'i')
   let m = filename.match(withCopyright)
   if (m) {
     return { seq: parseInt(m[1], 10), isStandard: true, hasCopyright: true }
   }
 
-  // 标准无版权（迁移文件）：角色名_n.扩展名
+  // 标准无版权：角色名_n.扩展名
   const noCopyright = new RegExp(`^${esc}_(\\d+)\\.[^.]+$`, 'i')
   m = filename.match(noCopyright)
   if (m) {
@@ -53,8 +67,6 @@ export function parseFilename(filename, roleName) {
 /**
  * 对面板图文件列表排序
  * 标准文件按 seq 升序排列在前，非标准按文件名字母序排列在后
- *（保证同一文件集下非标准文件的 100001+ 临时序号分配稳定）
- *
  * @param {string[]} files - 文件名数组
  * @param {string} roleName - 角色名
  * @returns {{ name: string, parsed: { seq: number, isStandard: boolean, hasCopyright: boolean } }[]}
@@ -90,104 +102,87 @@ export function parseAttribution(filename, roleName) {
 }
 
 /* ==========================================================================
-   多仓库聚合遍历（display n 分段）
+   段位工具 — 按 n 判断来源、段位内取下一个可用 n
    ========================================================================== */
 
 /**
- * 计算单个仓库内文件的 display n
- * @param {object} repo - 仓库对象
- * @param {Array} sorted - sortPanelFiles 结果
- * @param {Array} thirdPartyRepos - 全部第三方仓库（用于定位 tp 序号）
- * @returns {Array<{ name: string, parsed: object, displayN: number }>}
+ * 按 n 判断其来源段位
+ * @param {number} n - 序号
+ * @returns {{ source: 'main'|'default'|'third-party'|'unknown', tpIdx?: number }}
+ *   third-party 时返回 tpIdx（第几个第三方仓库，0 起）
  */
-function assignDisplayN(repo, sorted, thirdPartyRepos) {
+export function resolveNRange(n) {
+  if (n >= SEGMENTS.thirdBase) {
+    const tpIdx = Math.floor((n - SEGMENTS.thirdBase) / THIRD_PARTY_SLOT)
+    return { source: 'third-party', tpIdx }
+  }
+  if (n >= SEGMENTS.default.start) return { source: 'default' }
+  if (n >= SEGMENTS.main.start) return { source: 'main' }
+  return { source: 'unknown' }
+}
+
+/**
+ * 在指定段位范围内取下一个可用序号
+ * 扫描目录内该角色所有文件（含 .bak 屏蔽文件，避免序号复用）
+ * @param {string} dir - 角色目录
+ * @param {string} roleName - 角色名
+ * @param {number} start - 段位起点（含）
+ * @param {number} end - 段位终点（含）
+ * @returns {number} 下一个可用序号；段位已满返回 -1
+ */
+export function getNextSeqInRange(dir, roleName, start, end) {
+  const esc = escapeRegExp(roleName)
+  // 匹配 角色名_n_... / 角色名_n.扩展名（含 .bak 后缀：屏蔽文件也算占用）
+  const pattern = new RegExp(`^${esc}_(\\d+)(?:_|\\.)`, 'i')
+  let maxSeq = start - 1
+  try {
+    if (fs.existsSync(dir)) {
+      for (const file of fs.readdirSync(dir)) {
+        const m = file.match(pattern)
+        if (m) {
+          const seq = parseInt(m[1], 10)
+          if (seq >= start && seq <= end && seq > maxSeq) maxSeq = seq
+        }
+      }
+    }
+  } catch { /* 忽略读取失败 */ }
+  const next = maxSeq + 1
+  return next <= end ? next : -1
+}
+
+/**
+ * 读取角色目录并返回排序后的文件列表
+ * 直接读取主仓库角色目录（junction 目标），n 即 display n
+ * @param {string} dir - 角色目录绝对路径
+ * @param {string} roleName - 角色名
+ * @returns {Array<{ name: string, parsed: object, displayN: number, source: string, filePath: string }>}
+ */
+export function listRoleFiles(dir, roleName) {
+  if (!fs.existsSync(dir)) return []
+  let imgNames = []
+  try {
+    imgNames = fs.readdirSync(dir).filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))
+  } catch { return [] }
+
+  const sorted = sortPanelFiles(imgNames, roleName)
   let nonStdIdx = 0
   return sorted.map(item => {
     let displayN
+    let source = 'unknown'
     if (item.parsed.isStandard) {
       displayN = item.parsed.seq
-    } else if (repo.type === 'third-party') {
-      // 第三方：虚拟 n = base + 仓库序号×slot + 排序位置（从 1 起）
-      const tpIdx = thirdPartyRepos.indexOf(repo)
-      displayN = SEGMENTS.thirdBase + tpIdx * THIRD_PARTY_SLOT + nonStdIdx + 1
-      nonStdIdx++
+      source = resolveNRange(displayN).source
     } else {
-      // main/old/default 的非标准文件：兜底池（不与真实 n 冲突）
+      // 非标准文件：兜底 display n（命令不可按此 n 操作）
       displayN = NON_STANDARD_POOL + nonStdIdx
       nonStdIdx++
     }
-    return { name: item.name, parsed: item.parsed, displayN }
-  })
-}
-
-/**
- * 获取聚合目录下角色的所有源映射
- * 遍历所有仓库中该角色的目录，分配全局 display n
- * @param {string} roleName - 角色名
- * @param {'normal'|'super'} type - 类型
- * @param {Array} repos - 仓库注册表（buildRepos 产物）
- * @returns {Array<{ name: string, repo: object, displayN: number, sourceFile: string, parsed: object }>}
- */
-export function getAggregatedFiles(roleName, type, repos) {
-  const thirdPartyRepos = repos.filter(r => r.type === 'third-party')
-  const result = []
-
-  for (const repo of repos) {
-    const roleDir = path.join(repo.dir, `${type}-character`, roleName)
-    if (!fs.existsSync(roleDir)) continue
-
-    const imgNames = fs.readdirSync(roleDir)
-      .filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f) && fs.statSync(path.join(roleDir, f)).isFile())
-    if (imgNames.length === 0) continue
-
-    const sorted = sortPanelFiles(imgNames, roleName)
-    for (const item of assignDisplayN(repo, sorted, thirdPartyRepos)) {
-      result.push({
-        name: item.name,
-        repo,
-        displayN: item.displayN,
-        sourceFile: path.join(roleDir, item.name),
-        parsed: item.parsed
-      })
+    return {
+      name: item.name,
+      parsed: item.parsed,
+      displayN,
+      source,
+      filePath: path.join(dir, item.name)
     }
-  }
-
-  // 按 display n 全局排序
-  result.sort((a, b) => a.displayN - b.displayN)
-  return result
-}
-
-/**
- * 按 display n 在聚合层查找
- * @param {string} roleName - 角色名
- * @param {number} n - display n
- * @param {'normal'|'super'} type
- * @param {Array} repos - 仓库注册表
- * @returns {object|null} 匹配的聚合条目，找不到返回 null
- */
-export function findByDisplayN(roleName, n, type, repos) {
-  const agg = getAggregatedFiles(roleName, type, repos)
-  return agg.find(f => f.displayN === n) || null
-}
-
-/**
- * display n → 仓库 + 仓库内排序位置的换算（与 miao-plugin 删除一致）
- * @param {number} n - display n
- * @param {Array} repos - 仓库注册表
- * @returns {{ repo: object|null, offset: number, segment: string }}
- */
-export function resolveVirtualN(n, repos) {
-  if (n >= SEGMENTS.thirdBase) {
-    const tpIdx = Math.floor((n - SEGMENTS.thirdBase) / THIRD_PARTY_SLOT)
-    const offset = (n - SEGMENTS.thirdBase) % THIRD_PARTY_SLOT - 1 // 转 0 基
-    const tpRepos = repos.filter(r => r.type === 'third-party')
-    return { repo: tpRepos[tpIdx] || null, offset: offset < 0 ? 0 : offset, segment: 'third-party' }
-  }
-  if (n >= SEGMENTS.default.start) {
-    return { repo: repos.find(r => r.type === 'default') || null, offset: 0, segment: 'default' }
-  }
-  if (n >= SEGMENTS.old.start) {
-    return { repo: repos.find(r => r.type === 'old') || null, offset: 0, segment: 'old' }
-  }
-  return { repo: repos.find(r => r.type === 'main') || null, offset: 0, segment: 'main' }
+  })
 }
