@@ -23,8 +23,8 @@ export class MoveBlockImg extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: '^#屏蔽(.+)面板图\\s*(\\d*)$', fnc: 'blockImg', permission: 'master' },
-        { reg: '^#启用(.+?)(屏蔽)?面板图\\s*(\\d*)$', fnc: 'unblockImg', permission: 'master' }
+        { reg: '^#屏蔽(.+)面板图\\s*(\\d*)$', fnc: 'blockImg' },
+        { reg: '^#启用(.+?)(屏蔽)?面板图\\s*(\\d*)$', fnc: 'unblockImg' }
       ]
     })
   }
