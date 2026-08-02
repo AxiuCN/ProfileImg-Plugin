@@ -6,11 +6,16 @@ import * as blockedRepo from './blockedRepo.js'
 import * as uploadMod from './upload.js'
 import * as galleryMod from './gallery.js'
 import * as managersMod from './managers.js'
-import { getGalleryConfig, writeGalleryConfig, getManagerConfig, writeManagerConfig } from '../components/config.js'
+import * as thirdPartyUpdate from './thirdPartyUpdate.js'
+import { getGalleryConfig, getManagerConfig } from '../components/config.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
 const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
+const galleryTemplatePath = path.join(pluginRoot, 'defSet', 'gallery_config.yaml')
+const managerTemplatePath = path.join(pluginRoot, 'defSet', 'manager_config.yaml')
+const galleryConfigPath = path.join(pluginRoot, 'config', 'gallery_config.yaml')
+const managerConfigPath = path.join(pluginRoot, 'config', 'manager_config.yaml')
 
 /** 默认值映射（模板变量名 → 默认值） */
 const defaultValues = {
@@ -25,6 +30,9 @@ const defaultValues = {
   gallery_blocked_autoUpdate: true,
   gallery_blocked_autoRestart: false,
   gallery_defaultDir: '',
+  gallery_thirdPartyUpdate_enabled: false,
+  gallery_thirdPartyUpdate_cron: '',
+  gallery_thirdPartyUpdate_autoUpdate: false,
   upload_enabled: false,
   upload_format: 'webp',
   upload_maxSize: 500
@@ -67,6 +75,31 @@ function parseCurrentConfig() {
   return {}
 }
 
+/**
+ * 渲染列表配置模板（gallery_config / manager_config）
+ * 读 defSet 模板 → 将列表变量替换为 YAML 数组片段（保留注释结构）
+ * @param {string} templatePath - defSet 模板路径
+ * @param {string} varName - 模板变量名（不含 ${}）
+ * @param {Array} list - 列表数据
+ * @returns {string} 渲染后的 YAML 文本
+ */
+function renderListTemplate(templatePath, varName, list) {
+  const template = fs.readFileSync(templatePath, 'utf8')
+  // 片段缩进 2 空格（与模板中 "key:" 的下一级对齐），空列表用 [] 流式写法
+  const fragment = (Array.isArray(list) && list.length > 0)
+    ? YAML.stringify(list, { indent: 2 }).trim().split('\n')
+        .map(line => '  ' + line).join('\n')
+    : '  []'
+  return template.replace('${' + varName + '}', fragment)
+}
+
+/** 写列表配置（gallery_config / manager_config），模板渲染保留注释 */
+function writeListConfig(templatePath, varName, configPath, list) {
+  const content = renderListTemplate(templatePath, varName, list)
+  fs.writeFileSync(configPath, content, 'utf8')
+  return { ok: true }
+}
+
 export function supportGuoba() {
   return {
     pluginInfo: {
@@ -83,8 +116,13 @@ export function supportGuoba() {
     },
     configInfo: {
       schemas: [
+        // 图库更新：主图库 / 屏蔽图库 / 第三方图库，Divider 分割
+        { label: '图库更新', component: 'SOFT_GROUP_BEGIN' },
         ...mainRepo.getSchema(),
+        { component: 'Divider' },
         ...blockedRepo.getSchema(),
+        { component: 'Divider' },
+        ...thirdPartyUpdate.getSchema(),
         ...galleryMod.getSchema(),
         ...managersMod.getSchema(),
         ...uploadMod.getSchema()
@@ -96,6 +134,7 @@ export function supportGuoba() {
         const repos = gallery.repos || []
         const repo0 = repos[0] || {}
         const blocked = gallery.blocked || {}
+        const tpUpdate = gallery.thirdPartyUpdate || {}
         const upload = userConfig.upload || {}
         const galleryCfg = getGalleryConfig()
         const managerCfg = getManagerConfig()
@@ -111,6 +150,9 @@ export function supportGuoba() {
           'gallery.blocked.cron': blocked.cron ?? defaultValues.gallery_blocked_cron,
           'gallery.blocked.autoUpdate': blocked.autoUpdate ?? defaultValues.gallery_blocked_autoUpdate,
           'gallery.blocked.autoRestart': blocked.autoRestart ?? defaultValues.gallery_blocked_autoRestart,
+          'gallery.thirdPartyUpdate.enabled': tpUpdate.enabled ?? defaultValues.gallery_thirdPartyUpdate_enabled,
+          'gallery.thirdPartyUpdate.cron': tpUpdate.cron ?? defaultValues.gallery_thirdPartyUpdate_cron,
+          'gallery.thirdPartyUpdate.autoUpdate': tpUpdate.autoUpdate ?? defaultValues.gallery_thirdPartyUpdate_autoUpdate,
           'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.thirdParty': galleryCfg.thirdParty ?? [],
           'managers': managerCfg.managers ?? [],
@@ -122,22 +164,26 @@ export function supportGuoba() {
 
       setConfigData(data, { Result }) {
         try {
-          // ① 先写 manager_config.yaml（成员管理权限）— 失败则终止
+          // ① 先写 manager_config.yaml（成员管理权限，模板渲染保留注释）— 失败则终止
           const managersData = data['managers']
           if (managersData !== undefined) {
-            const mgrCfg = getManagerConfig()
-            mgrCfg.managers = Array.isArray(managersData) ? managersData : []
-            const wm = writeManagerConfig(mgrCfg)
-            if (!wm.ok) return Result.error('保存失败：' + wm.error)
+            try {
+              writeListConfig(managerTemplatePath, 'managers_list', managerConfigPath,
+                Array.isArray(managersData) ? managersData : [])
+            } catch (e) {
+              return Result.error('保存失败：' + e.message)
+            }
           }
 
-          // ② 再写 gallery_config.yaml（第三方图库列表）— 失败则终止，不污染 config.yaml
+          // ② 再写 gallery_config.yaml（第三方图库列表，模板渲染保留注释）— 失败则终止，不污染 config.yaml
           const thirdPartyData = data['gallery.thirdParty']
           if (thirdPartyData !== undefined) {
-            const galleryCfg = getGalleryConfig()
-            galleryCfg.thirdParty = Array.isArray(thirdPartyData) ? thirdPartyData : []
-            const w = writeGalleryConfig(galleryCfg)
-            if (!w.ok) return Result.error('保存失败：' + w.error)
+            try {
+              writeListConfig(galleryTemplatePath, 'gallery_thirdParty', galleryConfigPath,
+                Array.isArray(thirdPartyData) ? thirdPartyData : [])
+            } catch (e) {
+              return Result.error('保存失败：' + e.message)
+            }
           }
 
           // ③ 最后写 config.yaml（标量字段，模板替换保留注释）

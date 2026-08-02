@@ -1,11 +1,7 @@
-/** 屏蔽图库 Schema */
+/** 屏蔽图库 Schema — 不含分组头，由 guoba/index.js 统一编排 */
 
 export function getSchema () {
   return [
-    {
-      label: '屏蔽图库更新',
-      component: 'SOFT_GROUP_BEGIN'
-    },
     {
       field: 'gallery.blocked.enabled',
       label: '启用自动检查',

@@ -143,3 +143,35 @@ export function syncThirdPartyRepo(tp, idx) {
     return { ok: false, copied, skipped, removed, error: e.message }
   }
 }
+
+/**
+ * 删除第三方图库时清理主图库中该图库的所有副本（含 .bak 屏蔽文件）
+ * 遍历所有活跃主仓库的角色目录，文件名前缀匹配 `_第三方图库_<图库名>_`
+ * @param {string} tpName - 第三方图库名（与配置 thirdParty[].name 一致）
+ * @returns {number} 删除的副本数量
+ */
+export function removeThirdPartyCopies(tpName) {
+  let removed = 0
+  const escName = escapeRegExp(tpName)
+  const markerRe = new RegExp(`_第三方图库_${escName}_`, 'i')
+  for (const repoId of getActiveRepoIds()) {
+    const repoDir = getRepoDir(repoId)
+    for (const type of ['normal', 'super']) {
+      const typeDir = path.join(repoDir, `${type}-character`)
+      if (!fs.existsSync(typeDir)) continue
+      for (const charName of fs.readdirSync(typeDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())) {
+        const roleDir = path.join(typeDir, charName.name)
+        for (const f of fs.readdirSync(roleDir)) {
+          if (markerRe.test(f)) {
+            try {
+              fs.unlinkSync(path.join(roleDir, f))
+              removed++
+            } catch { /* 单个文件失败继续 */ }
+          }
+        }
+      }
+    }
+  }
+  return removed
+}

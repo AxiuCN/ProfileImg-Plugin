@@ -1,11 +1,7 @@
-/** 主图库（仓库 0）Schema */
+/** 主图库（仓库 0）Schema — 不含分组头，由 guoba/index.js 统一编排 */
 
 export function getSchema () {
   return [
-    {
-      label: '主图库（仓库 0）',
-      component: 'SOFT_GROUP_BEGIN'
-    },
     {
       field: 'gallery.repos.0.enabled',
       label: '启用自动检查',

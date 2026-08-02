@@ -8,6 +8,7 @@ import { checkProfileJunction, checkRepo } from '../model/gallery.js'
 import { setRepoVersion } from '../model/repoVersions.js'
 import { ensureAllCharJunctions, syncThirdPartyRepo } from '../model/copier.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
+import { removeThirdPartyCopies } from '../model/copier.js'
 import {
   BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig, PROFILE_IMG_DIR
 } from '../components/constants.js'
@@ -28,6 +29,7 @@ export class Download extends plugin {
         { reg: '^#下载主图库$', fnc: 'downloadMain', permission: 'master' },
         { reg: '^#下载屏蔽图库$', fnc: 'downloadBlocked', permission: 'master' },
         { reg: '^#下载第三方图库\\s+(.+)$', fnc: 'downloadThirdParty', permission: 'master' },
+        { reg: '^#删除第三方图库\\s+(.+)$', fnc: 'deleteThirdParty', permission: 'master' },
         { reg: '^#强制下载主图库$', fnc: 'forceDownload', permission: 'master' },
         { reg: '^#强制下载屏蔽图库$', fnc: 'forceDownloadBlocked', permission: 'master' }
       ]
@@ -175,7 +177,7 @@ export class Download extends plugin {
         return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载失败\n${result.msg}`)
       }
 
-      // URL 模式且未注册：追加到 gallery_config.yaml
+      // URL 模式且未注册：追加到 gallery_config.yaml（目录结构未知，normalPath/superPath 留空待用户配置）
       if (isUrl && !existingTp) {
         const cfg = getGalleryConfig()
         const list = Array.isArray(cfg.thirdParty) ? cfg.thirdParty : []
@@ -183,8 +185,8 @@ export class Download extends plugin {
           name: repoName,
           dir: repoName,
           remoteUrl,
-          normalPath: 'normal-character',
-          superPath: 'super-character',
+          normalPath: '',
+          superPath: '',
           enabled: true
         })
         cfg.thirdParty = list
@@ -194,17 +196,83 @@ export class Download extends plugin {
         }
       }
 
-      // 同步复制到主图库
+      // 同步复制到主图库：仅当已配置角色目录结构（normalPath/superPath 非空）时自动执行
       const tp = getThirdPartyRepos().find(t => t.dir === targetDir)
       let syncMsg = ''
+      let configured = false
       if (tp) {
-        const sync = syncThirdPartyRepo(tp, tp.idx)
-        syncMsg = `\n复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}`
+        configured = !!(tp.normalPath || tp.superPath)
+        if (configured) {
+          const sync = syncThirdPartyRepo(tp, tp.idx)
+          syncMsg = `\n复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}`
+        }
       }
 
-      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${syncMsg}`)
+      const hint = configured
+        ? ''
+        : '\n各仓库目录结构不同，请在锅巴后台「第三方图库」中配置该图库的 normalPath/superPath，配置后发送 #更新第三方图库 ' + repoName + ' 同步图片'
+
+      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${syncMsg}${hint}`)
     } catch (err) {
       return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载异常\n${err.message}`)
+    } finally {
+      lock.release()
+    }
+  }
+
+  /**
+   * 删除第三方图库
+   * #删除第三方图库 <图库名> — 移除配置 + 清理主图库副本 + 删除仓库目录
+   * 不允许删除 default 图库与主图库
+   */
+  async deleteThirdParty(e) {
+    const arg = e.msg.replace(/^#删除第三方图库\s+/, '').trim()
+    if (!arg) {
+      return e.reply('[面板图图库管理器] 用法：#删除第三方图库 <图库名>')
+    }
+
+    // 保护 default 与主图库
+    if (arg === 'default' || /^miao-plugin-ProfileImg(-\d+)?$/i.test(arg)) {
+      return e.reply('[面板图图库管理器] 不允许删除 default 图库或主图库')
+    }
+
+    const tps = getThirdPartyRepos().filter(tp => tp.name === arg)
+    if (tps.length === 0) {
+      return e.reply(`[面板图图库管理器] 未找到第三方图库「${arg}」`)
+    }
+
+    const lock = acquireLock(`tp-del-${arg}`, '删除第三方图库', 'update')
+    if (!lock.ok) {
+      return e.reply(`[面板图图库管理器] ${lock.msg}`)
+    }
+
+    try {
+      // 清理主图库中该图库的所有副本（含 .bak）
+      const removed = removeThirdPartyCopies(arg)
+
+      // 从 gallery_config.yaml 移除配置
+      const cfg = getGalleryConfig()
+      if (Array.isArray(cfg.thirdParty)) {
+        cfg.thirdParty = cfg.thirdParty.filter(tp => tp.name !== arg)
+        const w = writeGalleryConfig(cfg)
+        if (!w.ok) {
+          return e.reply(`[面板图图库管理器] 副本已清理但写入配置失败：${w.error}`)
+        }
+      }
+
+      // 删除仓库目录
+      let dirMsg = ''
+      for (const tp of tps) {
+        if (fs.existsSync(tp.dir)) {
+          fs.rmSync(tp.dir, { recursive: true, force: true })
+          dirMsg += `\n已删除仓库目录：${tp.dir}`
+        }
+      }
+
+      return e.reply(`[面板图图库管理器] 第三方图库「${arg}」已删除\n清理副本 ${removed} 个${dirMsg}`)
+    } catch (err) {
+      logger.error('[ProfileImg-Plugin] 删除第三方图库失败:', err)
+      return e.reply('[面板图图库管理器] 删除第三方图库失败: ' + err.message)
     } finally {
       lock.release()
     }

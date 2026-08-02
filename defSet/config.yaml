@@ -26,6 +26,12 @@ gallery:
     autoUpdate: ${gallery_blocked_autoUpdate}
     autoRestart: ${gallery_blocked_autoRestart}
 
+  # ---------- 第三方图库自动更新 ----------
+  thirdPartyUpdate:
+    enabled: ${gallery_thirdPartyUpdate_enabled}
+    cron: "${gallery_thirdPartyUpdate_cron}"
+    autoUpdate: ${gallery_thirdPartyUpdate_autoUpdate}
+
 # ---------- 上传压缩设置 ----------
 upload:
   enabled: ${upload_enabled}

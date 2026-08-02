@@ -27,6 +27,13 @@ gallery:
     autoUpdate: true
     autoRestart: false
 
+  # ---------- 第三方图库自动更新 ----------
+  # 检测到第三方图库新版本时自动 pull 并复制新图到主图库
+  thirdPartyUpdate:
+    enabled: false
+    cron: ""
+    autoUpdate: false
+
 # ---------- 上传压缩设置 ----------
 upload:
   enabled: false

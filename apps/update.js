@@ -23,7 +23,7 @@ export class Update extends plugin {
         { reg: '^#主图库强制更新$', fnc: 'forceUpdateMain', permission: 'master' },
         { reg: '^#屏蔽图库更新$', fnc: 'updateBlocked', permission: 'master' },
         { reg: '^#屏蔽图库强制更新$', fnc: 'forceUpdateBlocked', permission: 'master' },
-        { reg: '^#更新第三方图库$', fnc: 'updateThirdParty', permission: 'master' }
+        { reg: '^#更新第三方图库(?:\s+(.+))?$', fnc: 'updateThirdParty', permission: 'master' }
       ]
     })
     this._registerCronTasks()
@@ -62,6 +62,16 @@ export class Update extends plugin {
         name: '屏蔽图库自动检查更新',
         cron: blockedCfg.cron,
         fnc: () => this._autoCheckBlocked(),
+        log: true
+      })
+    }
+
+    const tpUpdateCfg = config?.gallery?.thirdPartyUpdate || {}
+    if (tpUpdateCfg.enabled !== false && tpUpdateCfg.cron) {
+      tasks.push({
+        name: '第三方图库自动检查更新',
+        cron: tpUpdateCfg.cron,
+        fnc: () => this._autoCheckThirdParty(),
         log: true
       })
     }
@@ -148,16 +158,61 @@ export class Update extends plugin {
     }
   }
 
+  /** 自动检查第三方图库（异步，有锁保护） */
+  async _autoCheckThirdParty() {
+    const tpUpdateCfg = getPluginConfig()?.gallery?.thirdPartyUpdate || {}
+    if (tpUpdateCfg.autoUpdate === false) return
+
+    const tps = getThirdPartyRepos().filter(tp => tp.enabled)
+    if (tps.length === 0) return
+
+    for (const tp of tps) {
+      const check = checkRepo(tp.dir)
+      if (!check.ok) continue
+
+      const lock = acquireLock(`tp-${tp.idx}`, '第三方图库自动更新', 'update')
+      if (!lock.ok) continue // 冲突时静默跳过
+
+      try {
+        const remoteSha = await getRemoteShaAsync(tp.dir)
+        if (!remoteSha) continue
+        const localSha = getLocalSha(tp.dir)
+        if (remoteSha === localSha) continue
+
+        if (tpUpdateCfg.autoUpdate !== false) {
+          const result = await fastForwardPullAsync(tp.dir)
+          const sync = syncThirdPartyRepo(tp, tp.idx)
+          notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+        } else {
+          notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」有新版本，自动更新已关闭\n${localSha} -> ${remoteSha}`)
+        }
+      } catch (err) {
+        logger.error(`[面板图图库管理器] 第三方图库「${tp.name}」自动检查更新失败:`, err)
+      } finally {
+        lock.release()
+      }
+    }
+  }
+
   // ========== 手动更新命令（全异步） ==========
 
-  /** #更新第三方图库 — pull 各第三方仓库后复制新图到主图库 */
+  /** #更新第三方图库 [图库名] — pull 第三方仓库（可指定单个）后复制新图到主图库 */
   async updateThirdParty(e) {
-    const tps = getThirdPartyRepos().filter(tp => tp.enabled)
+    const match = e.msg.match(/^#更新第三方图库(?:\s+(.+))?$/)
+    const arg = match?.[1]?.trim() || ''
+
+    let tps = getThirdPartyRepos().filter(tp => tp.enabled)
+    if (arg) {
+      tps = tps.filter(tp => tp.name === arg)
+      if (tps.length === 0) {
+        return e.reply(`[面板图图库管理器] 未找到启用的第三方图库「${arg}」（config/gallery_config.yaml）`)
+      }
+    }
     if (tps.length === 0) {
       return e.reply('[面板图图库管理器] 未配置启用的第三方图库（config/gallery_config.yaml）')
     }
 
-    e.reply(`[面板图图库管理器] 开始更新 ${tps.length} 个第三方图库...`)
+    e.reply(`[面板图图库管理器] 开始更新 ${arg ? `第三方图库「${arg}」` : `${tps.length} 个第三方图库`}...`)
     const results = []
 
     for (const tp of tps) {
