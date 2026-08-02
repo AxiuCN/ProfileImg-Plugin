@@ -126,13 +126,13 @@ export function writeManagerConfig(config) {
   }
 }
 
-/** 默认管理仓库编号（成员未配置 repoId 时使用） */
-export const DEFAULT_MANAGER_REPO = 0
+/** 成员未配置 repos 时的默认允许图库（default 图库） */
+export const DEFAULT_MANAGER_REPOS = ['default']
 
 /**
  * 查询用户的成员配置记录
  * @param {number|string} userId - 用户 QQ 号
- * @returns {{ qq: number, repoId?: number }|null} 非授权成员返回 null
+ * @returns {{ qq: number, repos?: Array|string }|null} 非授权成员返回 null
  */
 export function getManagerForUser(userId) {
   const cfg = getManagerConfig()
@@ -151,12 +151,30 @@ export function isManager(e) {
 }
 
 /**
- * 成员管理仓库编号（成员可操作的仓库边界）
+ * 成员允许操作的图库类型列表
+ * 图库类型标识：'main'（主图库，一体）/ 'default'（default 图库）/ 第三方图库名
  * @param {number|string} userId - 用户 QQ 号
- * @returns {number|null} 成员返回其管理仓库（未配置默认 0）；非成员返回 null
+ * @returns {string[]|null} 成员返回允许图库列表（未配置默认 ['default']）；非成员返回 null
  */
-export function getManagerRepoId(userId) {
+export function getManagerRepos(userId) {
   const m = getManagerForUser(userId)
   if (!m) return null
-  return Number.isInteger(m.repoId) ? m.repoId : DEFAULT_MANAGER_REPO
+  const raw = m.repos
+  let list = []
+  if (Array.isArray(raw)) list = raw
+  else if (typeof raw === 'string') list = raw.split(/[,，\s]+/).filter(Boolean)
+  list = list.map(String).map(s => s.trim()).filter(Boolean)
+  return list.length ? list : [...DEFAULT_MANAGER_REPOS]
+}
+
+/**
+ * 校验用户是否有权操作某图库类型的图
+ * @param {number|string} userId - 用户 QQ 号
+ * @param {string} galleryKey - 图库类型标识（'main'/'default'/第三方图库名）
+ * @returns {boolean}
+ */
+export function canAccessGallery(userId, galleryKey) {
+  const repos = getManagerRepos(userId)
+  if (!repos) return false
+  return repos.includes(galleryKey)
 }

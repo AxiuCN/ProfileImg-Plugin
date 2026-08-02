@@ -2,9 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { resolveRoleName } from '../modules/alias.js'
 import { getRoleFiles } from '../model/blockedInfo.js'
-import { getRepoForChar } from '../model/mapJson.js'
-import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
-import { isManager, getManagerRepoId } from '../components/config.js'
+import { resolveNRange, resolveGalleryKey, escapeRegExp } from '../components/panelUtils.js'
+import { isManager, canAccessGallery } from '../components/config.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
 
 /**
@@ -41,16 +40,18 @@ export class DelProfileImg extends plugin {
     const roleName = resolveRoleName(match[1].trim())
     const n = parseInt(match[2], 10)
 
-    // 成员仓库边界：角色须归属成员管理仓库
-    const managerRepoId = e.isMaster ? null : getManagerRepoId(e.user_id)
-    if (managerRepoId != null && getRepoForChar(roleName) !== managerRepoId) {
-      return e.reply(`[面板图图库管理器]\n角色「${roleName}」归属仓库${getRepoForChar(roleName)}，不在你管理的仓库${managerRepoId}内`)
-    }
-
     const files = getRoleFiles(roleName, 'normal')
     const target = files.find(f => f.displayN === n)
     if (!target) {
       return e.reply(`[面板图图库管理器]\n序号无效，角色${roleName}没有第${n}张图`)
+    }
+
+    // 成员图库边界：目标图所属图库须被允许
+    if (!e.isMaster) {
+      const gkey = resolveGalleryKey(target.name, roleName, n)
+      if (!gkey || !canAccessGallery(e.user_id, gkey)) {
+        return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
+      }
     }
 
     const { source } = resolveNRange(n)

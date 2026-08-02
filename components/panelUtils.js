@@ -122,6 +122,26 @@ export function resolveNRange(n) {
 }
 
 /**
+ * 解析文件所属图库类型标识（用于成员权限校验）
+ * 图库类型：'main'（主图库，一体）/ 'default'（default 图库）/ 第三方图库名
+ * @param {string} filename - 文件名
+ * @param {string} roleName - 角色名
+ * @param {number} n - 序号
+ * @returns {string|null} 图库类型标识；无法判定返回 null
+ */
+export function resolveGalleryKey(filename, roleName, n) {
+  const { source } = resolveNRange(n)
+  if (source === 'main') return 'main'
+  if (source === 'default') return 'default'
+  if (source === 'third-party') {
+    const esc = escapeRegExp(roleName)
+    const m = filename.match(new RegExp(`^${esc}_\\d+_第三方图库_([^_]+)_`, 'i'))
+    return m ? m[1] : null
+  }
+  return null
+}
+
+/**
  * 在指定段位范围内取下一个可用序号
  * 扫描目录内该角色所有文件（含 .bak 屏蔽文件，避免序号复用）
  * @param {string} dir - 角色目录
