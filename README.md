@@ -61,7 +61,22 @@ pnpm install -P --filter ProfileImg-Plugin
 | `#主图库强制更新` | 强制同步所有主图库仓库 |
 | `#屏蔽图库强制更新` | 强制同步屏蔽图库 |
 
-> 主图库更新/下载后自动确保角色级 junction；主图库 / 屏蔽图库 / 第三方图库的自动更新检查可在锅巴后台「图库更新」分组中分别配置。
+> 主图库更新/下载后自动确保角色级 junction。
+
+#### 统一自动更新（默认开启，cron `0 30 5 * * *` / 每天 5:30）
+
+所有图库共用**一个** cron，按固定顺序执行：**主图库 → 屏蔽图库 → 第三方图库 → 刷新副本**。某个图库更新失败不会中断后续，完成后统一通知主人。
+
+逐类开关（锅巴后台「图库更新」分组或 `config/config.yaml` 的 `gallery` 段）：
+
+| 配置项 | 作用 | 默认 |
+|--------|------|------|
+| `gallery.autoUpdate.enabled` | 自动更新总开关 | 开 |
+| `gallery.autoUpdate.cron` | 统一执行时间 | `0 30 5 * * *` |
+| `gallery.repos[].autoUpdate` | 该主仓库是否参与自动更新 | 开 |
+| `gallery.blocked.enabled` | 屏蔽图库是否参与自动更新 | 开 |
+| `gallery.thirdPartyUpdate.enabled` | 第三方图库是否参与自动更新 | 开 |
+| `gallery.refreshCopies.enabled` | 更新后是否自动刷新副本 | 开 |
 
 ### 第三方图库（仅主人）
 
@@ -69,7 +84,7 @@ pnpm install -P --filter ProfileImg-Plugin
 |------|------|
 | `#下载第三方图库 <URL>` | 克隆第三方图库到 `gallery/ProfileImg/` 并注册到配置 |
 | `#删除第三方图库 <图库名>` | 删除第三方图库（清理主图库副本 + 删除仓库目录 + 移除配置），不允许删 default/主图库 |
-| `#刷新图库副本 [图库名]` | 检查并修复角色级 junction 与副本遗漏（缺省=全部图库） |
+| `#刷新图库副本 [default/图库名]` | 检查并修复角色级 junction + default/第三方副本遗漏；无后缀=除主图库外全部，`default` 后缀=仅 default，图库名后缀=仅该第三方 |
 | `#更新第三方图库 [图库名]` | 拉取第三方图库并复制新图到主图库（缺省=全部；指定则仅更新单个） |
 
 > 各第三方仓库目录结构不同，下载后需在锅巴后台「第三方图库」中配置该图库的 normalPath / superPath，配置后 `#更新第三方图库 <图库名>` 才能同步图片；`#刷新图库副本` 可用于校验修复。
@@ -167,7 +182,7 @@ miao-plugin-ProfileImg[-N]/normal-character/琴/
 ```
 ProfileImg-Plugin/
 ├── config/
-│   ├── config.yaml                    ← 主配置（仓库元数据/屏蔽/第三方更新/上传压缩，运行时）
+│   ├── config.yaml                    ← 主配置（统一自动更新/仓库元数据/屏蔽/第三方/刷新副本/上传压缩，运行时）
 │   ├── gallery_config.yaml            ← 图库配置（default 路径 + 第三方列表，运行时）
 │   └── manager_config.yaml            ← 成员管理权限（运行时）
 ├── defSet/

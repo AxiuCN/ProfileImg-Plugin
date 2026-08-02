@@ -46,7 +46,8 @@ export class MigrateGallery extends plugin {
       return e.reply('[面板图图库管理器] default 图库不可用，无法迁移。')
     }
 
-    e.reply('[面板图图库管理器] 开始迁移图库，请稍候...')
+    // 先发送"开始"提示，避免同步复制阻塞事件循环导致消息延迟到完成后才送达
+    await e.reply('[面板图图库管理器] 开始迁移图库，请稍候...')
 
     try {
       let migratedChars = 0

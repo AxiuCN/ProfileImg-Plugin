@@ -27,6 +27,12 @@ export function getSchema () {
     // 主图库
     { label: '主图库', component: 'Divider' },
     {
+      field: 'gallery.repos.0.autoUpdate',
+      label: '参与自动更新',
+      bottomHelpMessage: '该仓库是否参与统一自动更新，默认开启',
+      component: 'Switch'
+    },
+    {
       field: 'gallery.repos.0.remoteUrl',
       label: '远程仓库地址',
       bottomHelpMessage: 'Git 仓库 URL（更换源或自定义镜像）',
@@ -34,12 +40,6 @@ export function getSchema () {
       componentProps: {
         placeholder: 'https://github.com/...'
       }
-    },
-    {
-      field: 'gallery.repos.0.autoUpdate',
-      label: '参与自动更新',
-      bottomHelpMessage: '该仓库是否参与统一自动更新，默认开启',
-      component: 'Switch'
     },
 
     // 屏蔽图库
