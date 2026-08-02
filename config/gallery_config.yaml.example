@@ -1,20 +1,17 @@
 # ==============================================================
-# ProfileImg-Plugin 图库配置
-# 管理 default 图库与第三方图库（主图库仓库元数据在 config.yaml 的 gallery.repos）
+# ProfileImg-Plugin 图库配置（第三方图库）
+# default 图库路径在 config.yaml 的 gallery.defaultDir 中配置（见锅巴"default 图库上传"）
 # ==============================================================
-
-# ---------- default 图库 ----------
-# 手动上传面板图的默认存放目录（非 git，本地可写）
-# dir 为绝对路径，或相对云崽根目录（app/）的路径；留空表示未配置
-default:
-  dir: ""
 
 # ---------- 第三方图库（只读，git pull 更新后复制到主图库） ----------
 # 第三方仓库的目录结构通常与 miao-plugin-ProfileImg 不同，
 # 需用 normalPath / superPath 指定角色目录在仓库内的相对位置（可为空表示该类型不存在）
+# dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名，如 "xxx-fan-repo"，
+# 实际路径: plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/xxx-fan-repo
+# 可用 #下载第三方图库 <URL> 命令自动下载并注册，无需手动填写
 thirdParty:
   # - name: "某同人图库"                        # 图库名（用于文件名前缀与显示）
-  #   dir: "plugins/xxx-fan-repo"              # 仓库本地目录（绝对路径或相对 app/ 根）
+  #   dir: "xxx-fan-repo"                      # gallery/ProfileImg/ 下的子目录名
   #   remoteUrl: "https://github.com/xxx/xxx.git"  # Git 远程地址
   #   normalPath: "normal-character"            # normal 角色目录相对路径（空=无）
   #   superPath: ""                             # super 角色目录相对路径（空=无）

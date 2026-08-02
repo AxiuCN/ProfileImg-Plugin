@@ -72,7 +72,7 @@ export class ProfileImgList extends plugin {
       const filePath = item.filePath
         || (item.sourceFile)
       forwardItems.push({
-        message: `${item.displayN}. ${item.name}` + segment.image('file://' + filePath)
+        message: [`${item.displayN}. ${item.name}`, segment.image('file://' + filePath)]
       })
     }
 

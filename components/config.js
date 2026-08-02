@@ -51,3 +51,21 @@ export function getGalleryConfig() {
   }
   return {}
 }
+
+/**
+ * 写入图库配置到 config/gallery_config.yaml
+ * 覆盖整个对象（含 thirdParty 列表），由锅巴保存 / 下载第三方时调用
+ * @param {object} config - 完整的 gallery_config 对象
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export function writeGalleryConfig(config) {
+  try {
+    const dir = path.dirname(GALLERY_CONFIG_PATH)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(GALLERY_CONFIG_PATH, YAML.stringify(config, { indent: 2 }), 'utf8')
+    return { ok: true }
+  } catch (e) {
+    logger.error('[ProfileImg-Plugin] 写入图库配置失败:', e)
+    return { ok: false, error: e.message }
+  }
+}

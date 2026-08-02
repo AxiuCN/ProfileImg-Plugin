@@ -1,30 +1,29 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { getGalleryConfig, getPluginConfig } from '../components/config.js'
+import { PROFILE_IMG_DIR } from '../components/constants.js'
 
 /**
  * 图库配置（config/gallery_config.yaml）读取工具
  *
  * 负责 default 图库路径与第三方图库列表的解析。
  * 第三方仓库目录结构各异，通过 normalPath / superPath 指定角色目录位置。
+ * 第三方仓库目录固定位于 PROFILE_IMG_DIR（gallery/ProfileImg/）下。
  */
 
-const cwd = process.cwd()
-
-/** 将配置中的目录路径解析为绝对路径（相对路径视为相对云崽根目录） */
+/** 将配置中的目录名解析为绝对路径（第三方仓库固定位于 PROFILE_IMG_DIR 下） */
 function resolveDir(dir) {
   if (!dir) return ''
-  return path.isAbsolute(dir) ? dir : path.resolve(cwd, dir)
+  return path.isAbsolute(dir) ? dir : path.join(PROFILE_IMG_DIR, dir)
 }
 
 /**
  * 获取 default 图库目录
- * 优先读 gallery_config.yaml 的 default.dir，兼容回退 config.yaml 的 gallery.defaultDir
+ * 读取 config.yaml 的 gallery.defaultDir（目录名，位于 gallery/ProfileImg/ 下）
  * @returns {string} 绝对路径；未配置返回空串
  */
 export function getDefaultDir() {
-  const config = getGalleryConfig()
-  const dir = config?.default?.dir || getPluginConfig()?.gallery?.defaultDir
+  const dir = getPluginConfig()?.gallery?.defaultDir
   return resolveDir(dir)
 }
 

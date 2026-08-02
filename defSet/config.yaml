@@ -14,8 +14,9 @@ gallery:
       autoUpdate: ${gallery_repos_0_autoUpdate}
       autoRestart: ${gallery_repos_0_autoRestart}
 
-  # ---------- default / 第三方图库 ----------
-  # 在 config/gallery_config.yaml 中配置（default 图库路径、第三方图库列表）
+  # ---------- default 图库 ----------
+  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时直接写入主图库
+  defaultDir: "${gallery_defaultDir}"
 
   # ---------- 屏蔽图库 ----------
   blocked:

@@ -130,7 +130,7 @@ miao-plugin-ProfileImg[-N]/normal-character/琴/
 | 图库 | 目录 | git | 可写 | 屏蔽方式 |
 |------|------|-----|------|---------|
 | 主图库 | `miao-plugin-ProfileImg[-N]` | ✓ | ✓ push | 移入 blocked-character |
-| default 图库 | `gallery_config.yaml` 配置 | ✗ | ✓ 本地 | .bak |
+| default 图库 | `config.yaml` gallery.defaultDir | ✗ | ✓ 本地 | .bak |
 | 第三方图库 N | 各自独立目录 | ✓ 只读 | ✗ | .bak |
 
 - **仅主图库 push**。default 本地目录，第三方只读 pull（更新后复制到主仓库）。
@@ -178,20 +178,17 @@ ProfileImg-Plugin/
 
 ### gallery_config.yaml
 
-第三方图库配置示例（`config/gallery_config.yaml`，参考 `gallery_config.yaml.example`）：
+第三方图库配置（`config/gallery_config.yaml`，参考 `gallery_config.yaml.example`）。
+default 图库路径在 `config.yaml` 的 `gallery.defaultDir` 中配置。
 
 ```yaml
-# default 图库（上传默认位置）
-default:
-  dir: ""
-
 # 第三方图库（只读，更新后复制到主图库）
 thirdParty:
   - name: "某同人图库"
-    dir: "plugins/xxx-fan-repo"
+    dir: "xxx-fan-repo"             # gallery/ProfileImg/ 下的子目录名
     remoteUrl: "https://github.com/xxx/xxx.git"
-    normalPath: "normal-character"   # 仓库中 normal 角色目录相对路径（空=无）
-    superPath: ""                    # 仓库中 super 角色目录相对路径（空=无）
+    normalPath: "normal-character"  # 仓库中 normal 角色目录相对路径（空=无）
+    superPath: ""                   # 仓库中 super 角色目录相对路径（空=无）
     enabled: true
 ```
 

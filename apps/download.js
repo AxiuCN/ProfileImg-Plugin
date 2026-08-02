@@ -1,13 +1,15 @@
 import fs from 'node:fs'
-import { installRepoAsync, getLocalSha, acquireLock } from '../model/git.js'
+import path from 'node:path'
+import { installRepoAsync, getLocalSha, acquireLock, gitExecAsync } from '../model/git.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
-import { getPluginConfig } from '../components/config.js'
+import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
 import { notifyMaster } from '../components/notify.js'
-import { checkProfileJunction } from '../model/gallery.js'
+import { checkProfileJunction, checkRepo } from '../model/gallery.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { ensureAllCharJunctions } from '../model/copier.js'
+import { ensureAllCharJunctions, syncThirdPartyRepo } from '../model/copier.js'
+import { getThirdPartyRepos } from '../model/galleryConfig.js'
 import {
-  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig
+  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig, PROFILE_IMG_DIR
 } from '../components/constants.js'
 
 /**
@@ -25,6 +27,7 @@ export class Download extends plugin {
       rule: [
         { reg: '^#下载主图库$', fnc: 'downloadMain', permission: 'master' },
         { reg: '^#下载屏蔽图库$', fnc: 'downloadBlocked', permission: 'master' },
+        { reg: '^#下载第三方图库\\s+(.+)$', fnc: 'downloadThirdParty', permission: 'master' },
         { reg: '^#强制下载主图库$', fnc: 'forceDownload', permission: 'master' },
         { reg: '^#强制下载屏蔽图库$', fnc: 'forceDownloadBlocked', permission: 'master' }
       ]
@@ -96,6 +99,112 @@ export class Download extends plugin {
       e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
       const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
       return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
+    } finally {
+      lock.release()
+    }
+  }
+
+  /**
+   * 检测远程仓库默认分支名（main / master / 其他）
+   * @param {string} url - 远程仓库 URL
+   * @returns {Promise<string>} 分支名，检测失败返回 'main'
+   */
+  async _detectRemoteBranch(url) {
+    try {
+      const r = await gitExecAsync(process.cwd(), `ls-remote --symref ${url} HEAD`, 30000)
+      if (!r.ok) return 'main'
+      const m = (r.stdout || '').match(/ref:\s*refs\/heads\/(\S+)\s+HEAD/)
+      return m ? m[1] : 'main'
+    } catch {
+      return 'main'
+    }
+  }
+
+  /**
+   * 下载第三方图库
+   * 支持两种参数：
+   *   #下载第三方图库 <Git仓库URL>        — clone 到 PROFILE_IMG_DIR 并注册到 gallery_config.yaml
+   *   #下载第三方图库 <已配置图库名>       — 按名称匹配已有配置，clone 到其 dir
+   * 下载完成后同步复制图片到主图库
+   */
+  async downloadThirdParty(e) {
+    const arg = e.msg.replace(/^#下载第三方图库\s+/, '').trim()
+    if (!arg) {
+      return e.reply('[面板图图库管理器] 用法：\n#下载第三方图库 <Git仓库URL>\n#下载第三方图库 <已配置图库名>')
+    }
+
+    const isUrl = /^https?:\/\/\S+/i.test(arg)
+    let repoName, remoteUrl, targetDir, existingTp
+
+    if (isUrl) {
+      remoteUrl = arg
+      repoName = arg.replace(/\.git$/, '').split('/').pop().trim()
+      if (!repoName) {
+        return e.reply('[面板图图库管理器] 无法从 URL 提取仓库名')
+      }
+      targetDir = path.join(PROFILE_IMG_DIR, repoName)
+      existingTp = getThirdPartyRepos().find(tp => tp.dir === targetDir || tp.name === repoName)
+    } else {
+      existingTp = getThirdPartyRepos().find(tp => tp.name === arg)
+      if (!existingTp) {
+        return e.reply(`[面板图图库管理器] 未找到名为「${arg}」的第三方图库配置\n请先用 #下载第三方图库 <URL> 或锅巴配置`)
+      }
+      repoName = existingTp.name
+      remoteUrl = existingTp.remoteUrl
+      targetDir = existingTp.dir
+      if (!remoteUrl) {
+        return e.reply(`[面板图图库管理器] 图库「${repoName}」未配置远程地址，无法下载`)
+      }
+    }
+
+    // 目录冲突检查：不与主图库重名
+    if (targetDir === getRepoDir(0)) {
+      return e.reply('[面板图图库管理器] 目录名与主图库冲突，请更换')
+    }
+
+    const lock = acquireLock(`tp-dl-${repoName}`, '下载第三方图库', 'download')
+    if (!lock.ok) {
+      return e.reply(`[面板图图库管理器] ${lock.msg}`)
+    }
+
+    try {
+      e.reply(`[面板图图库管理器] 开始下载第三方图库「${repoName}」...`)
+      const branch = await this._detectRemoteBranch(remoteUrl)
+      const result = await installRepoAsync(remoteUrl, targetDir, branch)
+      if (!result.ok) {
+        return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载失败\n${result.msg}`)
+      }
+
+      // URL 模式且未注册：追加到 gallery_config.yaml
+      if (isUrl && !existingTp) {
+        const cfg = getGalleryConfig()
+        const list = Array.isArray(cfg.thirdParty) ? cfg.thirdParty : []
+        list.push({
+          name: repoName,
+          dir: repoName,
+          remoteUrl,
+          normalPath: 'normal-character',
+          superPath: 'super-character',
+          enabled: true
+        })
+        cfg.thirdParty = list
+        const w = writeGalleryConfig(cfg)
+        if (!w.ok) {
+          return e.reply(`[面板图图库管理器] 下载成功但写入配置失败：${w.error}`)
+        }
+      }
+
+      // 同步复制到主图库
+      const tp = getThirdPartyRepos().find(t => t.dir === targetDir)
+      let syncMsg = ''
+      if (tp) {
+        const sync = syncThirdPartyRepo(tp, tp.idx)
+        syncMsg = `\n复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}`
+      }
+
+      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${syncMsg}`)
+    } catch (err) {
+      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载异常\n${err.message}`)
     } finally {
       lock.release()
     }

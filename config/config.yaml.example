@@ -14,9 +14,10 @@ gallery:
       autoUpdate: true
       autoRestart: false
 
-  # ---------- default / 第三方图库 ----------
-  # 见 config/gallery_config.yaml（default 图库路径、第三方图库列表）
-  # default.dir 也可沿用本文件旧字段 gallery.defaultDir（兼容）
+  # ---------- default 图库 ----------
+  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时直接写入主图库
+  # 实际路径：plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/<目录名>
+  defaultDir: ""
 
   # ---------- 屏蔽图库 ----------
   blocked:

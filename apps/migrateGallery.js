@@ -42,7 +42,7 @@ export class MigrateGallery extends plugin {
 
     const defaultDir = getDefaultDir()
     if (!defaultDir) {
-      return e.reply('[面板图图库管理器] 未配置 default 图库（config/gallery_config.yaml 的 default.dir），无法迁移。')
+      return e.reply('[面板图图库管理器] 未配置 default 图库（config.yaml 的 gallery.defaultDir），无法迁移。')
     }
 
     e.reply('[面板图图库管理器] 开始迁移图库，请稍候...')
