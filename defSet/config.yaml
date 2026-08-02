@@ -31,6 +31,7 @@ gallery:
     enabled: ${gallery_thirdPartyUpdate_enabled}
     cron: "${gallery_thirdPartyUpdate_cron}"
     autoUpdate: ${gallery_thirdPartyUpdate_autoUpdate}
+    autoRestart: ${gallery_thirdPartyUpdate_autoRestart}
 
 # ---------- 上传压缩设置 ----------
 upload:

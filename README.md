@@ -213,14 +213,22 @@ ProfileImg-Plugin/
 第三方图库配置（`config/gallery_config.yaml`，参考 `gallery_config.yaml.example`）。
 default 图库路径在 `config.yaml` 的 `gallery.defaultDir` 中配置。
 
+normalPath / superPath 指定角色目录相对**仓库根**的路径：
+
+| 值 | 含义 |
+|----|------|
+| `"normal-character"` | 仓库根/normal-character/角色名/（有类型层） |
+| `"."` | 角色目录直接挂在仓库根（仓库根/角色名/） |
+| 空 | 该类型不存在 |
+
 ```yaml
 # 第三方图库（只读，更新后复制到主图库）
 thirdParty:
   - name: "某同人图库"
     dir: "xxx-fan-repo"             # gallery/ProfileImg/ 下的子目录名
     remoteUrl: "https://github.com/xxx/xxx.git"
-    normalPath: "normal-character"  # 仓库中 normal 角色目录相对路径（空=无）
-    superPath: ""                   # 仓库中 super 角色目录相对路径（空=无）
+    normalPath: "normal-character"  # normal 角色目录相对仓库根的路径（"."=角色目录在根，空=无）
+    superPath: ""                   # super 角色目录相对仓库根的路径（空=无）
     enabled: true
 ```
 

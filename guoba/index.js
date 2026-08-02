@@ -1,12 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import * as mainRepo from './mainRepo.js'
-import * as blockedRepo from './blockedRepo.js'
 import * as uploadMod from './upload.js'
-import * as galleryMod from './gallery.js'
 import * as managersMod from './managers.js'
-import * as thirdPartyUpdate from './thirdPartyUpdate.js'
+import * as galleryUpdateMod from './galleryUpdate.js'
+import * as defaultGalleryMod from './defaultGallery.js'
+import * as thirdPartyMod from './thirdParty.js'
 import { getGalleryConfig, getManagerConfig } from '../components/config.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
@@ -33,6 +32,7 @@ const defaultValues = {
   gallery_thirdPartyUpdate_enabled: false,
   gallery_thirdPartyUpdate_cron: '',
   gallery_thirdPartyUpdate_autoUpdate: false,
+  gallery_thirdPartyUpdate_autoRestart: false,
   upload_enabled: false,
   upload_format: 'webp',
   upload_maxSize: 500
@@ -116,14 +116,9 @@ export function supportGuoba() {
     },
     configInfo: {
       schemas: [
-        // 图库更新：主图库 / 屏蔽图库 / 第三方图库，Divider 分割
-        { label: '图库更新', component: 'SOFT_GROUP_BEGIN' },
-        ...mainRepo.getSchema(),
-        { component: 'Divider' },
-        ...blockedRepo.getSchema(),
-        { component: 'Divider' },
-        ...thirdPartyUpdate.getSchema(),
-        ...galleryMod.getSchema(),
+        ...galleryUpdateMod.getSchema(),
+        ...defaultGalleryMod.getSchema(),
+        ...thirdPartyMod.getSchema(),
         ...managersMod.getSchema(),
         ...uploadMod.getSchema()
       ],
@@ -153,6 +148,7 @@ export function supportGuoba() {
           'gallery.thirdPartyUpdate.enabled': tpUpdate.enabled ?? defaultValues.gallery_thirdPartyUpdate_enabled,
           'gallery.thirdPartyUpdate.cron': tpUpdate.cron ?? defaultValues.gallery_thirdPartyUpdate_cron,
           'gallery.thirdPartyUpdate.autoUpdate': tpUpdate.autoUpdate ?? defaultValues.gallery_thirdPartyUpdate_autoUpdate,
+          'gallery.thirdPartyUpdate.autoRestart': tpUpdate.autoRestart ?? defaultValues.gallery_thirdPartyUpdate_autoRestart,
           'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.thirdParty': galleryCfg.thirdParty ?? [],
           'managers': managerCfg.managers ?? [],

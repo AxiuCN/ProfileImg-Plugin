@@ -1,23 +1,7 @@
-/** default 图库 + 第三方图库 Schema */
+/** 第三方图库 Schema */
 
 export function getSchema () {
   return [
-    // ==================== default 图库 ====================
-    {
-      label: 'default 图库上传',
-      component: 'SOFT_GROUP_BEGIN'
-    },
-    {
-      field: 'gallery.defaultDir',
-      label: '图库目录名',
-      bottomHelpMessage: '手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default',
-      component: 'Input',
-      componentProps: {
-        placeholder: '如：my-default-gallery（留空=直接写入主图库）'
-      }
-    },
-
-    // ==================== 第三方图库 ====================
     {
       label: '第三方图库',
       component: 'SOFT_GROUP_BEGIN'
@@ -33,6 +17,7 @@ export function getSchema () {
           {
             field: 'name',
             label: '图库名称',
+            bottomHelpMessage: '图库名，用于文件名前缀与显示（如 米游社）',
             component: 'Input',
             required: true,
             componentProps: { placeholder: '用于显示与文件名前缀' }
@@ -40,6 +25,7 @@ export function getSchema () {
           {
             field: 'dir',
             label: '目录名',
+            bottomHelpMessage: 'gallery/ProfileImg 下的子目录名，如 xxx-fan-repo',
             component: 'Input',
             required: true,
             componentProps: { placeholder: 'gallery/ProfileImg 下的子目录名，如：xxx-fan-repo' }
@@ -47,6 +33,7 @@ export function getSchema () {
           {
             field: 'remoteUrl',
             label: '远程仓库地址',
+            bottomHelpMessage: 'Git 仓库地址（#下载第三方图库 会自动写入）',
             component: 'Input',
             required: true,
             componentProps: { placeholder: 'https://github.com/xxx/xxx.git' }
@@ -54,18 +41,21 @@ export function getSchema () {
           {
             field: 'normalPath',
             label: '普通角色目录',
+            bottomHelpMessage: '角色目录相对仓库根的路径："normal-character"=有类型层，"."=角色目录在根，空=无',
             component: 'Input',
-            componentProps: { placeholder: 'normal-character（为空则无该类型）' }
+            componentProps: { placeholder: 'normal-character / .（角色目录在根）/ 留空（无）' }
           },
           {
             field: 'superPath',
             label: '彩蛋角色目录',
+            bottomHelpMessage: '角色目录相对仓库根的路径（同 normalPath），为空表示该类型不存在',
             component: 'Input',
-            componentProps: { placeholder: 'super-character（为空则无该类型）' }
+            componentProps: { placeholder: 'super-character / .（角色目录在根）/ 留空（无）' }
           },
           {
             field: 'enabled',
             label: '启用',
+            bottomHelpMessage: '关闭后跳过该图库的同步与更新',
             component: 'Switch'
           }
         ]

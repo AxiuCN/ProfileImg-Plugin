@@ -5,7 +5,10 @@
 
 # ---------- 第三方图库（只读，git pull 更新后复制到主图库） ----------
 # 第三方仓库的目录结构通常与 miao-plugin-ProfileImg 不同，
-# 需用 normalPath / superPath 指定角色目录在仓库内的相对位置（可为空表示该类型不存在）
+# 需用 normalPath / superPath 指定角色目录相对【仓库根】的路径：
+#   "normal-character" → 仓库根/normal-character/角色名/   （有类型层）
+#   "."                → 角色目录直接挂在仓库根（仓库根/角色名/）
+#   空                 → 该类型不存在
 # dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名
 # 可用 #下载第三方图库 <URL> 命令自动下载并注册，下载后需在此配置目录结构
 thirdParty:

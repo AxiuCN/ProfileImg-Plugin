@@ -183,6 +183,10 @@ export class Update extends plugin {
           const result = await fastForwardPullAsync(tp.dir)
           const sync = syncThirdPartyRepo(tp, tp.idx)
           notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+          if (tpUpdateCfg.autoRestart) {
+            notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」更新后需要重启，即将执行重启...`)
+            Bot.restart()
+          }
         } else {
           notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」有新版本，自动更新已关闭\n${localSha} -> ${remoteSha}`)
         }

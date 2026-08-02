@@ -33,6 +33,7 @@ gallery:
     enabled: false
     cron: ""
     autoUpdate: false
+    autoRestart: false
 
 # ---------- 上传压缩设置 ----------
 upload:
