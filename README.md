@@ -1,4 +1,4 @@
-# ProfileImg-Plugin
+# ProfileImg-Plugin / 面板图图库管理器
 
 miao-plugin 角色面板图图库管理器。管理主图库（多仓库）、default 图库、第三方图库与屏蔽图库，支持面板图上传（含版权归属）、屏蔽/启用、状态查看、自动更新。
 
@@ -74,7 +74,7 @@ pnpm install -P --filter ProfileImg-Plugin
 
 > 命名格式：`<角色名>_<序号>_<原作者>_<来源>[_<二改>].webp`
 > 角色名与序号间用下划线 `_` 分隔，避免含数字角色名（如"银狼LV.999"）混淆。
-> 上传默认写入 default 图库，并复制到主图库（带"本地默认图库"前缀）；未配置 default 时直接写入主图库。
+> 上传默认写入 default 图库，并复制到主图库（带"本地默认图库"前缀）；未配置 `gallery.defaultDir` 时使用固定目录 `gallery/ProfileImg/default`。
 
 ### 面板图管理
 

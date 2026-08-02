@@ -15,7 +15,7 @@ gallery:
       autoRestart: ${gallery_repos_0_autoRestart}
 
   # ---------- default 图库 ----------
-  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时直接写入主图库
+  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default
   defaultDir: "${gallery_defaultDir}"
 
   # ---------- 屏蔽图库 ----------

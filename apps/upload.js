@@ -15,8 +15,8 @@ import { copyDefaultToMain, getMainRoleDir } from '../model/copier.js'
  * 无版权：角色名_n.扩展名 — #添加琴面板图
  *
  * 写入目标（默认位于 default 图库）：
- *   - 配置了 default 图库 → 写入 default 目录，再复制到主仓库（带"本地默认图库"前缀）
- *   - 未配置 default → 直接写入主仓库（map.json 路由）
+ *   - 写入 default 目录，再复制到主仓库（带"本地默认图库"前缀）
+ *   - default 目录 = config.yaml 的 gallery.defaultDir，未配置时用固定目录 gallery/ProfileImg/default
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -98,7 +98,7 @@ export class UploadWithCompress extends plugin {
     const format = uploadCfg.format || 'webp'
     const ext = `.${format}`
 
-    // 确定写入目录：default 图库（默认）/ 主仓库（未配置 default）
+    // 确定写入目录：default 图库（getDefaultDir 恒返回非空，未配置时用固定 default 目录）
     const defaultDir = getDefaultDir()
     const writeDir = defaultDir
       ? path.join(defaultDir, 'normal-character', roleName)
@@ -150,7 +150,7 @@ export class UploadWithCompress extends plugin {
 
         fs.writeFileSync(filePath, finalBuffer)
 
-        // 复制到主仓库（仅写入 default 时；未配置 default 已直接写主仓库）
+        // 复制到主仓库（上传始终写入 default 图库，defaultDir 恒非空）
         if (defaultDir) {
           const r = copyDefaultToMain(filePath, roleName, 'normal')
           if (!r.ok) logger.warn(`[ProfileImg-Plugin] 复制到主仓库失败: ${r.error}`)
