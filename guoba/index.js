@@ -5,7 +5,8 @@ import * as mainRepo from './mainRepo.js'
 import * as blockedRepo from './blockedRepo.js'
 import * as uploadMod from './upload.js'
 import * as galleryMod from './gallery.js'
-import { getGalleryConfig, writeGalleryConfig } from '../components/config.js'
+import * as managersMod from './managers.js'
+import { getGalleryConfig, writeGalleryConfig, getManagerConfig, writeManagerConfig } from '../components/config.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
@@ -85,6 +86,7 @@ export function supportGuoba() {
         ...mainRepo.getSchema(),
         ...blockedRepo.getSchema(),
         ...galleryMod.getSchema(),
+        ...managersMod.getSchema(),
         ...uploadMod.getSchema()
       ],
 
@@ -96,6 +98,7 @@ export function supportGuoba() {
         const blocked = gallery.blocked || {}
         const upload = userConfig.upload || {}
         const galleryCfg = getGalleryConfig()
+        const managerCfg = getManagerConfig()
 
         return {
           'gallery.repos.0.enabled': repo0.enabled ?? defaultValues.gallery_repos_0_enabled,
@@ -110,6 +113,7 @@ export function supportGuoba() {
           'gallery.blocked.autoRestart': blocked.autoRestart ?? defaultValues.gallery_blocked_autoRestart,
           'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.thirdParty': galleryCfg.thirdParty ?? [],
+          'managers': managerCfg.managers ?? [],
           'upload.enabled': upload.enabled ?? defaultValues.upload_enabled,
           'upload.format': upload.format ?? defaultValues.upload_format,
           'upload.maxSize': upload.maxSize ?? defaultValues.upload_maxSize,
@@ -118,7 +122,16 @@ export function supportGuoba() {
 
       setConfigData(data, { Result }) {
         try {
-          // ① 先写 gallery_config.yaml（第三方图库列表）— 失败则终止，不污染 config.yaml
+          // ① 先写 manager_config.yaml（成员管理权限）— 失败则终止
+          const managersData = data['managers']
+          if (managersData !== undefined) {
+            const mgrCfg = getManagerConfig()
+            mgrCfg.managers = Array.isArray(managersData) ? managersData : []
+            const wm = writeManagerConfig(mgrCfg)
+            if (!wm.ok) return Result.error('保存失败：' + wm.error)
+          }
+
+          // ② 再写 gallery_config.yaml（第三方图库列表）— 失败则终止，不污染 config.yaml
           const thirdPartyData = data['gallery.thirdParty']
           if (thirdPartyData !== undefined) {
             const galleryCfg = getGalleryConfig()
@@ -127,7 +140,7 @@ export function supportGuoba() {
             if (!w.ok) return Result.error('保存失败：' + w.error)
           }
 
-          // ② 再写 config.yaml（标量字段，模板替换保留注释）
+          // ③ 最后写 config.yaml（标量字段，模板替换保留注释）
           const content = generateConfig(data)
           const dir = path.dirname(configPath)
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })

@@ -34,6 +34,12 @@ export const GALLERY_CONFIG_PATH = path.join(CONFIG_DIR, 'gallery_config.yaml')
 /** gallery_config.yaml.example（参考模板）路径 */
 export const GALLERY_CONFIG_EXAMPLE_PATH = path.join(CONFIG_DIR, 'gallery_config.yaml.example')
 
+/** manager_config.yaml（成员管理权限，运行时）路径 */
+export const MANAGER_CONFIG_PATH = path.join(CONFIG_DIR, 'manager_config.yaml')
+
+/** manager_config.yaml.example（参考模板）路径 */
+export const MANAGER_CONFIG_EXAMPLE_PATH = path.join(CONFIG_DIR, 'manager_config.yaml.example')
+
 /* ==========================================================================
    仓库路径
    ========================================================================== */

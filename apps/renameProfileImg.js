@@ -52,10 +52,18 @@ export class RenameProfileImg extends plugin {
       return e.reply(`[面板图图库管理器]\n${target.name} 不是标准命名，无法重命名`)
     }
 
-    // 仅标准含版权格式可重命名
-    const stdPattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)_.+\\.(webp|png|jpg|jpeg|gif)$`, 'i')
+    // 标准命名即可重命名（含版权 角色_n_作者_来源 / 无版权 角色_n）
+    const stdPattern = new RegExp(`^${escapeRegExp(roleName)}_(\\d+)(?:_.+)?\\.(webp|png|jpg|jpeg|gif)$`, 'i')
     if (!stdPattern.test(target.name)) {
-      return e.reply(`[面板图图库管理器]\n${target.name} 不是标准含版权格式，无法重命名`)
+      return e.reply(`[面板图图库管理器]\n${target.name} 不是标准命名，无法重命名`)
+    }
+
+    // 新文件名非法字符检测（Windows 文件名禁止 < > : " / \ | ? * 及控制字符）
+    const ILLEGAL = /[<>:"\/\\|?*]/
+    const badLabels = ['作者', '来源', '二改']
+    const bad = badLabels.filter((_, i) => [author, source, modifications][i] && ILLEGAL.test([author, source, modifications][i]))
+    if (bad.length) {
+      return e.reply(`[面板图图库管理器]\n${target.name} 重命名失败：${bad.join('、')}含非法字符\n（文件名不允许出现 < > : " / \\ | ? * 等字符）`)
     }
 
     const modsPart = modifications ? `_${modifications}` : ''

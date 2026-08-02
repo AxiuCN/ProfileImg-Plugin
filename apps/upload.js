@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadMap, autoAssignRepo } from '../model/mapJson.js'
-import { getPluginConfig } from '../components/config.js'
+import { loadMap, autoAssignRepo, setRepoForChar, getRepoForChar } from '../model/mapJson.js'
+import { getPluginConfig, isManager, getManagerRepoId } from '../components/config.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
 import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
@@ -72,16 +72,29 @@ export class UploadWithCompress extends plugin {
     const { author, source, modifications } = attribution
     const hasCopyright = !!(author && source)
 
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
+
     // 解析角色名
     const rawRole = e.msg.match(/(?:上传|添加)(.+?)(?:面板图)/)?.[1]?.trim()
       || e.msg.replace(/#|面板图|上传|添加/g, '').trim()
     const roleName = resolveRoleName(rawRole)
 
-    // 新角色：分配主仓库（map.json 记录归属）
+    // 成员仓库边界：新角色路由到成员管理仓库，已有角色须归属成员仓库
     const map = loadMap()
+    const managerRepoId = e.isMaster ? null : getManagerRepoId(e.user_id)
     if (!(roleName in map.mapping)) {
-      autoAssignRepo(roleName)
-      logger.info(`[ProfileImg-Plugin] 新角色「${roleName}」已自动分配主仓库`)
+      if (managerRepoId != null) {
+        setRepoForChar(roleName, managerRepoId)
+        logger.info(`[ProfileImg-Plugin] 新角色「${roleName}」已分配主仓库 ${managerRepoId}（成员配置）`)
+      } else {
+        autoAssignRepo(roleName)
+        logger.info(`[ProfileImg-Plugin] 新角色「${roleName}」已自动分配主仓库`)
+      }
+    } else if (managerRepoId != null && getRepoForChar(roleName) !== managerRepoId) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」归属仓库${getRepoForChar(roleName)}，不在你管理的仓库${managerRepoId}内`)
     }
 
     // 提取图片

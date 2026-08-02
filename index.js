@@ -7,7 +7,7 @@ import { buildAliasMap } from './modules/alias.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
 import { isJunction, ensureJunction } from './model/junction.js'
-import { ensureGalleryConfigFile } from './components/config.js'
+import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
 import { ensureAllCharJunctions } from './model/copier.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -38,10 +38,12 @@ if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true })
 if (!fs.existsSync(PROFILE_IMG_DIR)) fs.mkdirSync(PROFILE_IMG_DIR, { recursive: true })
 
 // ============================================================
-// 4. 初始化 map.json + gallery_config.yaml（若不存在则创建）
+// 4. 初始化 map.json + gallery_config.yaml + manager_config.yaml
+//    （若不存在则创建）
 // ============================================================
 initMap()
 ensureGalleryConfigFile()
+ensureManagerConfigFile()
 
 // ============================================================
 // 5. Junction 完整性检查（若已初始化则验证并修复）+ 角色级 junction

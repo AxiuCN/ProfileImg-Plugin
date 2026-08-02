@@ -4,6 +4,7 @@ node_modules/
 # 配置文件
 config/config.yaml
 config/gallery_config.yaml
+config/manager_config.yaml
 
 # 图库运行时目录（由 #图库初始化 创建）
 resources/gallery/*

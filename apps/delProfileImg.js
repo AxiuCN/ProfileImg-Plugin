@@ -2,7 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { resolveRoleName } from '../modules/alias.js'
 import { getRoleFiles } from '../model/blockedInfo.js'
+import { getRepoForChar } from '../model/mapJson.js'
 import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
+import { isManager, getManagerRepoId } from '../components/config.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
 
 /**
@@ -27,12 +29,23 @@ export class DelProfileImg extends plugin {
   }
 
   async delete(e) {
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
+
     // 从 regex 捕获组直接取角色名和序号（不再用 replace 盲删数字，避免破坏含数字的角色名）
     const match = e.msg.match(/^#?\s*(?:移除|清除|删除)(.+?)(?:面板图)(\d+)\s*$/)
     if (!match) return true
 
     const roleName = resolveRoleName(match[1].trim())
     const n = parseInt(match[2], 10)
+
+    // 成员仓库边界：角色须归属成员管理仓库
+    const managerRepoId = e.isMaster ? null : getManagerRepoId(e.user_id)
+    if (managerRepoId != null && getRepoForChar(roleName) !== managerRepoId) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」归属仓库${getRepoForChar(roleName)}，不在你管理的仓库${managerRepoId}内`)
+    }
 
     const files = getRoleFiles(roleName, 'normal')
     const target = files.find(f => f.displayN === n)

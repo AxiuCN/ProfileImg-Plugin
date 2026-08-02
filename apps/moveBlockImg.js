@@ -5,6 +5,7 @@ import { resolveRoleName } from '../modules/alias.js'
 import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import { getRepoForChar } from '../model/mapJson.js'
 import { getRepoDir } from '../components/constants.js'
+import { isManager, getManagerRepoId } from '../components/config.js'
 
 /**
  * 屏蔽/启用面板图
@@ -28,12 +29,22 @@ export class MoveBlockImg extends plugin {
   }
 
   async blockImg(e) {
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
     const rawMsg = e.msg.replace(/^#/, '')
     const match = rawMsg.match(/^屏蔽(.+)面板图\s*(\d*)$/)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #屏蔽角色名面板图 序号')
     let roleName = match[1].trim()
     roleName = resolveRoleName(roleName)
     const n = parseInt(match[2]) || 1
+
+    // 成员仓库边界：角色须归属成员管理仓库
+    const managerRepoId = e.isMaster ? null : getManagerRepoId(e.user_id)
+    if (managerRepoId != null && getRepoForChar(roleName) !== managerRepoId) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」归属仓库${getRepoForChar(roleName)}，不在你管理的仓库${managerRepoId}内`)
+    }
 
     const files = getRoleFiles(roleName, 'normal')
     const target = files.find(f => f.displayN === n)
@@ -68,12 +79,22 @@ export class MoveBlockImg extends plugin {
   }
 
   async unblockImg(e) {
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
     const rawMsg = e.msg.replace(/^#/, '')
     const match = rawMsg.match(/^启用(.+?)(屏蔽)?面板图\s*(\d*)$/)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
     let roleName = match[1].trim()
     roleName = resolveRoleName(roleName)
     const n = parseInt(match[3]) || 1
+
+    // 成员仓库边界：角色须归属成员管理仓库
+    const managerRepoId = e.isMaster ? null : getManagerRepoId(e.user_id)
+    if (managerRepoId != null && getRepoForChar(roleName) !== managerRepoId) {
+      return e.reply(`[面板图图库管理器]\n角色「${roleName}」归属仓库${getRepoForChar(roleName)}，不在你管理的仓库${managerRepoId}内`)
+    }
 
     // 与屏蔽列表 getBlockedAggregated 的 displayN 对应
     const blockedList = getBlockedAggregated(roleName)
