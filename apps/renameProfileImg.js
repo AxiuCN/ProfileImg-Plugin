@@ -6,7 +6,7 @@ import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
 
 /**
- * #重命名角色名N 作者 来源 [二改情况]
+ * #重命名角色名面板图N 作者 来源 [二改情况]
  * 修改面板图的版权归属信息（重命名文件），N 按段位判断来源：
  *   main(1~9999)      → 主仓库直接更名
  *   default(10001~)   → 主仓库副本 + default 源文件同步更名
@@ -20,14 +20,14 @@ export class RenameProfileImg extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: /^#?\s*重命名(.+?)(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/, fnc: 'rename', permission: 'master' }
+        { reg: /^#?\s*重命名(.+?)面板图(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/, fnc: 'rename', permission: 'master' }
       ]
     })
   }
 
   async rename(e) {
-    // 非贪婪 (.+?) 捕获角色名，(\d+) 捕获序号 N
-    const match = e.msg.match(/^#?\s*重命名(.+?)(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/)
+    // 非贪婪 (.+?) 捕获角色名，"面板图"分隔，(\d+) 捕获序号 N
+    const match = e.msg.match(/^#?\s*重命名(.+?)面板图(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/)
     if (!match) return true
 
     const rawRole = match[1].trim()

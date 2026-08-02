@@ -56,6 +56,11 @@ export class ProfileImgList extends plugin {
    * @param {'main'|'blocked'} mode - 主图库还是屏蔽图库
    */
   async _renderList(e, roleName, items, mode) {
+    // 合并转发节点数过多会导致发送失败，最多展示 20 张，超量提示可视化
+    const MAX_DISPLAY = 20
+    const displayItems = items.slice(0, MAX_DISPLAY)
+    const overflow = items.length - MAX_DISPLAY
+
     // 构建合并转发消息
     const forwardItems = []
 
@@ -68,11 +73,18 @@ export class ProfileImgList extends plugin {
     })
 
     // 后续：n. 文件名 + 图片
-    for (const item of items) {
+    for (const item of displayItems) {
       const filePath = item.filePath
         || (item.sourceFile)
       forwardItems.push({
         message: [`${item.displayN}. ${item.name}`, segment.image('file://' + filePath)]
+      })
+    }
+
+    // 溢出提示：数量过多时引导使用可视化
+    if (overflow > 0) {
+      forwardItems.push({
+        message: `...及其他 ${overflow} 张面板图未展示\n过多请使用 #${roleName}面板图可视化 查看全部`
       })
     }
 

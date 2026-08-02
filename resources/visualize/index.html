@@ -1,0 +1,88 @@
+{{extend defaultLayout}}
+
+{{block 'css'}}
+<style>
+  .vis-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 12px 6px 16px;
+  }
+  .vis-header .vis-title {
+    font-size: 26px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, .5);
+  }
+  .vis-header .vis-title .vis-count {
+    font-size: 14px;
+    font-weight: normal;
+    color: rgba(255, 255, 255, .55);
+    margin-left: 10px;
+  }
+  .vis-header .vis-page {
+    font-size: 14px;
+    color: rgba(255, 255, 255, .45);
+  }
+  .vis-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    padding: 4px 6px 8px;
+  }
+  .vis-item {
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 10px;
+    overflow: hidden;
+    padding: 6px;
+  }
+  .vis-item .vis-img {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: contain;
+    background: #171a1f;
+    border-radius: 6px;
+    display: block;
+  }
+  .vis-item .vis-label {
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+  .vis-item .vis-label .vis-n {
+    font-size: 15px;
+    font-weight: bold;
+    color: #ffd166;
+  }
+  .vis-item .vis-label .vis-name {
+    font-size: 11px;
+    color: rgba(255, 255, 255, .5);
+    word-break: break-all;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+</style>
+{{/block}}
+
+{{block 'main'}}
+<div class="vis-header">
+  <div class="vis-title">
+    {{roleName}} 面板图可视化
+    <span class="vis-count">共 {{totalCount}} 张</span>
+  </div>
+  {{if totalPages > 1}}
+  <div class="vis-page">第 {{page}} / {{totalPages}} 页</div>
+  {{/if}}
+</div>
+<div class="vis-grid">
+  {{each images img}}
+  <div class="vis-item">
+    <img class="vis-img" src="{{img.fileUrl}}" onerror="this.style.visibility='hidden'"/>
+    <div class="vis-label">
+      {{if img.isStandard}}<div class="vis-n">#{{img.displayN}}</div>{{/if}}
+      <div class="vis-name">{{img.name}}</div>
+    </div>
+  </div>
+  {{/each}}
+</div>
+{{/block}}
