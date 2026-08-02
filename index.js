@@ -7,6 +7,7 @@ import { buildAliasMap } from './modules/alias.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
 import { isJunction, ensureJunction } from './model/junction.js'
+import { checkProfileJunction } from './model/gallery.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
 import { ensureAllCharJunctions } from './model/copier.js'
 
@@ -47,7 +48,10 @@ ensureManagerConfigFile()
 
 // ============================================================
 // 5. Junction 完整性检查（若已初始化则验证并修复）+ 角色级 junction
+//    模式 A：MIAO_PROFILE_LINK 本身为 junction（标准架构）
+//    模式 B：MIAO_PROFILE_LINK 为真实目录，normal/super-character 子目录为 junction（升级兼容）
 // ============================================================
+const jState = checkProfileJunction()
 if (isJunction(MIAO_PROFILE_LINK)) {
   logger.info('[ProfileImg-Plugin] 检测到 profile junction，验证中...')
   const jResult = ensureJunction(PROFILE_DIR, MIAO_PROFILE_LINK)
@@ -58,13 +62,20 @@ if (isJunction(MIAO_PROFILE_LINK)) {
   } else {
     logger.info('[ProfileImg-Plugin] profile junction 正常')
   }
-  // 确保所有活跃主仓库的角色级 junction 存在
-  const charCount = ensureAllCharJunctions()
-  logger.info(`[ProfileImg-Plugin] 角色级 junction 检查完成，共 ${charCount} 个`)
 } else if (fs.existsSync(MIAO_PROFILE_LINK)) {
-  logger.info('[ProfileImg-Plugin] profile 目录为真实目录（未初始化），发送 #图库初始化 进行初始化')
+  if (jState.ok) {
+    logger.info('[ProfileImg-Plugin] profile 为真实目录 + 子目录 junction（模式 B），聚合层正常')
+  } else {
+    logger.info('[ProfileImg-Plugin] profile 目录为真实目录（未初始化），发送 #图库初始化 进行初始化')
+  }
 } else {
   logger.info('[ProfileImg-Plugin] profile 目录不存在，发送 #图库初始化 进行初始化')
+}
+
+// 已初始化（模式 A / B）时确保所有活跃主仓库的角色级 junction 存在
+if (jState.ok) {
+  const charCount = ensureAllCharJunctions()
+  logger.info(`[ProfileImg-Plugin] 角色级 junction 检查完成，共 ${charCount} 个`)
 }
 
 // ============================================================

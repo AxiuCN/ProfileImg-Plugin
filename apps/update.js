@@ -6,7 +6,7 @@ import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/const
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { setRepoVersion } from '../model/repoVersions.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
-import { syncThirdPartyRepo, ensureAllCharJunctions } from '../model/copier.js'
+import { syncThirdPartyRepo, ensureAllCharJunctions, syncDefaultToMain } from '../model/copier.js'
 
 /**
  * 多仓库图库更新（手动 + cron 自动，全程异步不阻塞 Bot）
@@ -42,160 +42,119 @@ export class Update extends plugin {
 
   _registerCronTasks() {
     const config = getPluginConfig()
-    const repos = this._getActiveRepos()
-    const tasks = []
-
-    for (const repo of repos) {
-      if (repo.autoUpdate !== false && repo.cron) {
-        tasks.push({
-          name: `图库仓库${repo.id}自动检查更新`,
-          cron: repo.cron,
-          fnc: () => this._autoCheckRepo(repo.id),
-          log: false
-        })
-      }
-    }
-
-    const blockedCfg = config?.gallery?.blocked
-    if (blockedCfg?.enabled !== false && blockedCfg?.cron) {
-      tasks.push({
-        name: '屏蔽图库自动检查更新',
-        cron: blockedCfg.cron,
-        fnc: () => this._autoCheckBlocked(),
-        log: true
-      })
-    }
-
-    const tpUpdateCfg = config?.gallery?.thirdPartyUpdate || {}
-    if (tpUpdateCfg.enabled !== false && tpUpdateCfg.cron) {
-      tasks.push({
-        name: '第三方图库自动检查更新',
-        cron: tpUpdateCfg.cron,
-        fnc: () => this._autoCheckThirdParty(),
-        log: true
-      })
-    }
-
-    if (tasks.length > 0) this.task = tasks
-  }
-
-  /** 自动检查单个仓库（异步，有锁保护） */
-  async _autoCheckRepo(repoId) {
-    const repoCfg = getRepoConfig(repoId)
-    if (repoCfg.autoUpdate === false) return
-
-    const repoDir = getRepoDir(repoId)
-    const check = checkRepo(repoDir)
-    if (!check.ok) return
-
-    const lock = acquireLock(String(repoId), '自动更新', 'update')
-    if (!lock.ok) return // cron 冲突时静默跳过，下轮再试
-
-    try {
-      const remoteSha = await getRemoteShaAsync(repoDir)
-      if (!remoteSha) return
-      const localSha = getLocalSha(repoDir)
-      if (remoteSha === localSha) return
-
-      if (repoCfg.autoUpdate !== false) {
-        try {
-          const result = await fastForwardPullAsync(repoDir)
-          this._syncAfterRepoUpdate(repoId)
-          const msg = `[面板图图库管理器] 仓库${repoId}自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}`
-          notifyMaster(msg)
-          if (repoCfg.autoRestart) {
-            notifyMaster(`[面板图图库管理器] 仓库${repoId}更新后需要重启，即将执行重启...`)
-            Bot.restart()
-          }
-        } catch (pullErr) {
-          notifyMaster(`[面板图图库管理器] 仓库${repoId}自动更新失败\n检测到新版本 ${remoteSha}\n错误：${pullErr.message}\n请手动执行 #主图库强制更新`)
-        }
-      } else {
-        notifyMaster(`[面板图图库管理器] 仓库${repoId}有新版本，自动更新已关闭\n${localSha} -> ${remoteSha}`)
-      }
-    } catch (err) {
-      logger.error(`[面板图图库管理器] 仓库${repoId}自动检查更新失败:`, err)
-    } finally {
-      lock.release()
+    const autoCfg = config?.gallery?.autoUpdate || {}
+    // 所有图库统一一个 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+    if (autoCfg.enabled !== false && autoCfg.cron) {
+      this.task = [{
+        name: '图库自动更新',
+        cron: autoCfg.cron,
+        fnc: () => this._autoUpdateAll(),
+        log: false
+      }]
     }
   }
 
-  /** 自动检查屏蔽图库（异步，有锁保护） */
-  async _autoCheckBlocked() {
-    const blockedCfg = getPluginConfig()?.gallery?.blocked || {}
-    if (blockedCfg.autoUpdate === false) return
+  /**
+   * 统一自动更新链（异步，有锁保护）
+   * 按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行，
+   * 每个图库独立 try/catch，单个失败不中断后续，末尾统一汇总通知。
+   */
+  async _autoUpdateAll() {
+    const cfg = getPluginConfig()?.gallery || {}
+    const lines = []
 
-    const check = checkBlockedGallery()
-    if (!check.ok) return
+    // ① 主图库（逐仓库）
+    for (const repo of this._getActiveRepos()) {
+      if (repo.autoUpdate === false) continue
+      const repoDir = getRepoDir(repo.id)
+      const check = checkRepo(repoDir)
+      if (!check.ok) { lines.push(`主图库仓库${repo.id}：${check.msg}`); continue }
 
-    const lock = acquireLock('blocked', '自动更新', 'update')
-    if (!lock.ok) return // cron 冲突时静默跳过
-
-    try {
-      const remoteSha = await getRemoteShaAsync(BLOCKED_REPO_DIR)
-      if (!remoteSha) return
-      const localSha = getLocalSha(BLOCKED_REPO_DIR)
-      if (remoteSha === localSha) return
-
-      if (blockedCfg.autoUpdate !== false) {
-        try {
-          await gitExecAsync(BLOCKED_REPO_DIR, 'pull origin main --allow-unrelated-histories', 60000)
-          notifyMaster(`[面板图图库管理器] 屏蔽图库自动更新成功\n${localSha} -> ${remoteSha}`)
-          if (blockedCfg.autoRestart) {
-            notifyMaster('[面板图图库管理器] 屏蔽图库更新后需要重启，即将执行重启...')
-            Bot.restart()
-          }
-        } catch (pullErr) {
-          notifyMaster(`[面板图图库管理器] 屏蔽图库自动更新失败\n检测到新版本 ${remoteSha}\n请手动执行 #屏蔽图库强制更新`)
-        }
-      } else {
-        notifyMaster(`[面板图图库管理器] 屏蔽图库有新版本，自动更新已关闭\n${localSha} -> ${remoteSha}`)
-      }
-    } catch (err) {
-      logger.error('[面板图图库管理器] 屏蔽图库自动检查更新失败:', err)
-    } finally {
-      lock.release()
-    }
-  }
-
-  /** 自动检查第三方图库（异步，有锁保护） */
-  async _autoCheckThirdParty() {
-    const tpUpdateCfg = getPluginConfig()?.gallery?.thirdPartyUpdate || {}
-    if (tpUpdateCfg.autoUpdate === false) return
-
-    const tps = getThirdPartyRepos().filter(tp => tp.enabled)
-    if (tps.length === 0) return
-
-    for (const tp of tps) {
-      const check = checkRepo(tp.dir)
-      if (!check.ok) continue
-
-      const lock = acquireLock(`tp-${tp.idx}`, '第三方图库自动更新', 'update')
-      if (!lock.ok) continue // 冲突时静默跳过
-
+      const lock = acquireLock(String(repo.id), '自动更新', 'update')
+      if (!lock.ok) continue
       try {
-        const remoteSha = await getRemoteShaAsync(tp.dir)
+        const remoteSha = await getRemoteShaAsync(repoDir)
         if (!remoteSha) continue
-        const localSha = getLocalSha(tp.dir)
+        const localSha = getLocalSha(repoDir)
         if (remoteSha === localSha) continue
-
-        if (tpUpdateCfg.autoUpdate !== false) {
-          const result = await fastForwardPullAsync(tp.dir)
-          const sync = syncThirdPartyRepo(tp, tp.idx)
-          notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」自动更新${result.updated ? '成功' : '完成'}\n${localSha} -> ${remoteSha}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
-          if (tpUpdateCfg.autoRestart) {
-            notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」更新后需要重启，即将执行重启...`)
-            Bot.restart()
-          }
-        } else {
-          notifyMaster(`[面板图图库管理器] 第三方图库「${tp.name}」有新版本，自动更新已关闭\n${localSha} -> ${remoteSha}`)
-        }
+        const result = await fastForwardPullAsync(repoDir)
+        this._syncAfterRepoUpdate(repo.id)
+        lines.push(`主图库仓库${repo.id}：更新${result.updated ? '成功' : '完成'}（${localSha} -> ${remoteSha}）`)
       } catch (err) {
-        logger.error(`[面板图图库管理器] 第三方图库「${tp.name}」自动检查更新失败:`, err)
+        lines.push(`主图库仓库${repo.id}：更新失败 - ${err.message}`)
       } finally {
         lock.release()
       }
     }
+
+    // ② 屏蔽图库
+    if (cfg.blocked?.enabled !== false) {
+      const check = checkBlockedGallery()
+      if (check.ok) {
+        const lock = acquireLock('blocked', '自动更新', 'update')
+        if (lock.ok) {
+          try {
+            const remoteSha = await getRemoteShaAsync(BLOCKED_REPO_DIR)
+            if (remoteSha) {
+              const localSha = getLocalSha(BLOCKED_REPO_DIR)
+              if (remoteSha !== localSha) {
+                await gitExecAsync(BLOCKED_REPO_DIR, 'pull origin main --allow-unrelated-histories', 60000)
+                lines.push(`屏蔽图库：更新成功（${localSha} -> ${remoteSha}）`)
+              }
+            }
+          } catch (err) {
+            lines.push(`屏蔽图库：更新失败 - ${err.message}`)
+          } finally {
+            lock.release()
+          }
+        }
+      } else {
+        lines.push(`屏蔽图库：${check.msg}`)
+      }
+    }
+
+    // ③ 第三方图库（逐个）
+    if (cfg.thirdPartyUpdate?.enabled !== false) {
+      const tps = getThirdPartyRepos().filter(tp => tp.enabled)
+      for (const tp of tps) {
+        const check = checkRepo(tp.dir)
+        if (!check.ok) { lines.push(`第三方「${tp.name}」：${check.msg}`); continue }
+
+        const lock = acquireLock(`tp-${tp.idx}`, '第三方图库自动更新', 'update')
+        if (!lock.ok) continue
+        try {
+          const remoteSha = await getRemoteShaAsync(tp.dir)
+          if (!remoteSha) continue
+          const localSha = getLocalSha(tp.dir)
+          if (remoteSha === localSha) continue
+          const result = await fastForwardPullAsync(tp.dir)
+          const sync = syncThirdPartyRepo(tp, tp.idx)
+          lines.push(`第三方「${tp.name}」：更新${result.updated ? '成功' : '完成'}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+        } catch (err) {
+          lines.push(`第三方「${tp.name}」：更新失败 - ${err.message}`)
+        } finally {
+          lock.release()
+        }
+      }
+    }
+
+    // ④ 刷新副本（junction + default/第三方副本）
+    if (cfg.refreshCopies?.enabled !== false) {
+      try {
+        const jCount = ensureAllCharJunctions(getActiveRepoIds())
+        const def = syncDefaultToMain()
+        const tpInfo = getThirdPartyRepos().filter(tp => tp.enabled).map(tp => {
+          const s = syncThirdPartyRepo(tp, tp.idx)
+          return s.ok ? `复制${s.copied}/跳过${s.skipped}/清理${s.removed}` : (s.error || '失败')
+        })
+        const tpText = tpInfo.length ? `，第三方（${tpInfo.join('；')}）` : ''
+        lines.push(`刷新副本：junction ${jCount} 个，default ${def.ok ? `复制${def.copied}/跳过${def.skipped}/清理${def.removed}` : (def.error || '失败')}${tpText}`)
+      } catch (err) {
+        lines.push(`刷新副本：失败 - ${err.message}`)
+      }
+    }
+
+    notifyMaster(`[面板图图库管理器] 自动更新完成\n${lines.length ? lines.join('\n') : '所有图库已是最新'}`)
   }
 
   // ========== 手动更新命令（全异步） ==========

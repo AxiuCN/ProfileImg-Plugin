@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { isJunction, ensureJunction } from '../model/junction.js'
+import { checkProfileJunction } from '../model/gallery.js'
 import { initMap } from '../model/mapJson.js'
 import { ensureGalleryConfigFile } from '../components/config.js'
 import { ensureAllCharJunctions } from '../model/copier.js'
@@ -34,12 +35,9 @@ export class InitGallery extends plugin {
   /** 第一步：检查状态，提示用户 */
   async init(e) {
     if (!e) return // 避免与 loader 生命周期 init 冲突（加载时无参调用）
-    if (isJunction(MIAO_PROFILE_LINK)) {
-      const verify = fs.existsSync(PROFILE_DIR)
-      if (verify) {
-        return e.reply('[面板图图库管理器] 图库已初始化，无需重复操作。')
-      }
-      return e.reply('[面板图图库管理器] 图库 junction 存在但目标目录异常，请手动检查。')
+    const jCheck = checkProfileJunction()
+    if (jCheck.ok) {
+      return e.reply('[面板图图库管理器] 图库已初始化，无需重复操作。')
     }
 
     if (fs.existsSync(MIAO_PROFILE_LINK)) {

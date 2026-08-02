@@ -18,21 +18,15 @@ const managerConfigPath = path.join(pluginRoot, 'config', 'manager_config.yaml')
 
 /** 默认值映射（模板变量名 → 默认值） */
 const defaultValues = {
-  gallery_repos_0_enabled: true,
+  gallery_autoUpdate_enabled: true,
+  gallery_autoUpdate_cron: '0 30 5 * * *',
   gallery_repos_0_remoteUrl: 'https://github.com/AxiuCN/miao-plugin-ProfileImg.git',
-  gallery_repos_0_cron: '0 20 5 * * *',
   gallery_repos_0_autoUpdate: true,
-  gallery_repos_0_autoRestart: false,
   gallery_blocked_enabled: true,
   gallery_blocked_remoteUrl: 'https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git',
-  gallery_blocked_cron: '0 40 5 * * *',
-  gallery_blocked_autoUpdate: true,
-  gallery_blocked_autoRestart: false,
+  gallery_thirdPartyUpdate_enabled: true,
+  gallery_refreshCopies_enabled: true,
   gallery_defaultDir: '',
-  gallery_thirdPartyUpdate_enabled: false,
-  gallery_thirdPartyUpdate_cron: '',
-  gallery_thirdPartyUpdate_autoUpdate: false,
-  gallery_thirdPartyUpdate_autoRestart: false,
   upload_enabled: false,
   upload_format: 'webp',
   upload_maxSize: 500
@@ -130,25 +124,21 @@ export function supportGuoba() {
         const repo0 = repos[0] || {}
         const blocked = gallery.blocked || {}
         const tpUpdate = gallery.thirdPartyUpdate || {}
+        const autoUpdate = gallery.autoUpdate || {}
+        const refreshCopies = gallery.refreshCopies || {}
         const upload = userConfig.upload || {}
         const galleryCfg = getGalleryConfig()
         const managerCfg = getManagerConfig()
 
         return {
-          'gallery.repos.0.enabled': repo0.enabled ?? defaultValues.gallery_repos_0_enabled,
+          'gallery.autoUpdate.enabled': autoUpdate.enabled ?? defaultValues.gallery_autoUpdate_enabled,
+          'gallery.autoUpdate.cron': autoUpdate.cron ?? defaultValues.gallery_autoUpdate_cron,
           'gallery.repos.0.remoteUrl': repo0.remoteUrl ?? defaultValues.gallery_repos_0_remoteUrl,
-          'gallery.repos.0.cron': repo0.cron ?? defaultValues.gallery_repos_0_cron,
           'gallery.repos.0.autoUpdate': repo0.autoUpdate ?? defaultValues.gallery_repos_0_autoUpdate,
-          'gallery.repos.0.autoRestart': repo0.autoRestart ?? defaultValues.gallery_repos_0_autoRestart,
           'gallery.blocked.enabled': blocked.enabled ?? defaultValues.gallery_blocked_enabled,
           'gallery.blocked.remoteUrl': blocked.remoteUrl ?? defaultValues.gallery_blocked_remoteUrl,
-          'gallery.blocked.cron': blocked.cron ?? defaultValues.gallery_blocked_cron,
-          'gallery.blocked.autoUpdate': blocked.autoUpdate ?? defaultValues.gallery_blocked_autoUpdate,
-          'gallery.blocked.autoRestart': blocked.autoRestart ?? defaultValues.gallery_blocked_autoRestart,
           'gallery.thirdPartyUpdate.enabled': tpUpdate.enabled ?? defaultValues.gallery_thirdPartyUpdate_enabled,
-          'gallery.thirdPartyUpdate.cron': tpUpdate.cron ?? defaultValues.gallery_thirdPartyUpdate_cron,
-          'gallery.thirdPartyUpdate.autoUpdate': tpUpdate.autoUpdate ?? defaultValues.gallery_thirdPartyUpdate_autoUpdate,
-          'gallery.thirdPartyUpdate.autoRestart': tpUpdate.autoRestart ?? defaultValues.gallery_thirdPartyUpdate_autoRestart,
+          'gallery.refreshCopies.enabled': refreshCopies.enabled ?? defaultValues.gallery_refreshCopies_enabled,
           'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.thirdParty': galleryCfg.thirdParty ?? [],
           'managers': managerCfg.managers ?? [],

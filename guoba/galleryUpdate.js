@@ -1,17 +1,31 @@
-/** 图库更新模块 Schema — 主图库 / 屏蔽图库 / 第三方图库更新 */
+/** 图库更新模块 Schema — 统一自动更新 / 主图库 / 屏蔽图库 / 第三方图库更新 / 刷新副本 */
 
 export function getSchema () {
   return [
     { label: '图库更新', component: 'SOFT_GROUP_BEGIN' },
 
-    // 主图库
-    { label: '主图库', component: 'Divider' },
+    // 自动更新（所有图库统一 cron）
+    { label: '自动更新', component: 'Divider' },
     {
-      field: 'gallery.repos.0.enabled',
-      label: '启用自动检查',
-      bottomHelpMessage: '检测到新版本时是否推送通知，关闭后仍可手动更新',
+      field: 'gallery.autoUpdate.enabled',
+      label: '启用自动更新',
+      bottomHelpMessage: '是否启用图库自动更新总开关，默认开启',
       component: 'Switch'
     },
+    {
+      field: 'gallery.autoUpdate.cron',
+      label: '更新时间',
+      helpMessage: '所有图库统一的自动检查 cron 表达式（默认每天 5:30），按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行',
+      component: 'EasyCron',
+      required: true,
+      componentProps: {
+        defaultValue: '0 30 5 * * *',
+        placeholder: '0 30 5 * * *'
+      }
+    },
+
+    // 主图库
+    { label: '主图库', component: 'Divider' },
     {
       field: 'gallery.repos.0.remoteUrl',
       label: '远程仓库地址',
@@ -22,26 +36,9 @@ export function getSchema () {
       }
     },
     {
-      field: 'gallery.repos.0.cron',
-      label: '检查时间',
-      helpMessage: '自动检查更新的 cron 表达式（默认每天 5:20）',
-      component: 'EasyCron',
-      required: true,
-      componentProps: {
-        defaultValue: '0 20 5 * * *',
-        placeholder: '0 20 5 * * *'
-      }
-    },
-    {
       field: 'gallery.repos.0.autoUpdate',
-      label: '自动更新',
-      bottomHelpMessage: '检测到更新后是否自动执行 git pull',
-      component: 'Switch'
-    },
-    {
-      field: 'gallery.repos.0.autoRestart',
-      label: '自动重启',
-      bottomHelpMessage: '自动更新后是否重启云崽（图库更新一般无需重启）',
+      label: '参与自动更新',
+      bottomHelpMessage: '该仓库是否参与统一自动更新，默认开启',
       component: 'Switch'
     },
 
@@ -49,8 +46,8 @@ export function getSchema () {
     { label: '屏蔽图库', component: 'Divider' },
     {
       field: 'gallery.blocked.enabled',
-      label: '启用自动检查',
-      bottomHelpMessage: '检测到新版本时是否推送通知，关闭后仍可手动更新',
+      label: '参与自动更新',
+      bottomHelpMessage: '屏蔽图库是否参与统一自动更新，默认开启',
       component: 'Switch'
     },
     {
@@ -62,58 +59,22 @@ export function getSchema () {
         placeholder: 'https://github.com/...'
       }
     },
-    {
-      field: 'gallery.blocked.cron',
-      label: '检查时间',
-      helpMessage: '自动检查更新的 cron 表达式（默认每天 5:40）',
-      component: 'EasyCron',
-      required: true,
-      componentProps: {
-        defaultValue: '0 40 5 * * *',
-        placeholder: '0 40 5 * * *'
-      }
-    },
-    {
-      field: 'gallery.blocked.autoUpdate',
-      label: '自动更新',
-      bottomHelpMessage: '检测到更新后是否自动执行 git pull',
-      component: 'Switch'
-    },
-    {
-      field: 'gallery.blocked.autoRestart',
-      label: '自动重启',
-      bottomHelpMessage: '自动更新后是否重启云崽（屏蔽图库更新无需重启）',
-      component: 'Switch'
-    },
 
     // 第三方图库更新
     { label: '第三方图库更新', component: 'Divider' },
     {
       field: 'gallery.thirdPartyUpdate.enabled',
-      label: '启用自动检查',
-      bottomHelpMessage: '检测到第三方图库新版本时是否推送通知，关闭后仍可手动更新',
+      label: '参与自动更新',
+      bottomHelpMessage: '第三方图库是否参与统一自动更新，默认开启',
       component: 'Switch'
     },
+
+    // 刷新副本
+    { label: '刷新副本', component: 'Divider' },
     {
-      field: 'gallery.thirdPartyUpdate.cron',
-      label: '检查时间',
-      helpMessage: '自动检查更新的 cron 表达式（留空 = 不自动检查）',
-      component: 'EasyCron',
-      componentProps: {
-        defaultValue: '0 0 5 * * *',
-        placeholder: '0 0 5 * * *'
-      }
-    },
-    {
-      field: 'gallery.thirdPartyUpdate.autoUpdate',
-      label: '自动更新',
-      bottomHelpMessage: '检测到更新后是否自动执行 git pull 并复制新图到主图库',
-      component: 'Switch'
-    },
-    {
-      field: 'gallery.thirdPartyUpdate.autoRestart',
-      label: '自动重启',
-      bottomHelpMessage: '自动更新后是否重启云崽（图库更新一般无需重启）',
+      field: 'gallery.refreshCopies.enabled',
+      label: '自动刷新副本',
+      bottomHelpMessage: '每次自动更新后执行 #刷新图库副本（角色级 junction + default/第三方副本），默认开启',
       component: 'Switch'
     }
   ]

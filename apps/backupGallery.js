@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { MIAO_PROFILE_LINK, BACKUP_DIR } from '../components/constants.js'
-import { isJunction } from '../model/junction.js'
+import { checkProfileJunction } from '../model/gallery.js'
 
 /**
  * #备份图库 — 将旧 miao-plugin/resources/profile 复制到 backup 目录
@@ -25,7 +25,8 @@ export class BackupGallery extends plugin {
     if (!fs.existsSync(MIAO_PROFILE_LINK)) {
       return e.reply('[面板图图库管理器] 没有需要备份的图库（profile 目录不存在）。')
     }
-    if (isJunction(MIAO_PROFILE_LINK)) {
+    const jCheck = checkProfileJunction()
+    if (jCheck.ok) {
       return e.reply('[面板图图库管理器] 图库已初始化，不需要备份。请使用 #迁移图库 恢复备份数据。')
     }
 

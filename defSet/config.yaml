@@ -3,16 +3,19 @@
 # 变量格式：${变量名}，由锅巴表单数据替换
 # ==============================================================
 gallery:
+  # ---------- 统一自动更新 ----------
+  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+  autoUpdate:
+    enabled: ${gallery_autoUpdate_enabled}
+    cron: "${gallery_autoUpdate_cron}"
+
   # ---------- 主图库仓库元数据 ----------
   # 仓库列表由 map.json 自动决定（仓库 0 始终活跃），此处仅提供元数据补丁
   repos:
     - id: 0
       name: "miao-plugin-ProfileImg"
-      remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg.git"
-      enabled: ${gallery_repos_0_enabled}
-      cron: "${gallery_repos_0_cron}"
+      remoteUrl: "${gallery_repos_0_remoteUrl}"
       autoUpdate: ${gallery_repos_0_autoUpdate}
-      autoRestart: ${gallery_repos_0_autoRestart}
 
   # ---------- default 图库 ----------
   # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default
@@ -21,17 +24,15 @@ gallery:
   # ---------- 屏蔽图库 ----------
   blocked:
     enabled: ${gallery_blocked_enabled}
-    remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git"
-    cron: "${gallery_blocked_cron}"
-    autoUpdate: ${gallery_blocked_autoUpdate}
-    autoRestart: ${gallery_blocked_autoRestart}
+    remoteUrl: "${gallery_blocked_remoteUrl}"
 
   # ---------- 第三方图库自动更新 ----------
   thirdPartyUpdate:
     enabled: ${gallery_thirdPartyUpdate_enabled}
-    cron: "${gallery_thirdPartyUpdate_cron}"
-    autoUpdate: ${gallery_thirdPartyUpdate_autoUpdate}
-    autoRestart: ${gallery_thirdPartyUpdate_autoRestart}
+
+  # ---------- 刷新副本 ----------
+  refreshCopies:
+    enabled: ${gallery_refreshCopies_enabled}
 
 # ---------- 上传压缩设置 ----------
 upload:

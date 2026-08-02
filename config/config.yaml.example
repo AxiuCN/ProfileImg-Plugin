@@ -2,17 +2,20 @@
 # ProfileImg-Plugin 配置文件
 # ==============================================================
 gallery:
+  # ---------- 统一自动更新 ----------
+  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+  autoUpdate:
+    enabled: true
+    cron: "0 30 5 * * *"
+
   # ---------- 主图库仓库元数据 ----------
   # 仓库列表由 map.json 的 mapping values 自动发现（仓库 0 始终活跃）
-  # 此处仅提供各仓库的元数据补丁（URL / cron / 开关），未配置的仓库使用默认值
+  # 此处仅提供各仓库的元数据补丁（URL / 开关），未配置的仓库使用默认值
   repos:
     - id: 0
       name: "miao-plugin-ProfileImg"
       remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg.git"
-      enabled: true
-      cron: "0 20 5 * * *"
       autoUpdate: true
-      autoRestart: false
 
   # ---------- default 图库 ----------
   # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default
@@ -23,17 +26,16 @@ gallery:
   blocked:
     enabled: true
     remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git"
-    cron: "0 40 5 * * *"
-    autoUpdate: true
-    autoRestart: false
 
   # ---------- 第三方图库自动更新 ----------
   # 检测到第三方图库新版本时自动 pull 并复制新图到主图库
   thirdPartyUpdate:
-    enabled: false
-    cron: ""
-    autoUpdate: false
-    autoRestart: false
+    enabled: true
+
+  # ---------- 刷新副本 ----------
+  # 自动更新后执行 #刷新图库副本（角色级 junction + default/第三方副本）
+  refreshCopies:
+    enabled: true
 
 # ---------- 上传压缩设置 ----------
 upload:

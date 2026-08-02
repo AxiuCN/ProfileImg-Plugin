@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { BACKUP_DIR, MIAO_PROFILE_LINK } from '../components/constants.js'
-import { isJunction } from '../model/junction.js'
+import { BACKUP_DIR } from '../components/constants.js'
+import { checkProfileJunction } from '../model/gallery.js'
 import { notifyMaster } from '../components/notify.js'
 import { parseFilename } from '../components/panelUtils.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
@@ -36,8 +36,9 @@ export class MigrateGallery extends plugin {
       return e.reply('[面板图图库管理器] 没有找到备份数据，请先执行 #备份图库。')
     }
 
-    if (!isJunction(MIAO_PROFILE_LINK)) {
-      return e.reply('[面板图图库管理器] 图库尚未初始化，请先执行 #图库初始化。')
+    const jCheck = checkProfileJunction()
+    if (!jCheck.ok) {
+      return e.reply(jCheck.msg)
     }
 
     const defaultDir = getDefaultDir()

@@ -1,14 +1,14 @@
-import { ensureAllCharJunctions, syncThirdPartyRepo } from '../model/copier.js'
+import { ensureAllCharJunctions, syncThirdPartyRepo, syncDefaultToMain } from '../model/copier.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
-import { getRepoDir } from '../components/constants.js'
 
 /**
  * 刷新图库副本
- * #刷新图库副本          — 检查全部：主仓库角色级 junction + 所有第三方图库副本
+ * #刷新图库副本          — 检查全部：主仓库角色级 junction + default 图库副本 + 所有第三方图库副本
+ * #刷新图库副本 default  — 只检查 default 图库副本
  * #刷新图库副本 <图库名>  — 检查指定第三方图库副本
  *
- * 修复遗漏：缺失的角色级 junction 重建、第三方新图复制到主图库、孤儿副本清理
+ * 修复遗漏：缺失的角色级 junction 重建、default/第三方新图复制到主图库、孤儿副本清理
  */
 export class RefreshCopies extends plugin {
   constructor() {
@@ -28,10 +28,24 @@ export class RefreshCopies extends plugin {
     const arg = match?.[1]?.trim() || ''
 
     const lines = []
-    const jCount = this._refreshJunctions()
-    lines.push(`角色级 junction：${jCount} 个已确保`)
 
-    // 收集要检查的第三方图库
+    // 无后缀：先修复主图库角色级 junction，再同步 default + 第三方副本
+    if (!arg) {
+      const jCount = this._refreshJunctions()
+      lines.push(`角色级 junction：${jCount} 个已确保`)
+    }
+
+    // default 副本：无后缀或后缀为 default 时同步
+    if (!arg || arg.toLowerCase() === 'default') {
+      const def = syncDefaultToMain()
+      const status = def.ok ? '完成' : `失败：${def.error || '未知错误'}`
+      lines.push(`default 图库：${status}（复制 ${def.copied}，跳过 ${def.skipped}，清理 ${def.removed}）`)
+      if (arg && arg.toLowerCase() === 'default') {
+        return e.reply('[面板图图库管理器] 刷新图库副本\n' + lines.join('\n'))
+      }
+    }
+
+    // 第三方副本：无后缀 = 全部启用，有后缀 = 指定图库
     let tps = getThirdPartyRepos().filter(tp => tp.enabled)
     if (arg) {
       tps = tps.filter(tp => tp.name === arg)
@@ -39,9 +53,8 @@ export class RefreshCopies extends plugin {
         return e.reply(`[面板图图库管理器] 未找到启用的第三方图库「${arg}」`)
       }
     }
-
     if (tps.length === 0) {
-      return e.reply('[面板图图库管理器] 刷新图库副本\n' + lines.join('\n') + '\n未配置第三方图库')
+      lines.push('未配置第三方图库')
     }
 
     for (const tp of tps) {

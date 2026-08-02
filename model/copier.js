@@ -7,7 +7,7 @@ import {
   SEGMENTS, THIRD_PARTY_SLOT, getNextSeqInRange, escapeRegExp
 } from '../components/panelUtils.js'
 import {
-  getThirdPartyRoleDir, listThirdPartyRoles
+  getThirdPartyRoleDir, listThirdPartyRoles, getDefaultDir
 } from './galleryConfig.js'
 
 /**
@@ -136,6 +136,70 @@ export function syncThirdPartyRepo(tp, idx) {
           fs.copyFileSync(path.join(srcRoleDir, f), path.join(mainRoleDir, newName))
           copied++
         } catch { /* 单个文件失败继续 */ }
+      }
+    }
+    return { ok: true, copied, skipped, removed }
+  } catch (e) {
+    return { ok: false, copied, skipped, removed, error: e.message }
+  }
+}
+
+/**
+ * 同步 default 图库到主图库（#刷新图库副本 后调用）
+ * ① 复制 default 图库新增图片到主仓库（幂等：已有同源文件名的副本则跳过）
+ * ② 清理主仓库中 default 源已删除的孤儿副本（含 .bak 屏蔽文件）
+ * @returns {{ ok: boolean, copied: number, skipped: number, removed: number, error?: string }}
+ */
+export function syncDefaultToMain() {
+  const defaultDir = getDefaultDir()
+  let copied = 0, skipped = 0, removed = 0
+  if (!fs.existsSync(defaultDir)) return { ok: true, copied, skipped, removed }
+
+  try {
+    for (const type of ['normal', 'super']) {
+      const typeDir = path.join(defaultDir, `${type}-character`)
+      if (!fs.existsSync(typeDir)) continue
+      const chars = fs.readdirSync(typeDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+
+      for (const charDir of chars) {
+        const roleName = charDir.name
+        const srcRoleDir = path.join(typeDir, roleName)
+        const srcFiles = fs.readdirSync(srcRoleDir).filter(f => IMG_RE.test(f))
+        if (srcFiles.length === 0) continue
+
+        const mainRoleDir = getMainRoleDir(roleName, type)
+        let mainFiles = []
+        try { mainFiles = fs.readdirSync(mainRoleDir) } catch { /* ignore */ }
+
+        // ① 清理孤儿副本：default 源已删除的文件（含 .bak）
+        const escRole = escapeRegExp(roleName)
+        const copyRe = new RegExp(`^${escRole}_(\\d+)_本地默认图库_默认_(.+)$`, 'i')
+        for (const mf of mainFiles) {
+          const m = mf.match(copyRe)
+          if (!m) continue
+          const originalName = m[2].replace(/\.bak$/, '')
+          if (!srcFiles.includes(originalName)) {
+            try {
+              fs.unlinkSync(path.join(mainRoleDir, mf))
+              removed++
+            } catch { /* ignore */ }
+          }
+        }
+
+        // ② 复制新增图片
+        const marker = '_本地默认图库_默认_'
+        for (const f of srcFiles) {
+          const suffix = marker + f
+          const hasCopy = mainFiles.some(mf => mf.endsWith(suffix) || mf.endsWith(suffix + '.bak'))
+          if (hasCopy) { skipped++; continue }
+          const n = getNextSeqInRange(mainRoleDir, roleName, SEGMENTS.default.start, SEGMENTS.default.end)
+          if (n < 0) continue
+          try {
+            fs.copyFileSync(path.join(srcRoleDir, f), path.join(mainRoleDir, `${roleName}_${n}${marker}${f}`))
+            copied++
+          } catch { /* 单个文件失败继续 */ }
+        }
       }
     }
     return { ok: true, copied, skipped, removed }
