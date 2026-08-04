@@ -11,45 +11,25 @@
 <body>
     <div class="container">
       <div class="header">
-        <div class="header-landscape"></div>
-        <div class="scene-container"></div>
         <div class="header-content-left">
           <div class="main-title" data-text="{{ roleName }} 面板图可视化">{{ roleName }} 面板图可视化</div>
           <div class="title-divider">
-             <div class="divider-dot accent"></div>
-             <div class="divider-dot"></div>
-             <div class="divider-dot"></div>
              <div class="divider-line"></div>
            </div>
-          <div class="tags-row">
-            <div class="list-type-tag">{{ roleName }}</div>
-            <div class="origin-plugin-tag origin-miao">Miao</div>
-            {{ if folderSize }}
-            <div class="folder-size-tag">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="currentColor"
-              >
-                <path
-                  d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.17l2 2H20v10z"
-                />
-              </svg>
-              <span>{{ folderSize }}</span>
-            </div>
-            {{ /if }}
-          </div>
         </div>
         <div class="header-stats-area">
-          <div class="stat-item">
-            <span>总数</span>
-            <div class="digit-container">
-              {{ each odometer digit }}
-              <div class="digit">{{ digit }}</div>
-              {{ /each }}
+          <div class="stat-card">
+            <div class="stat-block">
+              <span class="stat-label">图片总数</span>
+              <div class="stat-value">{{ totalCount }}</div>
             </div>
+            {{ if folderSize }}
+            <div class="stat-divider"></div>
+            <div class="stat-block">
+              <span class="stat-label">图库大小</span>
+              <div class="stat-value">{{ folderSize }}</div>
+            </div>
+            {{ /if }}
           </div>
           {{ if totalPages > 1 }}
           <div class="pagination-info">

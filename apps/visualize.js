@@ -48,7 +48,6 @@ export class Visualize extends plugin {
     } catch { /* 目录不可读时不显示 */ }
 
     const totalPages = Math.ceil(files.length / PAGE_SIZE)
-    const odometer = String(files.length).split('')
 
     try {
       // 分页渲染，逐页发送（每页 20 张，4 列 × 5 行网格）
@@ -65,7 +64,6 @@ export class Visualize extends plugin {
           totalCount: files.length,
           page: p + 1,
           totalPages,
-          odometer,
           folderSize,
           images
         }
