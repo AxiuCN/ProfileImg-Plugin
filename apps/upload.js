@@ -1,12 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadMap, autoAssignRepo } from '../model/mapJson.js'
+import { loadMap, autoAssignRepo, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, isManager, canAccessGallery } from '../components/config.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
 import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
-import { getDefaultDir } from '../model/galleryConfig.js'
-import { copyDefaultToMain, getMainRoleDir } from '../model/copier.js'
+import { getRepoDir } from '../components/constants.js'
+import { getUploadDir } from '../model/galleryConfig.js'
+import { copyDefaultToMain } from '../model/copier.js'
 
 /**
  * 面板图上传（版权信息可选）
@@ -107,14 +108,14 @@ export class UploadWithCompress extends plugin {
     const format = uploadCfg.format || 'webp'
     const ext = `.${format}`
 
-    // 确定写入目录：default 图库（getDefaultDir 恒返回非空，未配置时用固定 default 目录）
-    const defaultDir = getDefaultDir()
-    const writeDir = defaultDir
-      ? path.join(defaultDir, 'normal-character', roleName)
-      : path.join(getMainRoleDir(roleName, 'normal'))
+    // 手动上传存放目录：gallery.defaultDir 配置，留空回退 default 图库目录
+    const uploadDir = getUploadDir()
+    // 若手动上传目录就是某主仓库目录 → 直接写入主仓库（main 段位，无需复制）
+    const directMain = getActiveRepoIds().some(id => getRepoDir(id) === uploadDir)
+    const writeDir = path.join(uploadDir, 'normal-character', roleName)
     if (!fs.existsSync(writeDir)) fs.mkdirSync(writeDir, { recursive: true })
 
-    const seqEnd = defaultDir ? 9999999 : SEGMENTS.main.end
+    const seqEnd = directMain ? SEGMENTS.main.end : 9999999
     let nextNum = this._getNextSeq(writeDir, roleName, seqEnd)
 
     let addedCount = 0
@@ -159,8 +160,8 @@ export class UploadWithCompress extends plugin {
 
         fs.writeFileSync(filePath, finalBuffer)
 
-        // 复制到主仓库（上传始终写入 default 图库，defaultDir 恒非空）
-        if (defaultDir) {
+        // 非直写主仓库时才复制到主仓库（直写主仓库时已在主仓库内）
+        if (!directMain) {
           const r = copyDefaultToMain(filePath, roleName, 'normal')
           if (!r.ok) logger.warn(`[ProfileImg-Plugin] 复制到主仓库失败: ${r.error}`)
         }

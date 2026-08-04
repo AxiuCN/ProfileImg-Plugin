@@ -18,14 +18,24 @@ function resolveDir(dir) {
 }
 
 /**
- * 获取 default 图库目录
- * 优先读取 config.yaml 的 gallery.defaultDir（目录名，位于 gallery/ProfileImg/ 下）；
- * 未配置时回退到固定默认目录 gallery/ProfileImg/default
- * @returns {string} 绝对路径（始终非空）
+ * 获取 default 图库源目录（固定，不随配置变化）
+ * default 图库（段位 10001~99999）的源固定位于 gallery/ProfileImg/default，
+ * 与 gallery.defaultDir（手动上传存放目录）完全解耦
+ * @returns {string} 绝对路径
  */
 export function getDefaultDir() {
+  return path.join(PROFILE_IMG_DIR, 'default')
+}
+
+/**
+ * 获取手动上传面板图的默认存放目录
+ * 读 config.yaml 的 gallery.defaultDir（目录名，位于 gallery/ProfileImg/ 下）；
+ * 留空时回退到 default 图库源目录（getDefaultDir）
+ * @returns {string} 绝对路径（始终非空）
+ */
+export function getUploadDir() {
   const dir = getPluginConfig()?.gallery?.defaultDir
-  return resolveDir(dir) || path.join(PROFILE_IMG_DIR, 'default')
+  return resolveDir(dir) || getDefaultDir()
 }
 
 /**

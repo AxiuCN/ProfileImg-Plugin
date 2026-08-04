@@ -266,4 +266,4 @@ thirdParty:
 
 ## 鸣谢
 
-- **咕咕牛图库管理器（Miao-Plugin-MBT）** — 面板图可视化页的 HTML/CSS 布局设计参考
+- [Miao-Plugin-MBT](https://github.com/GuGuNiu/Miao-Plugin-MBT) — 面板图可视化页的布局与分页思路参考自此项目
