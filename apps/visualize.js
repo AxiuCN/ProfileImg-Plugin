@@ -1,13 +1,17 @@
+import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { getRoleFiles } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { render } from '../components/render.js'
+import { formatSize, getDirSize } from '../components/format.js'
+import { currentVersion } from '../components/pluginVersion.js'
 
-/** 每页展示的图片数（5 列 × 4 行） */
+/** 每页展示的图片数（4 列网格 × 5 行） */
 const PAGE_SIZE = 20
 
 /**
  * #角色名面板图可视化 — HTML 网格浏览角色全部面板图
+ * 布局参考咕咕牛图库管理器 visualize.html（蓝色渐变 header + 4 列卡片网格 + footer）
  * 列表（#角色名面板图列表）超过 20 张时提示使用本命令
  */
 export class Visualize extends plugin {
@@ -37,15 +41,24 @@ export class Visualize extends plugin {
       return e.reply(`[面板图图库管理器]\n角色「${roleName}」暂无面板图`)
     }
 
-    const totalPages = Math.ceil(files.length / PAGE_SIZE)
+    // 角色目录大小（header 文件夹徽章），失败时留空隐藏徽章
+    let folderSize = ''
     try {
-      // 分页渲染，逐页发送（每页 20 张，5 列 × 4 行网格）
+      const roleDir = path.dirname(files[0].filePath)
+      folderSize = formatSize(getDirSize(roleDir))
+    } catch { /* 目录不可读时不显示 */ }
+
+    const totalPages = Math.ceil(files.length / PAGE_SIZE)
+    const odometer = String(files.length).split('')
+
+    try {
+      // 分页渲染，逐页发送（每页 20 张，4 列 × 5 行网格）
       for (let p = 0; p < totalPages; p++) {
-        const images = files.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE).map(f => ({
-          displayN: f.displayN,
-          name: f.name,
-          isStandard: !!(f.parsed && f.parsed.isStandard),
-          fileUrl: pathToFileURL(f.filePath).href
+        const pageFiles = files.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE)
+        const images = pageFiles.map((f, i) => ({
+          fileName: f.name.replace(/\.[^.]+$/, ''),
+          fileUrl: pathToFileURL(f.filePath).href,
+          originalIndex: p * PAGE_SIZE + i
         }))
 
         const data = {
@@ -53,6 +66,9 @@ export class Visualize extends plugin {
           totalCount: files.length,
           page: p + 1,
           totalPages,
+          odometer,
+          folderSize,
+          version: currentVersion,
           images
         }
 
