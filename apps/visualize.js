@@ -4,7 +4,6 @@ import { getRoleFiles } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
 import { render } from '../components/render.js'
 import { formatSize, getDirSize } from '../components/format.js'
-import { currentVersion } from '../components/pluginVersion.js'
 
 /** 每页展示的图片数（4 列网格 × 5 行） */
 const PAGE_SIZE = 20
@@ -68,7 +67,6 @@ export class Visualize extends plugin {
           totalPages,
           odometer,
           folderSize,
-          version: currentVersion,
           images
         }
 
