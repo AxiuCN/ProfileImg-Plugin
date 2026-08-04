@@ -209,6 +209,85 @@ export function syncDefaultToMain() {
 }
 
 /**
+ * 全量清理主图库中的 default 孤儿副本（含 .bak 屏蔽文件）
+ * 遍历所有活跃主仓库的角色目录，删除所有 `_本地默认图库_默认_` 前缀、
+ * 且 base 在 default 源中反查不到的副本。
+ * 不依赖 default 源目录是否存在该角色（源角色目录缺失 → 其中副本一律视为孤儿），
+ * 补全 syncDefaultToMain 仅清理源存在角色的局限。
+ * @returns {number} 删除的副本数量
+ */
+export function cleanDefaultOrphans() {
+  const defaultDir = getDefaultDir()
+  let removed = 0
+  for (const repoId of getActiveRepoIds()) {
+    const repoDir = getRepoDir(repoId)
+    for (const type of ['normal', 'super']) {
+      const typeDir = path.join(repoDir, `${type}-character`)
+      if (!fs.existsSync(typeDir)) continue
+      const chars = fs.readdirSync(typeDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+      for (const c of chars) {
+        const roleDir = path.join(typeDir, c.name)
+        const srcRoleDir = path.join(defaultDir, `${type}-character`, c.name)
+        const re = new RegExp(`^${escapeRegExp(c.name)}_(\\d+)_本地默认图库_默认_(.+)$`)
+        for (const f of fs.readdirSync(roleDir)) {
+          const m = f.match(re)
+          if (!m) continue
+          const original = m[2].replace(/\.bak$/, '')
+          if (fs.existsSync(path.join(srcRoleDir, original))) continue
+          try {
+            fs.unlinkSync(path.join(roleDir, f))
+            removed++
+          } catch { /* 单个文件失败继续 */ }
+        }
+      }
+    }
+  }
+  return removed
+}
+
+/**
+ * 全量清理主图库中指定第三方图库的孤儿副本（含 .bak 屏蔽文件）
+ * 遍历所有活跃主仓库的角色目录，删除所有 `_第三方图库_<图库名>_` 前缀、
+ * 且 base 在第三方源中反查不到的副本。
+ * 源角色目录不存在（normalPath/superPath 未配置或目录缺失）→ 该角色该图库副本一律视为孤儿。
+ * 补全 syncThirdPartyRepo 仅清理源存在角色的局限。
+ * @param {object} tp - getThirdPartyRepos 产物
+ * @returns {number} 删除的副本数量
+ */
+export function cleanThirdPartyOrphans(tp) {
+  let removed = 0
+  for (const repoId of getActiveRepoIds()) {
+    const repoDir = getRepoDir(repoId)
+    for (const type of ['normal', 'super']) {
+      const typeDir = path.join(repoDir, `${type}-character`)
+      if (!fs.existsSync(typeDir)) continue
+      const chars = fs.readdirSync(typeDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+      for (const c of chars) {
+        const roleDir = path.join(typeDir, c.name)
+        const srcRoleDir = getThirdPartyRoleDir(tp, type, c.name)
+        const srcExists = !!srcRoleDir && fs.existsSync(srcRoleDir)
+        const re = new RegExp(`^${escapeRegExp(c.name)}_(\\d+)_第三方图库_${escapeRegExp(tp.name)}_(.+)$`)
+        for (const f of fs.readdirSync(roleDir)) {
+          const m = f.match(re)
+          if (!m) continue
+          if (srcExists) {
+            const original = m[2].replace(/\.bak$/, '')
+            if (fs.existsSync(path.join(srcRoleDir, original))) continue
+          }
+          try {
+            fs.unlinkSync(path.join(roleDir, f))
+            removed++
+          } catch { /* 单个文件失败继续 */ }
+        }
+      }
+    }
+  }
+  return removed
+}
+
+/**
  * 删除第三方图库时清理主图库中该图库的所有副本（含 .bak 屏蔽文件）
  * 遍历所有活跃主仓库的角色目录，文件名前缀匹配 `_第三方图库_<图库名>_`
  * @param {string} tpName - 第三方图库名（与配置 thirdParty[].name 一致）

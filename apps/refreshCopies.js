@@ -1,4 +1,7 @@
-import { ensureAllCharJunctions, syncThirdPartyRepo, syncDefaultToMain } from '../model/copier.js'
+import {
+  ensureAllCharJunctions, syncThirdPartyRepo, syncDefaultToMain,
+  cleanDefaultOrphans, cleanThirdPartyOrphans
+} from '../model/copier.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 
@@ -38,8 +41,9 @@ export class RefreshCopies extends plugin {
     // default 副本：无后缀或后缀为 default 时同步
     if (!arg || arg.toLowerCase() === 'default') {
       const def = syncDefaultToMain()
+      const defOrphan = cleanDefaultOrphans()
       const status = def.ok ? '完成' : `失败：${def.error || '未知错误'}`
-      lines.push(`default 图库：${status}（复制 ${def.copied}，跳过 ${def.skipped}，清理 ${def.removed}）`)
+      lines.push(`default 图库：${status}（复制 ${def.copied}，跳过 ${def.skipped}，清理 ${def.removed + defOrphan}）`)
       if (arg && arg.toLowerCase() === 'default') {
         return e.reply('[面板图图库管理器] 刷新图库副本\n' + lines.join('\n'))
       }
@@ -59,8 +63,9 @@ export class RefreshCopies extends plugin {
 
     for (const tp of tps) {
       const sync = syncThirdPartyRepo(tp, tp.idx)
+      const tpOrphan = cleanThirdPartyOrphans(tp)
       const status = sync.ok ? '完成' : `失败：${sync.error || '未知错误'}`
-      lines.push(`「${tp.name}」：${status}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+      lines.push(`「${tp.name}」：${status}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed + tpOrphan}）`)
     }
 
     return e.reply('[面板图图库管理器] 刷新图库副本\n' + lines.join('\n'))
