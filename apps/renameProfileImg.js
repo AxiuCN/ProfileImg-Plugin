@@ -66,6 +66,13 @@ export class RenameProfileImg extends plugin {
       return e.reply(`[面板图图库管理器]\n${target.name} 重命名失败：${bad.join('、')}含非法字符\n（文件名不允许出现 < > : " / \\ | ? * 等字符）`)
     }
 
+    // 下划线是文件名各部分的固定分隔符，含下划线会导致版权解析错乱
+    const underscoreLabels = ['作者', '来源', '二改']
+    const badUnder = underscoreLabels.filter((_, i) => [author, source, modifications][i] && [author, source, modifications][i].includes('_'))
+    if (badUnder.length) {
+      return e.reply(`[面板图图库管理器]\n${target.name} 重命名失败：${badUnder.join('、')}不允许包含下划线（_）\n（下划线是文件名各部分的固定分隔符）`)
+    }
+
     const modsPart = modifications ? `_${modifications}` : ''
 
     try {

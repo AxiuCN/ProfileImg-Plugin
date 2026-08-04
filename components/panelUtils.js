@@ -142,32 +142,34 @@ export function resolveGalleryKey(filename, roleName, n) {
 }
 
 /**
- * 在指定段位范围内取下一个可用序号
- * 扫描目录内该角色所有文件（含 .bak 屏蔽文件，避免序号复用）
+ * 在指定段位范围内取最小空缺序号
+ * 扫描目录内该角色所有文件（含 .bak 屏蔽文件，避免序号复用），
+ * 返回段位内第一个未占用的序号（非 max+1，删除后空出的序号会被复用）
  * @param {string} dir - 角色目录
  * @param {string} roleName - 角色名
  * @param {number} start - 段位起点（含）
  * @param {number} end - 段位终点（含）
- * @returns {number} 下一个可用序号；段位已满返回 -1
+ * @returns {number} 最小空缺序号；段位已满返回 -1
  */
 export function getNextSeqInRange(dir, roleName, start, end) {
   const esc = escapeRegExp(roleName)
   // 匹配 角色名_n_... / 角色名_n.扩展名（含 .bak 后缀：屏蔽文件也算占用）
   const pattern = new RegExp(`^${esc}_(\\d+)(?:_|\\.)`, 'i')
-  let maxSeq = start - 1
+  const used = new Set()
   try {
     if (fs.existsSync(dir)) {
       for (const file of fs.readdirSync(dir)) {
         const m = file.match(pattern)
         if (m) {
           const seq = parseInt(m[1], 10)
-          if (seq >= start && seq <= end && seq > maxSeq) maxSeq = seq
+          if (seq >= start && seq <= end) used.add(seq)
         }
       }
     }
   } catch { /* 忽略读取失败 */ }
-  const next = maxSeq + 1
-  return next <= end ? next : -1
+  let n = start
+  while (used.has(n) && n <= end) n++
+  return n <= end ? n : -1
 }
 
 /**

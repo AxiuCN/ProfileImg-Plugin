@@ -82,6 +82,11 @@ export class UploadWithCompress extends plugin {
       return e.reply('[面板图图库管理器]\n你未被授权向 default 图库添加面板图')
     }
 
+    // 下划线是文件名各部分的固定分隔符，含下划线会导致版权解析错乱
+    if (hasCopyright && [author, source, modifications].some(v => v && v.includes('_'))) {
+      return e.reply('[面板图图库管理器]\n上传失败：作者/来源/二改不允许包含下划线（_）\n（下划线是文件名各部分的固定分隔符）')
+    }
+
     // 解析角色名
     const rawRole = e.msg.match(/(?:上传|添加)(.+?)(?:面板图)/)?.[1]?.trim()
       || e.msg.replace(/#|面板图|上传|添加/g, '').trim()
