@@ -24,8 +24,18 @@ export function createJunction(target, link) {
     if (!fs.existsSync(linkParent)) {
       fs.mkdirSync(linkParent, { recursive: true })
     }
-    // 已存在则跳过
-    if (fs.existsSync(link)) return { ok: true }
+    // 用 lstatSync 判断 link 是否真实存在（broken junction 的 existsSync 为 false 但条目仍在）
+    let linkExists = false
+    try {
+      fs.lstatSync(link)
+      linkExists = true
+    } catch { /* 不存在 */ }
+    if (linkExists) {
+      // 有效 junction（目标可达）→ 跳过
+      if (fs.existsSync(link)) return { ok: true }
+      // broken junction（目标已删）→ 删除悬空链接后重建
+      fs.rmSync(link, { recursive: false, force: true })
+    }
     fs.symlinkSync(target, link, 'junction')
     return { ok: true }
   } catch (e) {
@@ -41,7 +51,8 @@ export function createJunction(target, link) {
  */
 export function isJunction(dirPath) {
   try {
-    if (!fs.existsSync(dirPath)) return false
+    // 用 lstatSync 直接检测 reparse point，不依赖目标是否可达
+    // （broken junction 的 existsSync 为 false，但仍应识别为 junction 以便清理重建）
     const stat = fs.lstatSync(dirPath)
     // Windows junction: lstat 返回 symbolicLink 但 isSymbolicLink() 为 true
     return stat.isSymbolicLink()
