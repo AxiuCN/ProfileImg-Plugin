@@ -3,7 +3,7 @@
  * 统一管理面板图命名规范的解析逻辑
  *
  * 标准命名格式：
- *   含版权：角色名_n_作者_来源[_二改].扩展名
+ *   含版权：角色名_n_作者_来源[_备注].扩展名
  *   无版权：角色名_n.扩展名
  *   第三方复制：角色名_n_第三方图库_图库名_图原名.扩展名（n 在第三方段位）
  *   default 复制：角色名_n_本地默认图库_默认_图原名.扩展名（n 在 default 段位）
@@ -46,7 +46,7 @@ export function escapeRegExp(str) {
 export function parseFilename(filename, roleName) {
   const esc = escapeRegExp(roleName)
 
-  // 标准含版权：角色名_n_作者_来源[_二改].扩展名（含第三方/default 复制前缀）
+  // 标准含版权：角色名_n_作者_来源[_备注].扩展名（含第三方/default 复制前缀）
   const withCopyright = new RegExp(`^${esc}_(\\d+)_.+\\.[^.]+$`, 'i')
   let m = filename.match(withCopyright)
   if (m) {
@@ -98,7 +98,7 @@ export function parseAttribution(filename, roleName) {
   const author = match[2]
   const source = match[3]
   const mods = match[4]
-  return `作者：${author} / 来源：${source}${mods ? ` / 二改：${mods}` : ''}`
+  return `作者：${author} / 来源：${source}${mods ? ` / 备注：${mods}` : ''}`
 }
 
 /* ==========================================================================

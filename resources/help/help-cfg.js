@@ -50,7 +50,7 @@ export const helpList = [
     list: [
       { icon: 75, title: '#添加<角色名>面板图 <作者> <来源>', desc: '上传面板图并标注版权' },
       { icon: 75, title: '#添加琴面板图 张三 米游社', desc: '示例：作者张三 / 来源米游社' },
-      { icon: 75, title: '#添加甘雨面板图 李四 lofter AI扩图', desc: '示例：含二改情况' }
+      { icon: 75, title: '#添加甘雨面板图 李四 lofter AI扩图', desc: '示例：含备注' }
     ]
   },
   {

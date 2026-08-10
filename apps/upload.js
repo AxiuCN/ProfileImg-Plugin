@@ -12,7 +12,7 @@ import { copyDefaultToMain } from '../model/copier.js'
 /**
  * 面板图上传（版权信息可选）
  *
- * 含版权：角色名_n_作者_来源[_二改].扩展名 — #添加琴面板图 张三 米游社
+ * 含版权：角色名_n_作者_来源[_备注].扩展名 — #添加琴面板图 张三 米游社
  * 无版权：角色名_n.扩展名 — #添加琴面板图
  *
  * 写入目标（默认位于 default 图库）：
@@ -84,7 +84,7 @@ export class UploadWithCompress extends plugin {
 
     // 下划线是文件名各部分的固定分隔符，含下划线会导致版权解析错乱
     if (hasCopyright && [author, source, modifications].some(v => v && v.includes('_'))) {
-      return e.reply('[面板图图库管理器]\n上传失败：作者/来源/二改不允许包含下划线（_）\n（下划线是文件名各部分的固定分隔符）')
+      return e.reply('[面板图图库管理器]\n上传失败：作者/来源/备注不允许包含下划线（_）\n（下划线是文件名各部分的固定分隔符）')
     }
 
     // 解析角色名
@@ -183,7 +183,7 @@ export class UploadWithCompress extends plugin {
       if (hasCopyright) {
         e.reply([
           segment.at(e.user_id, senderName),
-          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，二改：${modifications}` : ''}）`
+          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，备注：${modifications}` : ''}）`
         ])
       } else {
         e.reply([

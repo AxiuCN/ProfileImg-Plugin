@@ -6,7 +6,7 @@ import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
 
 /**
- * #重命名角色名面板图N 作者 来源 [二改情况]
+ * #重命名角色名面板图N 作者 来源 [备注]
  * 修改面板图的版权归属信息（重命名文件），N 按段位判断来源：
  *   main(1~9999)      → 主仓库直接更名
  *   default(10001~)   → 主仓库副本 + default 源文件同步更名
@@ -60,14 +60,14 @@ export class RenameProfileImg extends plugin {
 
     // 新文件名非法字符检测（Windows 文件名禁止 < > : " / \ | ? * 及控制字符）
     const ILLEGAL = /[<>:"\/\\|?*]/
-    const badLabels = ['作者', '来源', '二改']
+    const badLabels = ['作者', '来源', '备注']
     const bad = badLabels.filter((_, i) => [author, source, modifications][i] && ILLEGAL.test([author, source, modifications][i]))
     if (bad.length) {
       return e.reply(`[面板图图库管理器]\n${target.name} 重命名失败：${bad.join('、')}含非法字符\n（文件名不允许出现 < > : " / \\ | ? * 等字符）`)
     }
 
     // 下划线是文件名各部分的固定分隔符，含下划线会导致版权解析错乱
-    const underscoreLabels = ['作者', '来源', '二改']
+    const underscoreLabels = ['作者', '来源', '备注']
     const badUnder = underscoreLabels.filter((_, i) => [author, source, modifications][i] && [author, source, modifications][i].includes('_'))
     if (badUnder.length) {
       return e.reply(`[面板图图库管理器]\n${target.name} 重命名失败：${badUnder.join('、')}不允许包含下划线（_）\n（下划线是文件名各部分的固定分隔符）`)

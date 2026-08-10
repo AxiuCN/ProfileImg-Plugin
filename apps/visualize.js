@@ -53,10 +53,9 @@ export class Visualize extends plugin {
       // 分页渲染，逐页发送（每页 20 张，4 列 × 5 行网格）
       for (let p = 0; p < totalPages; p++) {
         const pageFiles = files.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE)
-        const images = pageFiles.map((f, i) => ({
+        const images = pageFiles.map((f) => ({
           fileName: f.name.replace(/\.[^.]+$/, ''),
-          fileUrl: pathToFileURL(f.filePath).href,
-          originalIndex: p * PAGE_SIZE + i
+          fileUrl: pathToFileURL(f.filePath).href
         }))
 
         const data = {
