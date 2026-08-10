@@ -101,7 +101,7 @@ pnpm install -P --filter ProfileImg-Plugin
 
 > 命名格式：`<角色名>_<序号>_<原作者>_<来源>[_<备注>].webp`
 > 角色名与序号间用下划线 `_` 分隔，避免含数字角色名（如"银狼LV.999"）混淆。
-> 上传默认写入 default 图库，并复制到主图库（带"本地默认图库"前缀）；未配置 `gallery.defaultDir` 时使用固定目录 `gallery/ProfileImg/default`。
+> 上传默认写入 default 图库源目录，并复制到主图库（带"本地默认图库"前缀）；成员上传恒写 default 图库源目录，主人可将 `gallery.defaultDir` 配置为主仓库目录直写主图库。
 
 ### 面板图管理
 

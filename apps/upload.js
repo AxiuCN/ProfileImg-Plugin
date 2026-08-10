@@ -6,7 +6,7 @@ import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
 import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
 import { getRepoDir } from '../components/constants.js'
-import { getUploadDir } from '../model/galleryConfig.js'
+import { getUploadDir, getDefaultDir } from '../model/galleryConfig.js'
 import { copyDefaultToMain } from '../model/copier.js'
 
 /**
@@ -15,9 +15,9 @@ import { copyDefaultToMain } from '../model/copier.js'
  * 含版权：角色名_n_作者_来源[_备注].扩展名 — #添加琴面板图 张三 米游社
  * 无版权：角色名_n.扩展名 — #添加琴面板图
  *
- * 写入目标（默认位于 default 图库）：
- *   - 写入 default 目录，再复制到主仓库（带"本地默认图库"前缀）
- *   - default 目录 = config.yaml 的 gallery.defaultDir，未配置时用固定目录 gallery/ProfileImg/default
+ * 写入目标（成员恒为 default 图库源目录；主人可配置手动上传目录）：
+ *   - 成员上传始终写入 default 图库源目录 gallery/ProfileImg/default，再复制到主仓库（带"本地默认图库"前缀）
+ *   - 主人可配置 config.yaml 的 gallery.defaultDir 作为手动上传目录；配置为主仓库目录时直写主仓库
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -113,10 +113,12 @@ export class UploadWithCompress extends plugin {
     const format = uploadCfg.format || 'webp'
     const ext = `.${format}`
 
-    // 手动上传存放目录：gallery.defaultDir 配置，留空回退 default 图库目录
-    const uploadDir = getUploadDir()
-    // 若手动上传目录就是某主仓库目录 → 直接写入主仓库（main 段位，无需复制）
-    const directMain = getActiveRepoIds().some(id => getRepoDir(id) === uploadDir)
+    // 成员上传始终写入 default 图库源目录（权限授权的图库），
+    // 与 gallery.defaultDir（手动上传存放目录）解耦，防止配置成主仓库时越权写 main
+    const isMember = !e.isMaster
+    const uploadDir = isMember ? getDefaultDir() : getUploadDir()
+    // 主人将手动上传目录配置为主仓库 → 直写主仓库（main 段位，无需复制）；成员恒走 default 流程
+    const directMain = !isMember && getActiveRepoIds().some(id => getRepoDir(id) === uploadDir)
     const writeDir = path.join(uploadDir, 'normal-character', roleName)
     if (!fs.existsSync(writeDir)) fs.mkdirSync(writeDir, { recursive: true })
 
