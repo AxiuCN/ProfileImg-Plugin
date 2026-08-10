@@ -5,6 +5,7 @@ import { getRepoForChar } from './mapJson.js'
 import { getRepoDir } from '../components/constants.js'
 import { getDirSize } from '../components/format.js'
 import { sortPanelFiles, listRoleFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
+import { normalizeRoleName } from '../modules/proMap.js'
 
 /** 非标准文件在屏蔽列表中的 display n 兜底池（不与任何段位冲突） */
 export const BAK_DISPLAY_BASE = 9999999
@@ -42,10 +43,12 @@ export function getBlockedInfo() {
  * @returns {Array} listRoleFiles 结果（含 name/displayN/source/filePath）
  */
 export function getRoleFiles(roleName, type = 'normal') {
-  const repoId = getRepoForChar(roleName)
+  // Pro 角色归一到基础角色目录（共享图库）
+  const dirName = normalizeRoleName(roleName)
+  const repoId = getRepoForChar(dirName)
   const repoDir = getRepoDir(repoId)
-  const roleDir = path.join(repoDir, `${type}-character`, roleName)
-  return listRoleFiles(roleDir, roleName)
+  const roleDir = path.join(repoDir, `${type}-character`, dirName)
+  return listRoleFiles(roleDir, dirName)
 }
 
 /**

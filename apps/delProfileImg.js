@@ -4,7 +4,7 @@ import { resolveRoleName } from '../modules/alias.js'
 import { getRoleFiles } from '../model/blockedInfo.js'
 import { resolveNRange, resolveGalleryKey, escapeRegExp } from '../components/panelUtils.js'
 import { isManager, canAccessGallery } from '../components/config.js'
-import { getDefaultDir } from '../model/galleryConfig.js'
+import { findDefaultSourceFile } from '../model/copier.js'
 
 /**
  * 删除面板图 — 接管 miao-plugin 的 #删除xxx面板图N
@@ -64,13 +64,13 @@ export class DelProfileImg extends plugin {
       }
 
       if (source === 'default') {
-        // default 复制：删主仓库副本 + 同步删 default 源文件
+        // default 复制：删主仓库副本 + 同步删 default 源文件（源可能在基础或 Pro 源目录）
         fs.unlinkSync(target.filePath)
         let extraMsg = ''
         const origName = extractDefaultOriginal(target.name, roleName)
         if (origName) {
-          const defaultFile = path.join(getDefaultDir(), 'normal-character', roleName, origName)
-          if (fs.existsSync(defaultFile)) {
+          const defaultFile = findDefaultSourceFile(roleName, origName)
+          if (defaultFile) {
             try {
               fs.unlinkSync(defaultFile)
               extraMsg = '\n已同步删除 default 图库源文件'

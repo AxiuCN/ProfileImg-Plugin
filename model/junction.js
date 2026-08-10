@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getRepoForChar } from './mapJson.js'
 import { getRepoDir, PROFILE_DIR } from '../components/constants.js'
+import { normalizeRoleName } from '../modules/proMap.js'
 
 /**
  * Junction（目录符号链接）管理工具
@@ -127,7 +128,9 @@ export function ensureJunction(target, link) {
  * @returns {{ ok: boolean, error?: string }}
  */
 export function createCharJunction(charName, type, repoDataDir, profileDir) {
-  const target = path.join(repoDataDir, `${type}-character`, charName)
+  // Pro 角色 target 归一到基础角色主仓库目录（共享图库）；link 保持原角色名供 miao-plugin 查询
+  const dirName = normalizeRoleName(charName)
+  const target = path.join(repoDataDir, `${type}-character`, dirName)
   const link = path.join(profileDir, `${type}-character`, charName)
 
   // 确保目标目录存在
@@ -145,7 +148,8 @@ export function createCharJunction(charName, type, repoDataDir, profileDir) {
  * @returns {{ ok: boolean, error?: string }}
  */
 export function ensureCharJunction(charName, type) {
-  const repoId = getRepoForChar(charName)
+  // Pro 角色用基础角色名查主仓库路由（target 归一到基础目录）
+  const repoId = getRepoForChar(normalizeRoleName(charName))
   const repoDir = getRepoDir(repoId)
   return createCharJunction(charName, type, repoDir, PROFILE_DIR)
 }

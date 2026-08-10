@@ -3,6 +3,7 @@ import path from 'node:path'
 import { getRepoForChar, getActiveRepoIds } from '../model/mapJson.js'
 import { getRepoDir } from '../components/constants.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
+import { normalizeRoleName } from './proMap.js'
 
 /** 别名映射表，启动时从 miao-plugin 的 alias.js 构建 */
 let ALIAS_MAP = new Map()
@@ -70,14 +71,16 @@ function getAllCharDirs() {
 
 /**
  * 判断角色是否有面板图目录（主仓库按 map.json 路由 / default 图库）
+ * Pro 角色归一到基础角色目录判断（共享图库，基础目录存在即视为存在）
  * @param {string} roleName - 角色名
  * @returns {boolean}
  */
 function roleDirExists(roleName) {
-  const repoId = getRepoForChar(roleName)
-  if (fs.existsSync(path.join(getRepoDir(repoId), 'normal-character', roleName))) return true
+  const dirName = normalizeRoleName(roleName)
+  const repoId = getRepoForChar(dirName)
+  if (fs.existsSync(path.join(getRepoDir(repoId), 'normal-character', dirName))) return true
   const defaultDir = getDefaultDir()
-  if (defaultDir && fs.existsSync(path.join(defaultDir, 'normal-character', roleName))) return true
+  if (defaultDir && fs.existsSync(path.join(defaultDir, 'normal-character', dirName))) return true
   return false
 }
 
@@ -88,30 +91,41 @@ function roleDirExists(roleName) {
  * @returns {string} 官方角色名，若解析失败则返回原输入
  */
 export function resolveRoleName(input) {
+  let result = input
+
   // 1. 跨所有仓库检查精确匹配
-  if (roleDirExists(input)) return input
+  if (roleDirExists(input)) {
+    result = input
+  } else {
+    // 2. 别名 Map 查找
+    const lowerInput = input.toLowerCase()
+    if (ALIAS_MAP.has(lowerInput)) {
+      const official = ALIAS_MAP.get(lowerInput)
+      // 验证官方名确实有目录存在
+      if (roleDirExists(official)) result = official
+    }
 
-  // 2. 别名 Map 查找
-  const lowerInput = input.toLowerCase()
-  if (ALIAS_MAP.has(lowerInput)) {
-    const official = ALIAS_MAP.get(lowerInput)
-    // 验证官方名确实有目录存在
-    if (roleDirExists(official)) return official
+    // 3. 大小写不敏感匹配 + 4. 模糊匹配（尚未命中时）
+    if (result === input) {
+      try {
+        const charDirs = getAllCharDirs()
+        const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
+        if (caseMatch) {
+          result = caseMatch
+        } else {
+          const partialMatches = charDirs.filter(dir => dir.includes(input))
+          if (partialMatches.length === 1) result = partialMatches[0]
+        }
+      } catch (e) {
+        logger.warn('[ProfileImg-Plugin] 目录扫描失败:', e.message)
+      }
+    }
   }
 
-  // 3. 大小写不敏感匹配（跨所有仓库扫描）
-  try {
-    const charDirs = getAllCharDirs()
-    const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
-    if (caseMatch) return caseMatch
-
-    // 4. 模糊匹配（唯一结果才返回）
-    const partialMatches = charDirs.filter(dir => dir.includes(input))
-    if (partialMatches.length === 1) return partialMatches[0]
-  } catch (e) {
-    logger.warn('[ProfileImg-Plugin] 目录扫描失败:', e.message)
+  if (result === input) {
+    logger.warn(`[ProfileImg-Plugin] 角色名解析失败，使用原始输入: "${input}"`)
   }
 
-  logger.warn(`[ProfileImg-Plugin] 角色名解析失败，使用原始输入: "${input}"`)
-  return input
+  // Pro 角色归一到基础角色（共享图库）
+  return normalizeRoleName(result)
 }

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { resolveRoleName } from '../modules/alias.js'
 import { getRoleFiles } from '../model/blockedInfo.js'
 import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
-import { getDefaultDir } from '../model/galleryConfig.js'
+import { findDefaultSourceFile } from '../model/copier.js'
 
 /**
  * #重命名角色名面板图N 作者 来源 [备注]
@@ -87,13 +87,13 @@ export class RenameProfileImg extends plugin {
         return e.reply(`[面板图图库管理器]\n已将${roleName}序号${seqNum}重命名\n原文件：${target.name}\n新文件：${newFile}`)
       }
 
-      // default 复制：主仓库副本 + default 源文件同步更名（保持一致性）
+      // default 复制：主仓库副本 + default 源文件同步更名（源可能在基础或 Pro 源目录）
       const origName = extractDefaultOriginal(target.name, roleName)
       if (!origName) {
         return e.reply(`[面板图图库管理器]\n${target.name} 无法解析 default 源文件名`)
       }
-      const defaultFile = path.join(getDefaultDir(), 'normal-character', roleName, origName)
-      if (!fs.existsSync(defaultFile)) {
+      const defaultFile = findDefaultSourceFile(roleName, origName)
+      if (!defaultFile) {
         return e.reply(`[面板图图库管理器]\ndefault 源文件未找到（${origName}），无法同步重命名`)
       }
 

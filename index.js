@@ -4,6 +4,7 @@ import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 
 import { buildAliasMap } from './modules/alias.js'
+import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
 import { isJunction, ensureJunction } from './model/junction.js'
@@ -27,9 +28,10 @@ if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
 }
 
 // ============================================================
-// 2. 构建角色别名映射表（必须在加载 apps 之前）
+// 2. 构建角色别名映射表 + Pro 角色映射（必须在加载 apps 之前）
 // ============================================================
 buildAliasMap()
+buildProMap()
 
 // ============================================================
 // 3. 确保图库基础目录结构存在

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { getRepoForChar, getActiveRepoIds } from './mapJson.js'
 import { getRepoDir, PROFILE_DIR } from '../components/constants.js'
 import { createCharJunction } from './junction.js'
+import { normalizeRoleName, getProNames, listProEntries } from '../modules/proMap.js'
 import {
   SEGMENTS, THIRD_PARTY_SLOT, getNextSeqInRange, escapeRegExp
 } from '../components/panelUtils.js'
@@ -27,12 +28,14 @@ const IMG_RE = /\.(webp|png|jpg|jpeg|gif)$/i
  * @returns {string} 主仓库角色目录绝对路径
  */
 export function getMainRoleDir(roleName, type) {
-  const repoId = getRepoForChar(roleName)
+  // Pro 角色归一到基础角色目录（共享图库，复制/序号/反查统一）
+  const dirName = normalizeRoleName(roleName)
+  const repoId = getRepoForChar(dirName)
   const repoDir = getRepoDir(repoId)
-  const roleDir = path.join(repoDir, `${type}-character`, roleName)
+  const roleDir = path.join(repoDir, `${type}-character`, dirName)
   if (!fs.existsSync(roleDir)) fs.mkdirSync(roleDir, { recursive: true })
   // 确保聚合目录中的角色级 junction 指向主仓库角色目录
-  createCharJunction(roleName, type, repoDir, PROFILE_DIR)
+  createCharJunction(dirName, type, repoDir, PROFILE_DIR)
   return roleDir
 }
 
@@ -45,13 +48,15 @@ export function getMainRoleDir(roleName, type) {
  */
 export function copyDefaultToMain(defaultFile, roleName, type) {
   try {
-    const mainRoleDir = getMainRoleDir(roleName, type)
-    const n = getNextSeqInRange(mainRoleDir, roleName, SEGMENTS.default.start, SEGMENTS.default.end)
+    // Pro 角色用基础角色名（文件名前缀统一，序号段位共享）
+    const dirName = normalizeRoleName(roleName)
+    const mainRoleDir = getMainRoleDir(dirName, type)
+    const n = getNextSeqInRange(mainRoleDir, dirName, SEGMENTS.default.start, SEGMENTS.default.end)
     if (n < 0) {
       return { ok: false, error: `default 段位(${SEGMENTS.default.start}~${SEGMENTS.default.end})已满` }
     }
     const base = path.basename(defaultFile)
-    const newName = `${roleName}_${n}_本地默认图库_默认_${base}`
+    const newName = `${dirName}_${n}_本地默认图库_默认_${base}`
     fs.copyFileSync(defaultFile, path.join(mainRoleDir, newName))
     return { ok: true, name: newName }
   } catch (e) {
@@ -80,6 +85,15 @@ export function ensureAllCharJunctions(repoIds = getActiveRepoIds()) {
       }
     }
   }
+  // Pro 角色 junction：link 保持 Pro 名，target 归一到基础角色主仓库目录（基础目录存在才建）
+  for (const { pro, base } of listProEntries()) {
+    for (const type of ['normal', 'super']) {
+      const repoDir = getRepoDir(getRepoForChar(base))
+      if (!fs.existsSync(path.join(repoDir, `${type}-character`, base))) continue
+      const r = createCharJunction(pro, type, repoDir, PROFILE_DIR)
+      if (r.ok) count++
+    }
+  }
   return count
 }
 
@@ -97,25 +111,44 @@ export function syncThirdPartyRepo(tp, idx) {
   let copied = 0, skipped = 0, removed = 0
 
   try {
+    // 按基础角色名分组收集第三方源目录（base + 所有 Pro 变体归并处理，序号/反查统一）
+    const groups = new Map()
     for (const { type, roleName } of listThirdPartyRoles(tp)) {
       const srcRoleDir = getThirdPartyRoleDir(tp, type, roleName)
       if (!srcRoleDir || !fs.existsSync(srcRoleDir)) continue
-      const srcFiles = fs.readdirSync(srcRoleDir).filter(f => IMG_RE.test(f))
-      if (srcFiles.length === 0) continue
+      const effectiveRole = normalizeRoleName(roleName)
+      const key = `${type}::${effectiveRole}`
+      let g = groups.get(key)
+      if (!g) {
+        g = { type, effectiveRole, srcDirs: [] }
+        groups.set(key, g)
+      }
+      g.srcDirs.push(srcRoleDir)
+    }
 
-      const mainRoleDir = getMainRoleDir(roleName, type)
+    for (const { type, effectiveRole, srcDirs } of groups.values()) {
+      // 合并所有源目录（base + Pro）的图片文件集合
+      const srcFilesAll = new Set()
+      for (const srcDir of srcDirs) {
+        for (const f of fs.readdirSync(srcDir)) {
+          if (IMG_RE.test(f)) srcFilesAll.add(f)
+        }
+      }
+      if (srcFilesAll.size === 0) continue
+
+      const mainRoleDir = getMainRoleDir(effectiveRole, type)
       let mainFiles = []
       try { mainFiles = fs.readdirSync(mainRoleDir) } catch { /* ignore */ }
 
-      // ① 清理本图库孤儿副本：源已删除的文件（含 .bak）
-      const escRole = escapeRegExp(roleName)
+      // ① 清理本图库孤儿副本：所有源目录（base + Pro）都已删除的文件（含 .bak）
+      const escRole = escapeRegExp(effectiveRole)
       const escName = escapeRegExp(tp.name)
       const copyRe = new RegExp(`^${escRole}_(\\d+)_第三方图库_${escName}_(.+)$`, 'i')
       for (const mf of mainFiles) {
         const m = mf.match(copyRe)
         if (!m) continue
         const originalName = m[2].replace(/\.bak$/, '')
-        if (!srcFiles.includes(originalName)) {
+        if (!srcFilesAll.has(originalName)) {
           try {
             fs.unlinkSync(path.join(mainRoleDir, mf))
             removed++
@@ -125,17 +158,21 @@ export function syncThirdPartyRepo(tp, idx) {
 
       // ② 复制新增图片
       const marker = `_第三方图库_${tp.name}_`
-      for (const f of srcFiles) {
-        const suffix = marker + f
-        const hasCopy = mainFiles.some(mf => mf.endsWith(suffix) || mf.endsWith(suffix + '.bak'))
-        if (hasCopy) { skipped++; continue }
-        const n = getNextSeqInRange(mainRoleDir, roleName, start, end)
-        if (n < 0) continue
-        const newName = `${roleName}_${n}_第三方图库_${tp.name}_${f}`
-        try {
-          fs.copyFileSync(path.join(srcRoleDir, f), path.join(mainRoleDir, newName))
-          copied++
-        } catch { /* 单个文件失败继续 */ }
+      for (const srcDir of srcDirs) {
+        for (const f of fs.readdirSync(srcDir)) {
+          if (!IMG_RE.test(f)) continue
+          const suffix = marker + f
+          const hasCopy = mainFiles.some(mf => mf.endsWith(suffix) || mf.endsWith(suffix + '.bak'))
+          if (hasCopy) { skipped++; continue }
+          const n = getNextSeqInRange(mainRoleDir, effectiveRole, start, end)
+          if (n < 0) continue
+          const newName = `${effectiveRole}_${n}${marker}${f}`
+          try {
+            fs.copyFileSync(path.join(srcDir, f), path.join(mainRoleDir, newName))
+            mainFiles.push(newName)
+            copied++
+          } catch { /* 单个文件失败继续 */ }
+        }
       }
     }
     return { ok: true, copied, skipped, removed }
@@ -156,6 +193,8 @@ export function syncDefaultToMain() {
   if (!fs.existsSync(defaultDir)) return { ok: true, copied, skipped, removed }
 
   try {
+    // 按基础角色名分组收集源目录（base + 所有 Pro 变体归并处理，序号/反查统一）
+    const groups = new Map()
     for (const type of ['normal', 'super']) {
       const typeDir = path.join(defaultDir, `${type}-character`)
       if (!fs.existsSync(typeDir)) continue
@@ -163,40 +202,61 @@ export function syncDefaultToMain() {
         .filter(d => d.isDirectory())
 
       for (const charDir of chars) {
-        const roleName = charDir.name
-        const srcRoleDir = path.join(typeDir, roleName)
-        const srcFiles = fs.readdirSync(srcRoleDir).filter(f => IMG_RE.test(f))
-        if (srcFiles.length === 0) continue
-
-        const mainRoleDir = getMainRoleDir(roleName, type)
-        let mainFiles = []
-        try { mainFiles = fs.readdirSync(mainRoleDir) } catch { /* ignore */ }
-
-        // ① 清理孤儿副本：default 源已删除的文件（含 .bak）
-        const escRole = escapeRegExp(roleName)
-        const copyRe = new RegExp(`^${escRole}_(\\d+)_本地默认图库_默认_(.+)$`, 'i')
-        for (const mf of mainFiles) {
-          const m = mf.match(copyRe)
-          if (!m) continue
-          const originalName = m[2].replace(/\.bak$/, '')
-          if (!srcFiles.includes(originalName)) {
-            try {
-              fs.unlinkSync(path.join(mainRoleDir, mf))
-              removed++
-            } catch { /* ignore */ }
-          }
+        const srcRoleDir = path.join(typeDir, charDir.name)
+        const effectiveRole = normalizeRoleName(charDir.name)
+        const key = `${type}::${effectiveRole}`
+        let g = groups.get(key)
+        if (!g) {
+          g = { type, effectiveRole, srcDirs: [] }
+          groups.set(key, g)
         }
+        g.srcDirs.push(srcRoleDir)
+      }
+    }
 
-        // ② 复制新增图片
-        const marker = '_本地默认图库_默认_'
-        for (const f of srcFiles) {
+    for (const { type, effectiveRole, srcDirs } of groups.values()) {
+      // 合并所有源目录（base + Pro）的图片文件集合
+      const srcFilesAll = new Set()
+      for (const srcDir of srcDirs) {
+        for (const f of fs.readdirSync(srcDir)) {
+          if (IMG_RE.test(f)) srcFilesAll.add(f)
+        }
+      }
+      if (srcFilesAll.size === 0) continue
+
+      const mainRoleDir = getMainRoleDir(effectiveRole, type)
+      let mainFiles = []
+      try { mainFiles = fs.readdirSync(mainRoleDir) } catch { /* ignore */ }
+
+      // ① 清理孤儿副本：所有源目录（base + Pro）都已删除的文件（含 .bak）
+      const escRole = escapeRegExp(effectiveRole)
+      const copyRe = new RegExp(`^${escRole}_(\\d+)_本地默认图库_默认_(.+)$`, 'i')
+      for (const mf of mainFiles) {
+        const m = mf.match(copyRe)
+        if (!m) continue
+        const originalName = m[2].replace(/\.bak$/, '')
+        if (!srcFilesAll.has(originalName)) {
+          try {
+            fs.unlinkSync(path.join(mainRoleDir, mf))
+            removed++
+          } catch { /* ignore */ }
+        }
+      }
+
+      // ② 复制新增图片
+      const marker = '_本地默认图库_默认_'
+      for (const srcDir of srcDirs) {
+        for (const f of fs.readdirSync(srcDir)) {
+          if (!IMG_RE.test(f)) continue
           const suffix = marker + f
           const hasCopy = mainFiles.some(mf => mf.endsWith(suffix) || mf.endsWith(suffix + '.bak'))
           if (hasCopy) { skipped++; continue }
-          const n = getNextSeqInRange(mainRoleDir, roleName, SEGMENTS.default.start, SEGMENTS.default.end)
+          const n = getNextSeqInRange(mainRoleDir, effectiveRole, SEGMENTS.default.start, SEGMENTS.default.end)
           if (n < 0) continue
+          const newName = `${effectiveRole}_${n}${marker}${f}`
           try {
-            fs.copyFileSync(path.join(srcRoleDir, f), path.join(mainRoleDir, `${roleName}_${n}${marker}${f}`))
+            fs.copyFileSync(path.join(srcDir, f), path.join(mainRoleDir, newName))
+            mainFiles.push(newName)
             copied++
           } catch { /* 单个文件失败继续 */ }
         }
@@ -228,13 +288,16 @@ export function cleanDefaultOrphans() {
         .filter(d => d.isDirectory())
       for (const c of chars) {
         const roleDir = path.join(typeDir, c.name)
-        const srcRoleDir = path.join(defaultDir, `${type}-character`, c.name)
+        // 源目录候选：基础角色 + 所有 Pro 变体（Pro 源图归并进基础目录）
+        const srcCandidates = [c.name, ...getProNames(c.name)]
+          .map(n => path.join(defaultDir, `${type}-character`, n))
         const re = new RegExp(`^${escapeRegExp(c.name)}_(\\d+)_本地默认图库_默认_(.+)$`)
         for (const f of fs.readdirSync(roleDir)) {
           const m = f.match(re)
           if (!m) continue
           const original = m[2].replace(/\.bak$/, '')
-          if (fs.existsSync(path.join(srcRoleDir, original))) continue
+          const srcExists = srcCandidates.some(dir => fs.existsSync(path.join(dir, original)))
+          if (srcExists) continue
           try {
             fs.unlinkSync(path.join(roleDir, f))
             removed++
@@ -266,15 +329,18 @@ export function cleanThirdPartyOrphans(tp) {
         .filter(d => d.isDirectory())
       for (const c of chars) {
         const roleDir = path.join(typeDir, c.name)
-        const srcRoleDir = getThirdPartyRoleDir(tp, type, c.name)
-        const srcExists = !!srcRoleDir && fs.existsSync(srcRoleDir)
+        // 源目录候选：基础角色 + 所有 Pro 变体（Pro 源图归并进基础目录）
+        const srcCandidates = [c.name, ...getProNames(c.name)]
+          .map(n => getThirdPartyRoleDir(tp, type, n))
+          .filter(Boolean)
         const re = new RegExp(`^${escapeRegExp(c.name)}_(\\d+)_第三方图库_${escapeRegExp(tp.name)}_(.+)$`)
         for (const f of fs.readdirSync(roleDir)) {
           const m = f.match(re)
           if (!m) continue
-          if (srcExists) {
+          if (srcCandidates.length > 0) {
             const original = m[2].replace(/\.bak$/, '')
-            if (fs.existsSync(path.join(srcRoleDir, original))) continue
+            const srcExists = srcCandidates.some(dir => fs.existsSync(path.join(dir, original)))
+            if (srcExists) continue
           }
           try {
             fs.unlinkSync(path.join(roleDir, f))
@@ -317,4 +383,22 @@ export function removeThirdPartyCopies(tpName) {
     }
   }
   return removed
+}
+
+/**
+ * 在 default 图库源目录中查找角色源文件（基础角色 + 所有 Pro 变体源目录）
+ * Pro 源图归并进基础角色图库，删除/重命名时需在 Pro 源目录定位实际文件
+ * @param {string} roleName - 基础角色名
+ * @param {string} originalName - default 源文件名
+ * @param {'normal'|'super'} [type] - 图库类型，默认 'normal'
+ * @returns {string|null} 源文件绝对路径，未找到返回 null
+ */
+export function findDefaultSourceFile(roleName, originalName, type = 'normal') {
+  const defaultDir = getDefaultDir()
+  const candidates = [roleName, ...getProNames(roleName)]
+  for (const n of candidates) {
+    const p = path.join(defaultDir, `${type}-character`, n, originalName)
+    if (fs.existsSync(p)) return p
+  }
+  return null
 }
