@@ -3,7 +3,7 @@ import path from 'node:path'
 import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 
-import { buildAliasMap } from './modules/alias.js'
+import { buildAliasMap, watchCustomAliasFiles } from './modules/alias.js'
 import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
@@ -32,6 +32,8 @@ if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
 // ============================================================
 buildAliasMap()
 buildProMap()
+// 监听 miao-plugin 自定义别名 cfg，变更自动重建别名表（热更新）
+watchCustomAliasFiles()
 
 // ============================================================
 // 3. 确保图库基础目录结构存在
