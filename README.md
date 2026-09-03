@@ -18,6 +18,12 @@ git clone --depth=1 https://gitee.com/AxiuCN/ProfileImg-Plugin ./plugins/Profile
 pnpm install -P --filter ProfileImg-Plugin
 ```
 
+> Gitcode
+```bash
+git clone --depth=1 https://gitcode.com/AxiuCN/ProfileImg-Plugin ./plugins/ProfileImg-Plugin/
+pnpm install -P --filter ProfileImg-Plugin
+```
+
 ## 首次使用
 
 安装插件后，发送 **`#图库初始化`**，然后按提示执行：

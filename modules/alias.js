@@ -142,39 +142,41 @@ function roleDirExists(roleName) {
 
 /**
  * 解析角色名，支持别名
- * 四级回退：精确匹配 → 别名 Map → 大小写不敏感 → 模糊匹配
+ * 四级回退：别名 Map → 精确匹配 → 大小写不敏感 → 模糊匹配
+ * 别名优先：miao 别名（预设 + 自定义合并表）权威性高于图库目录名，
+ * 防止「别名与目录撞名」时残留/空目录屏蔽别名（如 晴歌 → 知更鸟•晴歌）
  * @param {string} input - 用户输入的角色名
  * @returns {string} 官方角色名，若解析失败则返回原输入
  */
 export function resolveRoleName(input) {
   let result = input
+  const lowerInput = input.toLowerCase()
 
-  // 1. 跨所有仓库检查精确匹配
-  if (roleDirExists(input)) {
+  // 1. 别名 Map 查找优先（命中且目标官方名目录存在时直接采用）
+  if (ALIAS_MAP.has(lowerInput)) {
+    const official = ALIAS_MAP.get(lowerInput)
+    // 验证官方名确实有目录存在
+    if (roleDirExists(official)) result = official
+  }
+
+  // 2. 跨所有仓库检查精确匹配（别名未命中或目标目录缺失时）
+  if (result === input && roleDirExists(input)) {
     result = input
-  } else {
-    // 2. 别名 Map 查找
-    const lowerInput = input.toLowerCase()
-    if (ALIAS_MAP.has(lowerInput)) {
-      const official = ALIAS_MAP.get(lowerInput)
-      // 验证官方名确实有目录存在
-      if (roleDirExists(official)) result = official
-    }
+  }
 
-    // 3. 大小写不敏感匹配 + 4. 模糊匹配（尚未命中时）
-    if (result === input) {
-      try {
-        const charDirs = getAllCharDirs()
-        const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
-        if (caseMatch) {
-          result = caseMatch
-        } else {
-          const partialMatches = charDirs.filter(dir => dir.includes(input))
-          if (partialMatches.length === 1) result = partialMatches[0]
-        }
-      } catch (e) {
-        logger.warn('[ProfileImg-Plugin] 目录扫描失败:', e.message)
+  // 3. 大小写不敏感匹配 + 4. 模糊匹配（尚未命中时）
+  if (result === input) {
+    try {
+      const charDirs = getAllCharDirs()
+      const caseMatch = charDirs.find(dir => dir.toLowerCase() === lowerInput)
+      if (caseMatch) {
+        result = caseMatch
+      } else {
+        const partialMatches = charDirs.filter(dir => dir.includes(input))
+        if (partialMatches.length === 1) result = partialMatches[0]
       }
+    } catch (e) {
+      logger.warn('[ProfileImg-Plugin] 目录扫描失败:', e.message)
     }
   }
 
