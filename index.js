@@ -8,8 +8,9 @@ import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
+import { listUnregisteredRepos } from './model/galleryConfig.js'
 import { getLayoutState } from './model/migrateMultiSrc.js'
-import { syncProfileImgSrc } from './model/profileSrc.js'
+import { syncProfileImgSrc, buildSrcList } from './model/profileSrc.js'
 import { notifyLayout } from './model/layoutNotice.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -52,20 +53,38 @@ ensureManagerConfigFile()
 
 // ============================================================
 // 5. 布局检测（多图库源布局）
-//    ready  — 已注册图库源，启动时同步源列表（幂等，变更需重启 miao 生效）
+//    ready  — 已注册图库源，启动时同步源列表（幂等；有变更则私聊主人要求重启）
 //    legacy — 旧 junction 聚合布局，提示 #迁移图库
-//    fresh  — 未初始化，提示 #图库初始化
+//    fresh  — miao 配置里无自有源：本地有可用图库则直接注册并提示重启，否则提示 #图库初始化
 // ============================================================
 
 /**
  * 延迟私聊主人：等插件加载完成与协议适配器连接后再发送（启动早期发送易失败）
  * notifyLayout 内部带 24h 同状态节流，发送成功才记录；失败则下次启动重试
- * @param {'legacy'|'fresh'} state
+ * @param {'legacy'|'fresh'|'srcPending'} state
  */
 function scheduleLayoutNotice (state) {
   setTimeout(() => {
     notifyLayout(state).catch(e => logger?.warn('[ProfileImg-Plugin] 布局提示异常:', e.message))
   }, 45 * 1000)
+}
+
+/**
+ * 输出图库源诊断日志：已配置但未注册的图库 / 未注册的仓库目录
+ * 第三方仓库必须在 gallery_config.yaml 中注册才会被读取（跨盘仓库无法通过扫描发现）
+ * @param {Array<{label: string, reason: string}>} skipped - syncProfileImgSrc 的 skipped
+ */
+function logSourceDiagnostics (skipped = []) {
+  if (skipped.length) {
+    logger.warn('[ProfileImg-Plugin] 已配置但未注册的图库：' +
+      skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
+  }
+  const unregistered = listUnregisteredRepos()
+  if (unregistered.length) {
+    logger.warn('[ProfileImg-Plugin] gallery/ProfileImg 下存在未注册的仓库目录（不会被读取）：' +
+      unregistered.map(u => u.name).join('、') +
+      '；如需使用请在锅巴「第三方图库」注册，或发送 #下载第三方图库 <Git地址> <目录名>')
+  }
 }
 
 const layoutState = getLayoutState()
@@ -74,16 +93,32 @@ if (layoutState === 'ready') {
   if (!synced.ok) {
     logger.warn('[ProfileImg-Plugin] 图库源列表同步失败:', synced.error)
   } else if (synced.changed) {
+    // 写入发生在 miao 加载之后时本次不生效（插件并发加载，顺序不确定），因此一律提示重启
     logger.info('[ProfileImg-Plugin] 已更新 miao 图库源列表（profileImgSrc），重启 Yunzai 后生效')
+    scheduleLayoutNotice('srcPending')
   } else {
     logger.info(`[ProfileImg-Plugin] 图库源列表正常，共 ${synced.list.length} 个源`)
   }
+  logSourceDiagnostics(synced.ok ? synced.skipped : [])
 } else if (layoutState === 'legacy') {
   logger.warn('[ProfileImg-Plugin] 检测到旧版图库布局（junction 聚合），发送 #迁移图库 升级到多图库源布局')
   scheduleLayoutNotice('legacy')
 } else {
-  logger.info('[ProfileImg-Plugin] 图库未初始化，发送 #图库初始化 进行初始化')
-  scheduleLayoutNotice('fresh')
+  // fresh：本地已有可用图库（主仓库 / 第三方）时直接注册，省去「先 #图库初始化 才注册」的一步
+  const want = buildSrcList()
+  if (want.list.length > 1) {
+    const synced = syncProfileImgSrc()
+    if (!synced.ok) {
+      logger.warn('[ProfileImg-Plugin] 图库源列表同步失败:', synced.error)
+    } else {
+      logger.info(`[ProfileImg-Plugin] 检测到本地图库源，已注册 ${synced.list.length} 个源，重启 Yunzai 后生效`)
+      if (synced.changed) scheduleLayoutNotice('srcPending')
+    }
+    logSourceDiagnostics(synced.ok ? synced.skipped : [])
+  } else {
+    logger.info('[ProfileImg-Plugin] 图库未初始化，发送 #图库初始化 进行初始化')
+    scheduleLayoutNotice('fresh')
+  }
 }
 
 // ============================================================

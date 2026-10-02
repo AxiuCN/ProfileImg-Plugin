@@ -3,14 +3,15 @@ import path from 'node:path'
 import { installRepoAsync, getLocalSha, acquireLock, gitExecAsync } from '../model/git.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
-import { notifyMaster } from '../components/notify.js'
+import { notifyMaster, restartHint } from '../components/notify.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { getThirdPartyRepos } from '../model/galleryConfig.js'
+import { getThirdPartyRepos, resolveThirdPartyDir, toConfigDirValue } from '../model/galleryConfig.js'
 import { syncProfileImgSrc } from '../model/profileSrc.js'
 import { probeRepo } from '../model/srcProbe.js'
 import { guardLayout } from '../model/layoutGuard.js'
 import {
-  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig, PROFILE_IMG_DIR
+  BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig, PROFILE_IMG_DIR,
+  GALLERY_ROOT, MIAO_PROFILE_LINK
 } from '../components/constants.js'
 
 /**
@@ -55,7 +56,7 @@ export class Download extends plugin {
         lines.push('    修复：确认仓库已完整克隆（可用 #下载第三方图库 <URL> 重新下载，或 #删除第三方图库 <名> 后重下），目录需为 normal-character/{角色}/ 或平铺 {角色}/')
       }
     }
-    if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
+    if (synced.changed) lines.push(restartHint())
     return lines.join('')
   }
 
@@ -154,26 +155,44 @@ export class Download extends plugin {
   async downloadThirdParty(e) {
     if (!(await guardLayout(e, { allowFresh: true }))) return true
 
-    const arg = e.msg.replace(/^#下载第三方图库\s+/, '').trim()
-    if (!arg) {
-      return e.reply('[面板图图库管理器] 用法：\n#下载第三方图库 <Git仓库URL>\n#下载第三方图库 <已配置图库名>')
+    const raw = e.msg.replace(/^#下载第三方图库\s+/, '').trim()
+    if (!raw) {
+      return e.reply([
+        '[面板图图库管理器] 用法：',
+        '#下载第三方图库 <Git仓库URL> [目标目录]',
+        '#下载第三方图库 <已配置图库名>',
+        '',
+        '目标目录可省略（默认 gallery/ProfileImg/<仓库名>），',
+        '也可填子目录名或绝对路径（支持其他盘、网络盘，如 E:/fan-repo、//NAS/gallery/fan）'
+      ].join('\n'))
     }
 
-    const isUrl = /^https?:\/\/\S+/i.test(arg)
+    // 拆出 URL 与可选目标目录（URL 内含空格时按整串处理）
+    const urlMatch = raw.match(/^(https?:\/\/\S+)(?:\s+(.+))?$/i)
+    const isUrl = !!urlMatch
     let repoName, remoteUrl, targetDir, existingTp
 
     if (isUrl) {
-      remoteUrl = arg
-      repoName = arg.replace(/\.git$/, '').split('/').pop().trim()
+      remoteUrl = urlMatch[1]
+      const dirArg = (urlMatch[2] || '').trim()
+      repoName = remoteUrl.replace(/\.git$/, '').split('/').pop().trim()
       if (!repoName) {
         return e.reply('[面板图图库管理器] 无法从 URL 提取仓库名')
       }
-      targetDir = path.join(PROFILE_IMG_DIR, repoName)
-      existingTp = getThirdPartyRepos().find(tp => tp.dir === targetDir || tp.name === repoName)
+      // 已配置过（按 remoteUrl / 名称 / 默认路径匹配）→ 沿用其名称与目录（尊重自定义路径）
+      existingTp = getThirdPartyRepos().find(tp =>
+        (tp.remoteUrl && tp.remoteUrl === remoteUrl) ||
+        tp.name === repoName ||
+        tp.dir === path.join(PROFILE_IMG_DIR, repoName)
+      )
+      if (existingTp?.name) repoName = existingTp.name
+      targetDir = dirArg
+        ? resolveThirdPartyDir(dirArg)
+        : (existingTp?.dir || resolveThirdPartyDir(repoName))
     } else {
-      existingTp = getThirdPartyRepos().find(tp => tp.name === arg)
+      existingTp = getThirdPartyRepos().find(tp => tp.name === raw)
       if (!existingTp) {
-        return e.reply(`[面板图图库管理器] 未找到名为「${arg}」的第三方图库配置\n请先用 #下载第三方图库 <URL> 或锅巴配置`)
+        return e.reply(`[面板图图库管理器] 未找到名为「${raw}」的第三方图库配置\n可先用 #下载第三方图库 <URL> [目标目录] 下载，或在锅巴中添加「已下载图库」配置`)
       }
       repoName = existingTp.name
       remoteUrl = existingTp.remoteUrl
@@ -183,9 +202,10 @@ export class Download extends plugin {
       }
     }
 
-    // 目录冲突检查：不与主图库重名
-    if (targetDir === getRepoDir(0)) {
-      return e.reply('[面板图图库管理器] 目录名与主图库冲突，请更换')
+    // 目录冲突检查：不与主图库 / 默认图库目录重合
+    if (path.resolve(targetDir) === path.resolve(getRepoDir(0)) ||
+        path.resolve(targetDir) === path.resolve(MIAO_PROFILE_LINK)) {
+      return e.reply('[面板图图库管理器] 目标目录与主图库 / 默认图库目录冲突，请更换')
     }
 
     const lock = acquireLock(`tp-dl-${repoName}`, '下载第三方图库', 'download')
@@ -202,16 +222,14 @@ export class Download extends plugin {
       }
 
       // URL 模式且未注册：追加到 gallery_config.yaml
-      // 目录结构由 srcProbe 自动探测，normalPath/superPath 仅为旧字段兼容而留空
+      // dir 位于 gallery/ProfileImg 下时写相对子目录名，跨盘写入正斜杠绝对路径（结构由 srcProbe 自动探测）
       if (isUrl && !existingTp) {
         const cfg = getGalleryConfig()
         const list = Array.isArray(cfg.thirdParty) ? cfg.thirdParty : []
         list.push({
           name: repoName,
-          dir: repoName,
+          dir: toConfigDirValue(targetDir),
           remoteUrl,
-          normalPath: '',
-          superPath: '',
           enabled: true
         })
         cfg.thirdParty = list
@@ -273,13 +291,20 @@ export class Download extends plugin {
       return e.reply(`[面板图图库管理器] 未找到第三方图库「${arg}」`)
     }
 
-    // 安全校验：只允许删除位于图库目录（gallery/ProfileImg/）内的仓库目录，
-    // 防止第三方 dir 被配置成外部绝对路径时误删
-    const galleryBase = path.resolve(PROFILE_IMG_DIR)
+    // 安全校验：只允许删除「Git 仓库目录」，并拒绝磁盘根 / 图库根 / 默认图库 / 主图库等受保护目标
+    // （第三方目录支持自定义与跨盘，因此不再限制必须位于 gallery/ProfileImg 下）
+    const protectedDirs = new Set([
+      path.resolve(GALLERY_ROOT),
+      path.resolve(MIAO_PROFILE_LINK),
+      path.resolve(getRepoDir(0))
+    ])
     for (const tp of tps) {
       const resolved = path.resolve(tp.dir)
-      if (!resolved.startsWith(galleryBase + path.sep)) {
-        return e.reply(`[面板图图库管理器] 已拒绝删除：图库「${arg}」的目录不在图库目录内（${path.basename(resolved)}）`)
+      if (protectedDirs.has(resolved) || path.parse(resolved).root === resolved) {
+        return e.reply(`[面板图图库管理器] 已拒绝删除：目标目录受保护（${resolved}）`)
+      }
+      if (!fs.existsSync(path.join(resolved, '.git'))) {
+        return e.reply(`[面板图图库管理器] 已拒绝删除：${resolved} 不是 Git 仓库目录\n（如确认要删该目录，请手动处理）`)
       }
     }
 

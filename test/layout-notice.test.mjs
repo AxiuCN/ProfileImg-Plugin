@@ -28,6 +28,10 @@ check('legacy 说明节流', legacy.includes('24 小时'))
 const fresh = buildNotice('fresh')
 check('fresh 含 #图库初始化', fresh.includes('#图库初始化'))
 check('fresh 含 #下载主图库', fresh.includes('#下载主图库'))
+const srcPending = buildNotice('srcPending')
+check('srcPending 说明源列表已更新', srcPending.includes('图库源列表已更新'))
+check('srcPending 含重启要求', srcPending.includes('重启'))
+check('srcPending 指向 #图库状态', srcPending.includes('#图库状态'))
 check('ready 无提示文本', buildNotice('ready') === '')
 
 // ---- 2. 节流逻辑 ----
@@ -36,6 +40,11 @@ check('markNotified 写入成功', markNotified('legacy', { file, now: NOW }) ==
 check('刚提示过 → 不再提示', shouldNotify('legacy', { file, now: NOW + 1000 }) === false)
 check('恰好超过 24h → 再次提示', shouldNotify('legacy', { file, now: NOW + THROTTLE_MS + 1 }) === true)
 check('不同状态互不影响', shouldNotify('fresh', { file, now: NOW }) === true)
+check('srcPending 与其他状态独立节流', shouldNotify('srcPending', { file, now: NOW }) === true)
+check('srcPending 记录后自身节流生效',
+  markNotified('srcPending', { file, now: NOW }) === true &&
+  shouldNotify('srcPending', { file, now: NOW + 1000 }) === false &&
+  shouldNotify('srcPending', { file, now: NOW + THROTTLE_MS + 1 }) === true)
 
 // ---- 3. 发送（Bot 桩）----
 const sent = []

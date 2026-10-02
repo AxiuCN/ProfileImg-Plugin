@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url'
 /**
  * 启动布局提示（私聊主人）
  *
- * 触发场景：plugin 启动检测到旧版布局（legacy，需迁移）或未初始化（fresh）
+ * 触发场景：
+ *   - legacy：检测到旧版布局（需迁移）
+ *   - fresh：未初始化（需 #图库初始化）
+ *   - srcPending：启动时按配置重新注册了图库源，需重启才被 miao 读取
  * 目标：用户不使用管理/查看命令、也不看日志时，仍能知道需要操作
  *
  * 节流：同一状态 24 小时内最多提示一次（避免频繁重启被反复打扰）；
@@ -19,7 +22,7 @@ export const THROTTLE_MS = 24 * 60 * 60 * 1000
 
 /**
  * 是否应发送提示（同状态节流）
- * @param {'legacy'|'fresh'} state
+ * @param {'legacy'|'fresh'|'srcPending'} state
  * @param {{ file?: string, now?: number }} [opts]
  * @returns {boolean}
  */
@@ -38,7 +41,7 @@ export function shouldNotify (state, opts = {}) {
 
 /**
  * 记录某状态的提示时间
- * @param {'legacy'|'fresh'} state
+ * @param {'legacy'|'fresh'|'srcPending'} state
  * @param {{ file?: string, now?: number }} [opts]
  * @returns {boolean}
  */
@@ -66,7 +69,7 @@ export function markNotified (state, opts = {}) {
 
 /**
  * 生成提示文本
- * @param {'legacy'|'fresh'} state
+ * @param {'legacy'|'fresh'|'srcPending'} state
  * @returns {string} 非提示状态返回空串
  */
 export function buildNotice (state) {
@@ -101,12 +104,24 @@ export function buildNotice (state) {
       '· 本提醒 24 小时内最多发送一次，初始化完成后不再发送'
     ].join('\n')
   }
+  if (state === 'srcPending') {
+    return [
+      '[面板图图库管理器] 图库源列表已更新',
+      '',
+      '本次启动检测到 miao 图库源列表与配置不一致，已按配置重新注册。',
+      'miao 只在模块加载时读取一次图库源列表，因此需重启 Yunzai 才会生效。',
+      '',
+      '重启后发送 #图库状态 可确认已注册的图库源。',
+      '',
+      '· 本提醒 24 小时内最多发送一次'
+    ].join('\n')
+  }
   return ''
 }
 
 /**
  * 发送启动提示（带节流；发送成功才记录）
- * @param {'legacy'|'fresh'|'ready'} state
+ * @param {'legacy'|'fresh'|'srcPending'} state
  * @param {{ file?: string, now?: number }} [opts]
  * @returns {Promise<boolean>} 是否已发送
  */

@@ -7,9 +7,24 @@
 # 第三方仓库作为独立只读图库源注册给 miao（不再复制到主图库），支持两种结构：
 #   normal-character/{角色}/ 与 super-character/{角色}/   （分层，含彩蛋立绘）
 #   {角色}/                                             （平铺，仅普通立绘；仓库根不要放 docs 等含图目录）
-# 结构无法直读时不会被注册，命令会提示整理目录；整理后执行 #更新第三方图库 或重启 Yunzai 重新注册
-# normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可留空或删除）
-# dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名，也可填绝对路径
-# 可用 #下载第三方图库 <URL> 自动下载并注册为图库源
+#
+# 注册要求：第三方仓库**必须在本列表中注册**才会被读取（不做目录扫描）；
+#   gallery/ProfileImg 下未注册的仓库目录会被忽略，#图库状态 与启动日志会提示；
+#   跨盘 / 网络盘仓库不在该目录下，只能靠此处注册生效
+#
+# dir —— 图库仓库目录，支持自定义与跨盘，两种写法：
+#   · 子目录名：如 "xxx-fan-repo"   → gallery/ProfileImg/xxx-fan-repo
+#   · 绝对路径：如 "E:/fan-repo" 或网络盘 "//NAS/gallery/fan"（Windows 建议用正斜杠）
+#   网络盘（UNC）需先执行一次：git config --global --add safe.directory <该路径>
+#   （否则 git 以 dubious ownership 拒绝操作，下载/更新会失败）
+#
+# 下载与注册：
+#   · 推荐 #下载第三方图库 <Git地址> [目标目录]（目标目录可省略，也可填上面两种写法）
+#   · 已自行下载到任意位置的仓库：直接在锅巴 / 本文件新增配置即可（结构自动探测）
+#   · 结构无法直读时不会被注册，命令会提示如何整理目录
+#
+# 生效方式：新增或修改图库后需重启 Yunzai（miao 只在启动时读取图库源列表）；
+#           目录不存在或结构不符的条目不会被注册
+# normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可删除）
 thirdParty:
 ${gallery_thirdParty}

@@ -1,6 +1,6 @@
 import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync, acquireLock, getRepoBranch } from '../model/git.js'
 import { checkRepo, checkBlockedGallery } from '../model/gallery.js'
-import { notifyMaster } from '../components/notify.js'
+import { notifyMaster, restartHint } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
@@ -59,7 +59,7 @@ export class Update extends plugin {
         lines.push('    修复：确认仓库已完整克隆（可用 #下载第三方图库 <URL> 重新下载，或 #删除第三方图库 <名> 后重下），目录需为 normal-character/{角色}/ 或平铺 {角色}/')
       }
     }
-    if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
+    if (synced.changed) lines.push(restartHint())
     return lines.join('')
   }
 
@@ -169,7 +169,7 @@ export class Update extends plugin {
       if (!synced.ok) {
         lines.push(`图库源同步：失败 - ${synced.error || '未知错误'}`)
       } else {
-        if (synced.changed) lines.push('图库源同步：已更新，需重启 Yunzai 生效')
+        if (synced.changed) lines.push('图库源同步：已更新，需重启 Yunzai 后生效')
         if (synced.skipped.length) {
           lines.push(`图库源同步：${synced.skipped.length} 个仓库无法直读（` +
             synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；') + '）')

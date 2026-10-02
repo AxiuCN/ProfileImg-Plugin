@@ -34,7 +34,9 @@ pnpm install -P --filter ProfileImg-Plugin
 
 > 若之前是旧版图库布局，发送 `#迁移图库` 一次性升级到多图库源布局（完成后需重启 Yunzai）。
 >
-> 第三方图库用 `#下载第三方图库 <URL>` 克隆，插件会自动探测目录结构（`normal-character/{角色}/`、`super-character/{角色}/` 或平铺 `{角色}/`）并注册为图库源；无法直读时会提示整理目录结构。
+> 第三方图库用 `#下载第三方图库 <URL> [目标目录]` 克隆，插件会自动探测目录结构（`normal-character/{角色}/`、`super-character/{角色}/` 或平铺 `{角色}/`）并注册为图库源；目标目录可省略（默认落在 `gallery/ProfileImg/` 下），也可指定其他盘 / 网络盘路径；无法直读时会提示整理目录结构。
+>
+> 图库源列表变动后**必须重启 Yunzai**：miao 只在模块加载时读取一次 `profileImgSrc`。
 
 ## 指令列表
 
@@ -53,7 +55,7 @@ pnpm install -P --filter ProfileImg-Plugin
 
 | 指令 | 说明 |
 |------|------|
-| `#图库状态` | 全部图库源（默认图库/主仓库/第三方）+ 屏蔽图库总览 |
+| `#图库状态` | 全部图库源（默认图库/主仓库/第三方）+ 屏蔽图库总览 + 未注册仓库提示 |
 | `#主图库状态` | 各主仓库规模与路径（角色数/图片数/大小/路径/SHA） |
 | `#屏蔽图库状态` | 屏蔽图库详细信息 |
 
@@ -86,11 +88,27 @@ pnpm install -P --filter ProfileImg-Plugin
 
 | 指令 | 说明 |
 |------|------|
-| `#下载第三方图库 <URL>` | 克隆第三方图库到 `gallery/ProfileImg/`，自动探测目录结构并注册为图库源 |
-| `#删除第三方图库 <图库名>` | 删除第三方图库（移除配置 + 删除仓库目录 + 重新注册图库源），不允许删 default/主图库 |
+| `#下载第三方图库 <URL> [目标目录]` | 克隆第三方图库（缺省落在 `gallery/ProfileImg/<仓库名>`），自动探测目录结构并注册为图库源 |
+| `#删除第三方图库 <图库名>` | 移除配置并删除该图库的 Git 仓库目录，然后重新注册图库源；只删 Git 仓库目录，磁盘根 / 图库根 / 默认图库 / 主图库受保护 |
 | `#更新第三方图库 [图库名]` | 拉取第三方图库最新版本（只读源，只 git pull，不复制图片；缺省=全部，指定则仅更新单个） |
 
 > 第三方仓库目录结构由插件自动探测（支持 `normal-character/{角色}/`、`super-character/{角色}/` 与平铺 `{角色}/`）；无法直读的仓库不会注册为图库源，会提示整理目录结构。
+
+#### 第三方图库路径（`thirdParty[].dir`）
+
+`dir` 始终按「Git 仓库根目录」理解，支持两种写法：
+
+| 写法 | 示例 | 实际落点 |
+|------|------|---------|
+| 子目录名 | `xxx-fan-repo` | `gallery/ProfileImg/xxx-fan-repo` |
+| 绝对路径 | `E:/fan-repo`、`//NAS/gallery/fan` | 原样使用（支持其他盘 / 网络盘） |
+
+- 路径建议用正斜杠 `/`；网络盘（UNC）需先执行一次 `git config --global --add safe.directory <该路径>`，否则 git 会以 `dubious ownership` 拒绝下载 / 更新
+- **第三方仓库必须在本配置中注册才会被读取**：插件不做目录扫描，`gallery/ProfileImg/` 下未注册的 Git 仓库目录会被忽略（跨盘仓库不在该目录下，只能靠注册生效）；未注册目录会在 `#图库状态` 末尾与启动日志中提示
+- `#下载第三方图库 <URL> [目标目录]` 按 `remoteUrl` 匹配已有配置：命中则沿用该配置的自定义目录，未命中则新建条目
+- 路径可在锅巴后台「第三方图库 → 目录名或路径」或 `config/gallery_config.yaml` 修改；目录不存在或结构不符的条目不会被注册
+- `normalPath` / `superPath` 为旧字段，仍可读取但不再参与注册（结构由插件自动探测）
+- 路径或条目变动后需重启 Yunzai 才会被 miao 读取
 
 ### 面板图上传（版权可选，主人/授权成员）
 
@@ -146,7 +164,7 @@ managers:
 ```
 miao-plugin/resources/profile/                  ← 默认图库（真实目录，唯一可写，源列表中的 'profile'）
 gallery/ProfileImg/miao-plugin-ProfileImg[-N]/  ← 主仓库（独立只读源，可 push）
-gallery/ProfileImg/<第三方仓库>/                 ← 第三方图库（独立只读源）
+gallery/ProfileImg/<第三方仓库>/                 ← 第三方图库（独立只读源，可配置到其他盘 / 网络盘）
 gallery/profile/blocked-character/              ← 屏蔽图库（自带 .git）
 
 miao-plugin/config/profile.js
@@ -157,7 +175,7 @@ miao-plugin/config/profile.js
 - **默认图库可写**：上传 / 迁移的面板图落在这里（`miao-plugin/resources/profile`），文件名取 default 段位（10001~99999）
 - **各主仓库 / 第三方仓库为独立源**：更新只做 `git pull`，图片留在各自仓库内，不做任何聚合
 - **屏蔽**：主图库文件移入 `gallery/profile/blocked-character`；默认图库 / 第三方源文件改 `.bak` 后缀（miao 只认 webp/png/jpg/jpeg，天然不可见）
-- **源列表变更需重启**：miao 只在模块加载时读一次 `profileImgSrc`
+- **源列表变更需重启**：miao 只在模块加载时读一次 `profileImgSrc`；插件**每次启动**都会比对 miao 配置与本地图库——已注册过源的（`ready`）与首次发现本地已有可用图库的（`fresh`）都会按配置重新注册，有变更就私聊主人要求重启（24h 节流，发送失败下次启动重试）；本地无可用图库时才提示 `#图库初始化`
 
 ### 序号段位（n 编码来源）
 
@@ -175,7 +193,7 @@ miao-plugin/config/profile.js
 |------|------|-----|------|---------|
 | 默认图库 | `miao-plugin/resources/profile` | ✗ | ✓ 本地 | .bak |
 | 主图库 | `gallery/ProfileImg/miao-plugin-ProfileImg[-N]` | ✓ | ✓ push | 移入 blocked-character |
-| 第三方图库 | `gallery/ProfileImg/<仓库名>` | ✓ 只读 | ✗ | .bak |
+| 第三方图库 | `gallery/ProfileImg/<仓库名>`（或自定义 / 跨盘路径） | ✓ 只读 | ✗ | .bak |
 
 - **仅主图库 push**。默认图库是 miao 的唯一可写位置；第三方仓库只读 `git pull`，不复制到其他源。
 
@@ -234,14 +252,18 @@ miao-plugin 侧：`plugins/miao-plugin/resources/profile/` 为**默认图库**�
 
 第三方仓库的目录结构由插件自动探测（支持 `normal-character/{角色}/`、`super-character/{角色}/` 与平铺 `{角色}/`），可直读的仓库才会注册为图库源；`normalPath` / `superPath` 为旧字段，仅作兼容保留，注册图库源时不使用。
 
+`dir` 取值与跨盘 / 网络盘注意事项见上文「第三方图库路径」。
+
 ```yaml
 # 第三方图库（独立只读图库源，更新只做 git pull）
 thirdParty:
   - name: "某同人图库"
     dir: "xxx-fan-repo"             # gallery/ProfileImg/ 下的子目录名
     remoteUrl: "https://github.com/xxx/xxx.git"
-    normalPath: ""                  # 旧字段（兼容保留，不再使用）
-    superPath: ""                   # 旧字段（兼容保留，不再使用）
+    enabled: true
+  - name: "本地同人图库"
+    dir: "E:/gallery/fan-repo"      # 也可填绝对路径（其他盘 / 网络盘，建议正斜杠）
+    remoteUrl: "https://github.com/xxx/fan.git"
     enabled: true
 ```
 

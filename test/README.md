@@ -31,8 +31,10 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 | `default-segment-name.test.mjs` | default 段位命名：有版权 / 有备注 / 无版权 / 非标准命名的重命名规则、原名「」备注、扩展名与段位号 | 无 |
 | `gallery-index.test.mjs` | 多源索引：源列表、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库，可逆清理） | miao-plugin 配置模板 |
 | `layout-guard.test.mjs` | 布局守卫：legacy 一律拦截、fresh 默认拦截但 `allowFresh` 放行、ready 放行（按当前环境状态分支断言） | miao-plugin 配置模板 |
-| `layout-notice.test.mjs` | 启动布局提示：提示文本、24h 同状态节流、发送失败不记录（下次重试）、主人不可用不发送 | 无 |
+| `layout-notice.test.mjs` | 启动布局提示：三个状态（legacy / fresh / srcPending）提示文本、24h 同状态节流与状态间独立、发送失败不记录（下次重试）、主人不可用不发送 | 无 |
 | `status-output.test.mjs` | 状态输出不回显绝对路径、分层/平铺源体积口径（跳过 `.git`） | 无 |
 | `repo-branch.test.mjs` | 仓库默认分支探测：main / master / 自定义 / 空仓库 / 非仓库回退 | git 可执行文件 |
+| `third-party-path.test.mjs` | 第三方图库目录值解析与回写：相对名 / 跨盘绝对路径 / UNC / 空值 / 往返一致 | 无 |
+| `unregistered-repo.test.mjs` | 未注册仓库检测：只提示未注册的 Git 目录（含 `.git` 为文件的 worktree），排除主仓库保留名 / 已注册 / 非 Git / 隐藏目录，目录缺失边界（夹具在临时目录） | 无 |
 | `guoba-schema.test.mjs` | 锅巴 schema 可加载、thirdParty 不含退役字段、defSet 模板变量与 defaultValues 一致 | 无 |
 | `smoke-imports.test.mjs` | 全部 apps / model / modules / components 可加载、导出非空、关键导出面、`getDefaultDir()` 路径语义 | 无 |

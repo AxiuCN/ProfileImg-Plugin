@@ -1,19 +1,38 @@
 # ==============================================================
 # ProfileImg-Plugin 图库配置（第三方图库）
-# default 图库路径在 config.yaml 的 gallery.defaultDir 中配置（见锅巴"default 图库上传"）
+# 默认图库固定为 miao-plugin/resources/profile（由 miao 的 profileImgSrc 首项决定，不可自定义）
 # ==============================================================
 
 # ---------- 第三方图库（只读 git 图库源，目录结构自动探测） ----------
 # 第三方仓库作为独立只读图库源注册给 miao（不再复制到主图库），支持两种结构：
 #   normal-character/{角色}/ 与 super-character/{角色}/   （分层，含彩蛋立绘）
 #   {角色}/                                             （平铺，仅普通立绘；仓库根不要放 docs 等含图目录）
-# 结构无法直读时不会被注册，命令会提示整理目录；整理后执行 #更新第三方图库 或重启 Yunzai 重新注册
-# dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名，也可填绝对路径，
-# 实际路径: plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/xxx-fan-repo
-# 可用 #下载第三方图库 <URL> 命令自动下载并注册，无需手动填写
-# 注：normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可留空）
+#
+# 注册要求：第三方仓库**必须在本列表中注册**才会被读取（不做目录扫描）；
+#   gallery/ProfileImg 下未注册的仓库目录会被忽略，#图库状态 与启动日志会提示；
+#   跨盘 / 网络盘仓库不在该目录下，只能靠此处注册生效
+#
+# dir —— 图库仓库目录，支持自定义与跨盘：
+#   · 子目录名：如 "xxx-fan-repo"   → gallery/ProfileImg/xxx-fan-repo
+#   · 绝对路径：如 "E:/fan-repo" 或网络盘 "//NAS/gallery/fan"（Windows 建议用正斜杠）
+#   网络盘（UNC）需先执行一次：git config --global --add safe.directory <该路径>
+#   否则 git 会以 dubious ownership 拒绝操作，导致下载/更新失败
+#
+# 下载与注册：
+#   · 推荐 #下载第三方图库 <Git地址> [目标目录]（目标目录可省略；填子目录名或绝对路径均可）
+#   · 已自行下载到任意位置的仓库：直接在本文件或锅巴新增配置即可（结构由插件自动探测）
+#   · 结构无法直读时不注册，命令会提示整理为 normal-character/{角色}/ 或平铺 {角色}/
+#
+# 生效方式：新增或修改图库后需重启 Yunzai（miao 只在启动时读取图库源列表）；
+#           目录不存在或结构不符的条目不会被注册
+# normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可删除）
 thirdParty:
-  # - name: "某同人图库"                        # 图库名（显示用）
-  #   dir: "xxx-fan-repo"                      # gallery/ProfileImg/ 下的子目录名
-  #   remoteUrl: "https://github.com/xxx/xxx.git"  # Git 远程地址
-  #   enabled: true                             # 是否参与 #更新第三方图库 与图库源注册
+  # - name: "某同人图库"                          # 图库名（显示用）
+  #   dir: "xxx-fan-repo"                        # 子目录名 → gallery/ProfileImg/xxx-fan-repo
+  #   remoteUrl: "https://github.com/xxx/xxx.git" # Git 远程地址
+  #   enabled: true                              # 是否参与 #更新第三方图库 与图库源注册
+  #
+  # - name: "跨盘图库"                            # 自定义路径 / 跨盘示例
+  #   dir: "E:/gallery/fan-repo"                 # 绝对路径（其他盘；网络盘写 //NAS/gallery/fan）
+  #   remoteUrl: "https://github.com/xxx/fan.git"
+  #   enabled: true
