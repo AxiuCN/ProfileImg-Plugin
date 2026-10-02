@@ -1,15 +1,20 @@
-import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync, acquireLock } from '../model/git.js'
-import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/gallery.js'
+import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync, acquireLock, getRepoBranch } from '../model/git.js'
+import { checkRepo, checkBlockedGallery } from '../model/gallery.js'
 import { notifyMaster } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { setRepoVersion } from '../model/repoVersions.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
-import { syncThirdPartyRepo, ensureAllCharJunctions, syncDefaultToMain } from '../model/copier.js'
+import { syncProfileImgSrc } from '../model/profileSrc.js'
+import { guardLayout } from '../model/layoutGuard.js'
 
 /**
  * 多仓库图库更新（手动 + cron 自动，全程异步不阻塞 Bot）
+ *
+ * 多图库源布局：各图库仓库（主仓库 / 第三方仓库）由 miao 通过 profileImgSrc 直接读取，
+ * 更新只做 git pull，不再复制到主仓库、不再维护 junction；
+ * 每次更新完成后重新注册图库源（仓库数量 / 结构变化时需重启 Yunzai 生效）。
  */
 export class Update extends plugin {
   constructor() {
@@ -33,17 +38,32 @@ export class Update extends plugin {
     return getActiveRepoIds().map(id => getRepoConfig(id))
   }
 
-  /** 更新后确保该仓库已有角色创建角色级 junction + 记录版本 */
-  _syncAfterRepoUpdate(repoId) {
-    ensureAllCharJunctions([repoId])
+  /** 更新后记录仓库版本（图库源由 syncProfileImgSrc 统一注册） */
+  _recordRepoVersion(repoId) {
     const sha = getLocalSha(getRepoDir(repoId))
     if (sha) setRepoVersion(repoId, sha)
+  }
+
+  /**
+   * 注册 miao 图库源并生成提示（更新后调用，幂等）
+   * @returns {string} 追加到回复末尾的提示文本（无可提示内容时为空串）
+   */
+  _syncSources() {
+    const synced = syncProfileImgSrc()
+    if (!synced.ok) return `\n⚠️ 注册图库源失败：${synced.error || '未知错误'}`
+    const lines = []
+    if (synced.skipped.length) {
+      lines.push(`\n⚠️ ${synced.skipped.length} 个图库仓库无法直读，未注册：` +
+        synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
+    }
+    if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
+    return lines.join('')
   }
 
   _registerCronTasks() {
     const config = getPluginConfig()
     const autoCfg = config?.gallery?.autoUpdate || {}
-    // 所有图库统一一个 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+    // 所有图库统一一个 cron，按主图库 → 屏蔽图库 → 第三方图库 → 图库源同步顺序执行
     if (autoCfg.enabled !== false && autoCfg.cron) {
       this.task = [{
         name: '图库自动更新',
@@ -56,8 +76,8 @@ export class Update extends plugin {
 
   /**
    * 统一自动更新链（异步，有锁保护）
-   * 按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行，
-   * 每个图库独立 try/catch，单个失败不中断后续，末尾统一汇总通知。
+   * 按主图库 → 屏蔽图库 → 第三方图库 → 图库源同步顺序执行，
+   * 每个步骤独立 try/catch，单个失败不中断后续，末尾统一汇总通知。
    */
   async _autoUpdateAll() {
     const cfg = getPluginConfig()?.gallery || {}
@@ -73,12 +93,13 @@ export class Update extends plugin {
       const lock = acquireLock(String(repo.id), '自动更新', 'update')
       if (!lock.ok) continue
       try {
-        const remoteSha = await getRemoteShaAsync(repoDir)
+        const branch = getRepoBranch(repoDir)
+        const remoteSha = await getRemoteShaAsync(repoDir, branch)
         if (!remoteSha) continue
         const localSha = getLocalSha(repoDir)
         if (remoteSha === localSha) continue
-        const result = await fastForwardPullAsync(repoDir)
-        this._syncAfterRepoUpdate(repo.id)
+        const result = await fastForwardPullAsync(repoDir, branch)
+        this._recordRepoVersion(repo.id)
         lines.push(`主图库仓库${repo.id}：更新${result.updated ? '成功' : '完成'}（${localSha} -> ${remoteSha}）`)
       } catch (err) {
         lines.push(`主图库仓库${repo.id}：更新失败 - ${err.message}`)
@@ -94,11 +115,12 @@ export class Update extends plugin {
         const lock = acquireLock('blocked', '自动更新', 'update')
         if (lock.ok) {
           try {
-            const remoteSha = await getRemoteShaAsync(BLOCKED_REPO_DIR)
+            const blockedBranch = getRepoBranch(BLOCKED_REPO_DIR)
+            const remoteSha = await getRemoteShaAsync(BLOCKED_REPO_DIR, blockedBranch)
             if (remoteSha) {
               const localSha = getLocalSha(BLOCKED_REPO_DIR)
               if (remoteSha !== localSha) {
-                await gitExecAsync(BLOCKED_REPO_DIR, 'pull origin main --allow-unrelated-histories', 60000)
+                await gitExecAsync(BLOCKED_REPO_DIR, `pull origin ${blockedBranch} --allow-unrelated-histories`, 60000)
                 lines.push(`屏蔽图库：更新成功（${localSha} -> ${remoteSha}）`)
               }
             }
@@ -113,7 +135,7 @@ export class Update extends plugin {
       }
     }
 
-    // ③ 第三方图库（逐个）
+    // ③ 第三方图库（逐个，仅 git pull）
     if (cfg.thirdPartyUpdate?.enabled !== false) {
       const tps = getThirdPartyRepos().filter(tp => tp.enabled)
       for (const tp of tps) {
@@ -123,13 +145,13 @@ export class Update extends plugin {
         const lock = acquireLock(`tp-${tp.idx}`, '第三方图库自动更新', 'update')
         if (!lock.ok) continue
         try {
-          const remoteSha = await getRemoteShaAsync(tp.dir)
+          const branch = getRepoBranch(tp.dir)
+          const remoteSha = await getRemoteShaAsync(tp.dir, branch)
           if (!remoteSha) continue
           const localSha = getLocalSha(tp.dir)
           if (remoteSha === localSha) continue
-          const result = await fastForwardPullAsync(tp.dir)
-          const sync = syncThirdPartyRepo(tp, tp.idx)
-          lines.push(`第三方「${tp.name}」：更新${result.updated ? '成功' : '完成'}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+          const result = await fastForwardPullAsync(tp.dir, branch)
+          lines.push(`第三方「${tp.name}」：更新${result.updated ? '成功' : '完成'}（${localSha} -> ${remoteSha}）`)
         } catch (err) {
           lines.push(`第三方「${tp.name}」：更新失败 - ${err.message}`)
         } finally {
@@ -138,20 +160,20 @@ export class Update extends plugin {
       }
     }
 
-    // ④ 刷新副本（junction + default/第三方副本）
-    if (cfg.refreshCopies?.enabled !== false) {
-      try {
-        const jCount = ensureAllCharJunctions(getActiveRepoIds())
-        const def = syncDefaultToMain()
-        const tpInfo = getThirdPartyRepos().filter(tp => tp.enabled).map(tp => {
-          const s = syncThirdPartyRepo(tp, tp.idx)
-          return s.ok ? `复制${s.copied}/跳过${s.skipped}/清理${s.removed}` : (s.error || '失败')
-        })
-        const tpText = tpInfo.length ? `，第三方（${tpInfo.join('；')}）` : ''
-        lines.push(`刷新副本：junction ${jCount} 个，default ${def.ok ? `复制${def.copied}/跳过${def.skipped}/清理${def.removed}` : (def.error || '失败')}${tpText}`)
-      } catch (err) {
-        lines.push(`刷新副本：失败 - ${err.message}`)
+    // ④ 图库源同步（仓库数量 / 目录结构变化时写入 miao profileImgSrc）
+    try {
+      const synced = syncProfileImgSrc()
+      if (!synced.ok) {
+        lines.push(`图库源同步：失败 - ${synced.error || '未知错误'}`)
+      } else {
+        if (synced.changed) lines.push('图库源同步：已更新，需重启 Yunzai 生效')
+        if (synced.skipped.length) {
+          lines.push(`图库源同步：${synced.skipped.length} 个仓库无法直读（` +
+            synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；') + '）')
+        }
       }
+    } catch (err) {
+      lines.push(`图库源同步：失败 - ${err.message}`)
     }
 
     notifyMaster(`[面板图图库管理器] 自动更新完成\n${lines.length ? lines.join('\n') : '所有图库已是最新'}`)
@@ -159,8 +181,10 @@ export class Update extends plugin {
 
   // ========== 手动更新命令（全异步） ==========
 
-  /** #更新第三方图库 [图库名] — pull 第三方仓库（可指定单个）后复制新图到主图库 */
+  /** #更新第三方图库 [图库名] — pull 第三方仓库（可指定单个），不复制图片 */
   async updateThirdParty(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const match = e.msg.match(/^#更新第三方图库(?:\s+(.+))?$/)
     const arg = match?.[1]?.trim() || ''
 
@@ -192,21 +216,19 @@ export class Update extends plugin {
       }
 
       try {
-        const result = await fastForwardPullAsync(tp.dir)
-        const sync = syncThirdPartyRepo(tp, tp.idx)
-        results.push(`图库「${tp.name}」：${result.msg}（复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}）`)
+        const result = await fastForwardPullAsync(tp.dir, getRepoBranch(tp.dir))
+        results.push(`图库「${tp.name}」：${result.msg}`)
       } catch (err) {
         results.push(`图库「${tp.name}」：更新失败 - ${err.message}`)
       } finally {
         lock.release()
       }
     }
-    return e.reply('[面板图图库管理器] 第三方图库更新\n' + results.join('\n'))
+    return e.reply('[面板图图库管理器] 第三方图库更新\n' + results.join('\n') + this._syncSources())
   }
 
   async updateMain(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) return e.reply(jCheck.msg)
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
 
     const repos = this._getActiveRepos()
     const total = repos.length
@@ -230,8 +252,8 @@ export class Update extends plugin {
       }
 
       try {
-        const result = await fastForwardPullAsync(repoDir)
-        this._syncAfterRepoUpdate(repo.id)
+        const result = await fastForwardPullAsync(repoDir, getRepoBranch(repoDir))
+        this._recordRepoVersion(repo.id)
         completed++
         results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
         if (total > 1) {
@@ -241,12 +263,11 @@ export class Update extends plugin {
         lock.release()
       }
     }
-    return e.reply('[面板图图库管理器] 主图库更新\n' + results.join('\n'))
+    return e.reply('[面板图图库管理器] 主图库更新\n' + results.join('\n') + this._syncSources())
   }
 
   async forceUpdateMain(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) return e.reply(jCheck.msg)
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
 
     const repos = this._getActiveRepos()
     const total = repos.length
@@ -270,8 +291,8 @@ export class Update extends plugin {
       }
 
       try {
-        await forceResetAsync(repoDir)
-        this._syncAfterRepoUpdate(repo.id)
+        await forceResetAsync(repoDir, getRepoBranch(repoDir))
+        this._recordRepoVersion(repo.id)
         completed++
         results.push(`仓库${repo.id}：强制更新成功`)
       } catch (err) {
@@ -284,10 +305,12 @@ export class Update extends plugin {
         e.reply(`[面板图图库管理器] 强制更新进度：${completed}/${total}\n仓库${repo.id}：${results[results.length - 1]}`)
       }
     }
-    return e.reply('[面板图图库管理器] 主图库强制更新\n' + results.join('\n'))
+    return e.reply('[面板图图库管理器] 主图库强制更新\n' + results.join('\n') + this._syncSources())
   }
 
   async updateBlocked(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const check = checkBlockedGallery()
     if (!check.ok) return e.reply(check.msg)
 
@@ -296,7 +319,7 @@ export class Update extends plugin {
 
     try {
       e.reply('[面板图图库管理器] 开始更新屏蔽图库...')
-      const result = await fastForwardPullAsync(BLOCKED_REPO_DIR)
+      const result = await fastForwardPullAsync(BLOCKED_REPO_DIR, getRepoBranch(BLOCKED_REPO_DIR))
       return e.reply('[面板图图库管理器] 屏蔽图库更新\n' + result.msg)
     } catch (err) {
       return e.reply('[面板图图库管理器] 屏蔽图库更新失败\n' + err.message)
@@ -306,6 +329,8 @@ export class Update extends plugin {
   }
 
   async forceUpdateBlocked(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const check = checkBlockedGallery()
     if (!check.ok) return e.reply(check.msg)
 
@@ -314,7 +339,7 @@ export class Update extends plugin {
 
     try {
       e.reply('[面板图图库管理器] 开始强制更新屏蔽图库...')
-      await forceResetAsync(BLOCKED_REPO_DIR)
+      await forceResetAsync(BLOCKED_REPO_DIR, getRepoBranch(BLOCKED_REPO_DIR))
       return e.reply('[面板图图库管理器] 屏蔽图库强制更新成功')
     } catch (err) {
       return e.reply('[面板图图库管理器] 屏蔽图库强制更新失败\n' + err.message)

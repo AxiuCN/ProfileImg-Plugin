@@ -3,7 +3,7 @@
 # ==============================================================
 gallery:
   # ---------- 统一自动更新 ----------
-  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 图库源同步顺序执行
   autoUpdate:
     enabled: true
     cron: "0 30 5 * * *"
@@ -17,8 +17,8 @@ gallery:
       remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg.git"
       autoUpdate: true
 
-  # ---------- default 图库 ----------
-  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default
+  # ---------- 默认图库 ----------
+  # 主人手动上传面板图的存放目录名（位于 gallery/ProfileImg/ 下），留空则写入默认图库
   # 实际路径：plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/<目录名>
   defaultDir: ""
 
@@ -28,13 +28,8 @@ gallery:
     remoteUrl: "https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git"
 
   # ---------- 第三方图库自动更新 ----------
-  # 检测到第三方图库新版本时自动 pull 并复制新图到主图库
+  # 检测到第三方图库新版本时自动 pull（第三方仓库作为只读图库源，不再复制）
   thirdPartyUpdate:
-    enabled: true
-
-  # ---------- 刷新副本 ----------
-  # 自动更新后执行 #刷新图库副本（角色级 junction + default/第三方副本）
-  refreshCopies:
     enabled: true
 
 # ---------- 上传压缩设置 ----------

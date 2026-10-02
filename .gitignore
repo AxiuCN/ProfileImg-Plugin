@@ -23,6 +23,13 @@ Thumbs.db
 # 运行时锁文件
 data/
 
+# 回归套件临时产物
+test/.test-tmp/
+
 # Claude Code 工作区
 .claude/
 CLAUDE.md
+
+# Deepseek Harness 工作区
+.dsh/
+AGENTS.md

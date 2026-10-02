@@ -1,11 +1,23 @@
 import fs from 'node:fs'
-import { checkRepo, checkBlockedGallery, checkProfileJunction } from '../model/gallery.js'
-import { formatSize, getDirSize, countImages } from '../components/format.js'
+import path from 'node:path'
+import { checkBlockedGallery } from '../model/gallery.js'
+import { formatSize, getDirSize } from '../components/format.js'
 import { getLocalVersionAt } from '../model/version.js'
 import { getBlockedInfo } from '../model/blockedInfo.js'
-import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
-import { getActiveRepoIds, getCharsInRepo } from '../model/mapJson.js'
+import { countSourceImages, getSources } from '../model/galleryIndex.js'
+import { BLOCKED_REPO_DIR } from '../components/constants.js'
+import { guardLayout } from '../model/layoutGuard.js'
 
+/** 源类型显示名 */
+const KIND_LABEL = { default: '默认图库', main: '主仓库', thirdParty: '第三方图库' }
+
+/**
+ * 图库状态（多图库源布局）
+ *
+ * 面板图由「默认图库 + 各主仓库 + 可直读的第三方仓库」多源提供：
+ * 统计取 countSourceImages()（各源角色数 / 图片数）与 getBlockedInfo()（屏蔽图库），
+ * 展示每个源的规模与路径；不再有 junction / 副本概念。
+ */
 export class Status extends plugin {
   constructor() {
     super({
@@ -21,68 +33,81 @@ export class Status extends plugin {
     })
   }
 
-  /** 统计单个仓库的 info */
-  _getRepoStats(repoDir) {
-    const normalDir = `${repoDir}/normal-character`
-    if (!fs.existsSync(normalDir)) {
-      return { charCount: 0, imageCount: 0, totalSize: 0 }
+  /**
+   * 统计单个源的图片体积
+   * 分层源统计 normal/super-character；平铺源逐个子目录累计并跳过 .git 等版本目录
+   * @param {object} source - getSources 元素
+   * @returns {number} 字节数
+   */
+  _sourceSize(source) {
+    if (source.level === 'flat') {
+      let size = 0
+      let entries = []
+      try {
+        entries = fs.readdirSync(source.dir, { withFileTypes: true })
+      } catch {
+        return 0
+      }
+      for (const e of entries) {
+        if (e.name === '.git') continue
+        const p = path.join(source.dir, e.name)
+        if (e.isDirectory()) size += getDirSize(p)
+        else if (e.isFile()) size += fs.statSync(p).size
+      }
+      return size
     }
-    const charCount = fs.readdirSync(normalDir, { withFileTypes: true })
-      .filter(f => f.isDirectory()).length
-    const imageCount = countImages(normalDir)
-    const totalSize = getDirSize(normalDir)
-    return { charCount, imageCount, totalSize }
+    let size = 0
+    for (const type of ['normal-character', 'super-character']) {
+      const d = path.join(source.dir, type)
+      if (fs.existsSync(d)) size += getDirSize(d)
+    }
+    return size
   }
 
-  /** 统计 super-character */
-  _getSuperStats(repoDir) {
-    const superDir = `${repoDir}/super-character`
-    if (!fs.existsSync(superDir)) return { charCount: 0, imageCount: 0 }
-    const charCount = fs.readdirSync(superDir, { withFileTypes: true })
-      .filter(f => f.isDirectory()).length
-    const imageCount = countImages(superDir)
-    return { charCount, imageCount }
+  /**
+   * 生成单个源的展示行（规模 + 目录名）
+   * 状态命令对所有人生效，只展示仓库目录名，不回显服务器绝对路径
+   * @param {object} source - getSources 元素
+   * @param {{ roles: number, images: number }} stat - countSourceImages 元素
+   * @param {number} size - 源图片体积（字节）
+   * @returns {string}
+   */
+  _sourceLine(source, stat, size) {
+    const kind = KIND_LABEL[source.kind] || source.kind
+    return `  ${source.label}（${kind}）：${stat.roles} 角色 / ${stat.images} 图片 / ${formatSize(size)}\n` +
+      `    目录：${path.basename(source.dir)}\n`
   }
 
+  /** #主图库状态 — 各主仓库的规模与版本 */
   async status(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) return e.reply(jCheck.msg)
+    if (!(await guardLayout(e))) return true
+
+    const statByDir = new Map(countSourceImages().map(s => [s.dir, s]))
+    const mains = getSources().filter(s => s.kind === 'main')
+    if (mains.length === 0) {
+      return e.reply('[面板图图库管理器] 未找到主图库仓库，请发送 #下载主图库')
+    }
 
     let msg = '[面板图图库管理器] 主图库\n'
-    const repoIds = getActiveRepoIds()
-    let totalChars = 0, totalImgs = 0, totalSize = 0
-
-    for (const repoId of repoIds) {
-      const repoDir = getRepoDir(repoId)
-      const repoName = getRepoConfig(repoId).name || `仓库${repoId}`
-      const check = checkRepo(repoDir)
-      if (!check.ok) {
-        msg += `\n仓库${repoName}：${check.msg}\n`
-        continue
-      }
-      const stats = this._getRepoStats(repoDir)
-      const superStats = this._getSuperStats(repoDir)
-      const charCount = getCharsInRepo(repoId).length || stats.charCount
-      const ver = getLocalVersionAt(repoDir)
-
-      msg += `\n仓库${repoName}：\n`
-      msg += `  角色数：${charCount}（普通${stats.charCount} / 彩蛋${superStats.charCount}）\n`
-      msg += `  图片数：${stats.imageCount + superStats.imageCount}\n`
-      msg += `  大小：${formatSize(stats.totalSize)}\n`
-      msg += ver ? `  版本：${ver.sha} / ${ver.date}\n` : '  版本：未知\n'
-
-      totalChars += charCount
-      totalImgs += stats.imageCount + superStats.imageCount
-      totalSize += stats.totalSize
+    let totalRoles = 0, totalImages = 0
+    for (const source of mains) {
+      const stat = statByDir.get(source.dir) || { roles: 0, images: 0 }
+      msg += '\n' + this._sourceLine(source, stat, this._sourceSize(source))
+      const ver = getLocalVersionAt(source.dir)
+      msg += ver ? `    版本：${ver.sha} / ${ver.date}\n` : '    版本：未知\n'
+      totalRoles += stat.roles
+      totalImages += stat.images
     }
-
-    if (repoIds.length > 1) {
-      msg += `\n合计：${totalChars}角色 / ${totalImgs}图片 / ${formatSize(totalSize)}\n`
+    if (mains.length > 1) {
+      msg += `\n合计：${totalRoles} 角色 / ${totalImages} 图片\n`
     }
     return e.reply(msg)
   }
 
+  /** #屏蔽图库状态 — 屏蔽图库规模与版本 */
   async blockedStatus(e) {
+    if (!(await guardLayout(e))) return true
+
     const check = checkBlockedGallery()
     if (!check.ok) return e.reply(check.msg)
     const { charCount, totalSize, imageCount } = getBlockedInfo()
@@ -100,42 +125,33 @@ export class Status extends plugin {
     return e.reply(msg)
   }
 
+  /** #图库状态 — 全部图库源总览 + 屏蔽图库 */
   async overallStatus(e) {
-    let msg = '[面板图图库管理器] 总览\n'
+    if (!(await guardLayout(e))) return true
 
-    // 主图库
-    const jCheck = checkProfileJunction()
-    if (jCheck.ok) {
-      const repoIds = getActiveRepoIds()
-      let totalChars = 0, totalImgs = 0, totalSize = 0
-      for (const repoId of repoIds) {
-        const repoDir = getRepoDir(repoId)
-        const check = checkRepo(repoDir)
-        if (!check.ok) continue
-        const stats = this._getRepoStats(repoDir)
-        const superStats = this._getSuperStats(repoDir)
-        totalChars += getCharsInRepo(repoId).length || stats.charCount
-        totalImgs += stats.imageCount + superStats.imageCount
-        totalSize += stats.totalSize
-      }
-      msg += '\n主图库：\n'
-      msg += `  仓库数：${repoIds.length}\n`
-      msg += '  角色数：' + totalChars + '\n'
-      msg += '  图片数：' + totalImgs + '\n'
-      msg += '  大小：' + formatSize(totalSize) + '\n'
-    } else {
-      msg += '\n主图库：未初始化\n'
+    const statByDir = new Map(countSourceImages().map(s => [s.dir, s]))
+    const sources = getSources()
+    let msg = `[面板图图库管理器] 总览（图库源 ${sources.length} 个）\n`
+    let totalRoles = 0, totalImages = 0, totalSize = 0
+    for (const source of sources) {
+      const stat = statByDir.get(source.dir) || { roles: 0, images: 0 }
+      const size = this._sourceSize(source)
+      msg += '\n' + this._sourceLine(source, stat, size)
+      totalRoles += stat.roles
+      totalImages += stat.images
+      totalSize += size
     }
+    msg += `\n合计：${totalRoles} 角色 / ${totalImages} 图片 / ${formatSize(totalSize)}\n`
 
     // 屏蔽图库
     const blockedCheck = checkBlockedGallery()
     if (blockedCheck.ok) {
-      const { charCount, totalSize, imageCount } = getBlockedInfo()
+      const { charCount, totalSize: blockedSize, imageCount } = getBlockedInfo()
       const blockedVer = getLocalVersionAt(BLOCKED_REPO_DIR)
       msg += '\n屏蔽图库：\n'
       msg += '  屏蔽角色数：' + charCount + '\n'
       msg += '  屏蔽图片数：' + imageCount + '\n'
-      msg += '  大小：' + formatSize(totalSize) + '\n'
+      msg += '  大小：' + formatSize(blockedSize) + '\n'
       msg += blockedVer ? '  版本：' + blockedVer.sha + '\n' : '  版本：未知\n'
     } else {
       msg += '\n屏蔽图库：未安装\n'

@@ -94,6 +94,27 @@ export function gitExec(gitDir, command, timeout = 10000) {
 }
 
 /**
+ * 探测本地仓库的默认分支（origin/HEAD → 符号引用 HEAD → 'main'）
+ * 已 clone 的仓库由 origin/HEAD 给出远程默认分支；未 clone 完成 / 空仓库时
+ * 用 symbolic-ref 读符号引用（不要求存在 commit）；异常时回退 'main'，
+ * 供 pull / fetch / reset 使用，避免硬编码 main 导致 master 仓库更新失败
+ * @param {string} gitDir - Git 仓库目录
+ * @returns {string} 分支名
+ */
+export function getRepoBranch(gitDir) {
+  try {
+    const out = gitExec(gitDir, 'symbolic-ref --short refs/remotes/origin/HEAD', 10000)
+    const m = out.match(/^origin\/(.+)$/)
+    if (m) return m[1]
+  } catch { /* 回退下一级 */ }
+  try {
+    const out = gitExec(gitDir, 'symbolic-ref --short HEAD', 10000)
+    if (out && out !== 'HEAD') return out
+  } catch { /* 回退默认值 */ }
+  return 'main'
+}
+
+/**
  * 在指定目录执行 Git 命令（异步），不阻塞 Bot 主线程
  * timeout=0 时不设超时（用于长时间下载）
  * @param {string} gitDir - Git 仓库目录

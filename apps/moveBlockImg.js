@@ -1,19 +1,21 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getBlockedDir, getBlockedAggregated, getRoleFiles } from '../model/blockedInfo.js'
+import { getBlockedDir, getBlockedAggregated } from '../model/blockedInfo.js'
 import { resolveRoleName } from '../modules/alias.js'
-import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
+import { findImageByN, findBlockedByN } from '../model/galleryIndex.js'
+import { resolveNRange, escapeRegExp, resolveGalleryKey } from '../components/panelUtils.js'
 import { getRepoForChar } from '../model/mapJson.js'
 import { getRepoDir } from '../components/constants.js'
-import { resolveGalleryKey } from '../components/panelUtils.js'
 import { isManager, canAccessGallery } from '../components/config.js'
+import { guardLayout } from '../model/layoutGuard.js'
 
 /**
- * 屏蔽/启用面板图
+ * 屏蔽/启用面板图（多图库源布局）
  *
- * 分两类屏蔽（按 n 段位）：
- *   main(1~9999)      → 源文件移入 blocked-character（可 push），按空位重排 n
- *   default/第三方     → 主仓库副本改 .bak（隐藏）
+ * 段位决定屏蔽方式：
+ *   main(1~9999)         → 源文件移入 blocked-character 屏蔽图库（可 push），按空位重排 n
+ *   default(10001~99999) → 默认图库内文件改 .bak（miao 只认 4 种后缀，天然不可见）
+ * 第三方图库源不参与段位寻址，需在源仓库中自行管理
  */
 export class MoveBlockImg extends plugin {
   constructor() {
@@ -29,7 +31,8 @@ export class MoveBlockImg extends plugin {
     })
   }
 
-  async blockImg(e) {
+  async blockImg (e) {
+    if (!(await guardLayout(e))) return true
     // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
     if (!isManager(e)) {
       return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
@@ -37,14 +40,15 @@ export class MoveBlockImg extends plugin {
     const rawMsg = e.msg.replace(/^#/, '')
     const match = rawMsg.match(/^屏蔽(.+)面板图\s*(\d*)$/)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #屏蔽角色名面板图 序号')
-    let roleName = match[1].trim()
-    roleName = resolveRoleName(roleName)
+    const roleName = resolveRoleName(match[1].trim())
     const n = parseInt(match[2]) || 1
 
-    const files = getRoleFiles(roleName, 'normal')
-    const target = files.find(f => f.displayN === n)
+    const target = findImageByN(roleName, 'normal', n)
     if (!target) {
-      return e.reply(`[面板图图库管理器]\n序号无效，角色${roleName}没有第${n}张图`)
+      return e.reply([
+        `[面板图图库管理器]\n序号无效：角色${roleName}没有第${n}张图\n`,
+        '（第三方图库的图片不参与序号，请在源仓库中管理）'
+      ].join(''))
     }
 
     // 成员图库边界：目标图所属图库须被允许
@@ -59,16 +63,56 @@ export class MoveBlockImg extends plugin {
     if (source === 'main') {
       return this._blockMain(e, roleName, target)
     }
-    if (source === 'unknown') {
-      return e.reply('[面板图图库管理器]\n该文件不符合命名规范，无法屏蔽')
+    if (source === 'default') {
+      // 默认图库：源文件改 .bak
+      fs.renameSync(target.filePath, target.filePath + '.bak')
+      return e.reply(`[面板图图库管理器]\n已屏蔽默认图库中${roleName}第${n}张图(${target.name})`)
     }
-    // default / 第三方：主仓库副本改 .bak
-    fs.renameSync(target.filePath, target.filePath + '.bak')
-    return e.reply(`[面板图图库管理器]\n已屏蔽${roleName}第${n}张图(${target.name})`)
+    return e.reply('[面板图图库管理器]\n该文件不符合命名规范，无法屏蔽')
+  }
+
+  async unblockImg (e) {
+    if (!(await guardLayout(e))) return true
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
+    const rawMsg = e.msg.replace(/^#/, '')
+    const match = rawMsg.match(/^启用(.+?)(屏蔽)?面板图\s*(\d*)$/)
+    if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
+    const roleName = resolveRoleName(match[1].trim())
+    const n = parseInt(match[3]) || 1
+
+    // ① 默认图库内的 .bak（段位 10001+ 保留原序号）
+    const bakFile = findBlockedByN(roleName, 'normal', n)
+    if (bakFile) {
+      if (!e.isMaster) {
+        const gkey = resolveGalleryKey(bakFile.baseName, roleName, n)
+        if (!gkey || !canAccessGallery(e.user_id, gkey)) {
+          return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
+        }
+      }
+      fs.renameSync(bakFile.filePath, bakFile.filePath.slice(0, -4))
+      return e.reply(`[面板图图库管理器]\n已恢复${roleName}第${n}张图(${bakFile.baseName})`)
+    }
+
+    // ② 屏蔽图库（主图库移入的图，displayN 为屏蔽图库内重排序号）
+    const blockedList = getBlockedAggregated(roleName)
+    const target = blockedList.find(item => item.displayN === n)
+    if (!target) {
+      return e.reply(`[面板图图库管理器]\n序号无效：当前有 ${blockedList.length} 张屏蔽面板图（第三方图库的图片不参与序号）`)
+    }
+    if (!e.isMaster) {
+      const gkey = resolveGalleryKey(target.name, roleName, n)
+      if (!gkey || !canAccessGallery(e.user_id, gkey)) {
+        return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
+      }
+    }
+    return this._unblockMain(e, roleName, target)
   }
 
   /** 主图库屏蔽：移入 blocked-character，按空位重排 n */
-  _blockMain(e, roleName, target) {
+  _blockMain (e, roleName, target) {
     const blockedDir = getBlockedDir(roleName)
     if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true })
 
@@ -81,43 +125,8 @@ export class MoveBlockImg extends plugin {
     return e.reply(`[面板图图库管理器]\n已将${roleName}的第${target.displayN}张图移入屏蔽图库(${newName})`)
   }
 
-  async unblockImg(e) {
-    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
-    if (!isManager(e)) {
-      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
-    }
-    const rawMsg = e.msg.replace(/^#/, '')
-    const match = rawMsg.match(/^启用(.+?)(屏蔽)?面板图\s*(\d*)$/)
-    if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
-    let roleName = match[1].trim()
-    roleName = resolveRoleName(roleName)
-    const n = parseInt(match[3]) || 1
-
-    // 与屏蔽列表 getBlockedAggregated 的 displayN 对应
-    const blockedList = getBlockedAggregated(roleName)
-    const target = blockedList.find(item => item.displayN === n)
-    if (!target) {
-      return e.reply(`[面板图图库管理器]\n序号无效，当前有${blockedList.length}张屏蔽面板图`)
-    }
-
-    // 成员图库边界：目标图所属图库须被允许
-    if (!e.isMaster) {
-      const gkey = resolveGalleryKey(target.name, roleName, n)
-      if (!gkey || !canAccessGallery(e.user_id, gkey)) {
-        return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
-      }
-    }
-
-    if (target.isBak) {
-      // default / 第三方：.bak 去后缀
-      fs.renameSync(target.filePath, target.filePath.slice(0, -4))
-      return e.reply(`[面板图图库管理器]\n已恢复${roleName}第${n}张隐藏图(${target.name})`)
-    }
-    return this._unblockMain(e, roleName, target)
-  }
-
   /** 主图库启用：从 blocked-character 移回主图库，按空位重排 n */
-  _unblockMain(e, roleName, target) {
+  _unblockMain (e, roleName, target) {
     const blockedDir = getBlockedDir(roleName)
     if (!fs.existsSync(blockedDir)) return e.reply(`[面板图图库管理器]\n角色${roleName}暂无屏蔽面板图`)
 
@@ -142,7 +151,7 @@ export class MoveBlockImg extends plugin {
    * @param {string} roleName
    * @returns {string}
    */
-  _extractSuffix(filename, roleName) {
+  _extractSuffix (filename, roleName) {
     const esc = escapeRegExp(roleName)
     const m = filename.match(new RegExp(`^${esc}_(\\d+)`))
     if (m) return filename.slice(m[0].length)
@@ -155,7 +164,7 @@ export class MoveBlockImg extends plugin {
    * @param {string} roleName - 角色名
    * @returns {number}
    */
-  _findFirstGap(dir, roleName) {
+  _findFirstGap (dir, roleName) {
     if (!fs.existsSync(dir)) return 1
     const files = fs.readdirSync(dir)
       .filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))

@@ -10,14 +10,17 @@ const _cwd = process.cwd()
 /** 图库根目录：ProfileImg-Plugin/resources/gallery/ */
 export const GALLERY_ROOT = path.join(_cwd, 'plugins/ProfileImg-Plugin/resources/gallery')
 
-/** Profile 聚合目录（junction 目标，miao-plugin 通过 junction 读取） */
+/** 旧聚合目录（junction 时代：角色级 junction 的宿主，迁移后仅用于清理与 blocked 屏蔽图库） */
 export const PROFILE_DIR = path.join(GALLERY_ROOT, 'profile')
 
-/** miao-plugin 侧的 junction 链接路径 */
+/** 默认图库目录（miao-plugin/resources/profile）：miao 的唯一可写位置，源列表中的 'profile' */
 export const MIAO_PROFILE_LINK = path.join(_cwd, 'plugins/miao-plugin/resources/profile')
 
 /** 面板图仓库目录：gallery/ProfileImg/ */
 export const PROFILE_IMG_DIR = path.join(GALLERY_ROOT, 'ProfileImg')
+
+/** 旧 default 图库源目录（junction 时代布局，迁移时搬迁用） */
+export const LEGACY_DEFAULT_DIR = path.join(PROFILE_IMG_DIR, 'default')
 
 /** 备份目录 */
 export const BACKUP_DIR = path.join(GALLERY_ROOT, 'backup')

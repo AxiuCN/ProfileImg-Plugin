@@ -1,14 +1,14 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { getGalleryConfig, getPluginConfig } from '../components/config.js'
-import { PROFILE_IMG_DIR } from '../components/constants.js'
+import { PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from '../components/constants.js'
 
 /**
  * 图库配置（config/gallery_config.yaml）读取工具
  *
- * 负责 default 图库路径与第三方图库列表的解析。
- * 第三方仓库目录结构各异，通过 normalPath / superPath 指定角色目录位置。
- * 第三方仓库目录固定位于 PROFILE_IMG_DIR（gallery/ProfileImg/）下。
+ * 负责默认图库路径与第三方图库列表的解析。
+ * 第三方仓库目录固定位于 PROFILE_IMG_DIR（gallery/ProfileImg/）下，
+ * 迁移到多图库源布局后由 srcProbe 探测结构并注册为 miao 图库源。
  */
 
 /** 将配置中的目录名解析为绝对路径（第三方仓库固定位于 PROFILE_IMG_DIR 下） */
@@ -18,13 +18,13 @@ function resolveDir(dir) {
 }
 
 /**
- * 获取 default 图库源目录（固定，不随配置变化）
- * default 图库（段位 10001~99999）的源固定位于 gallery/ProfileImg/default，
- * 与 gallery.defaultDir（手动上传存放目录）完全解耦
+ * 获取默认图库目录（固定，不随配置变化）
+ * 多图库源布局下，默认图库即 miao-plugin/resources/profile（miao 的唯一可写位置，
+ * 源列表中的 'profile'），文件名使用 default 段位（10001~99999）
  * @returns {string} 绝对路径
  */
 export function getDefaultDir() {
-  return path.join(PROFILE_IMG_DIR, 'default')
+  return MIAO_PROFILE_LINK
 }
 
 /**

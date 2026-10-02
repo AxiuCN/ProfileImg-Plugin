@@ -8,27 +8,26 @@ export const helpList = [
     group: '图库初始化（仅主人）',
     auth: 'master',
     list: [
-      { icon: 87, title: '#图库初始化', desc: '初始化图库（创建 junction + 角色级 junction）' },
-      { icon: 88, title: '#备份图库', desc: '备份旧 miao-plugin/resources/profile 数据' },
-      { icon: 89, title: '#迁移图库', desc: '将备份数据迁入 default 图库并复制到主图库' }
+      { icon: 87, title: '#图库初始化', desc: '初始化多图库源布局（生成 miao config/profile.js 并注册图库源）' },
+      { icon: 89, title: '#迁移图库', desc: '旧版图库布局升级到多图库源布局（完成后需重启 Yunzai）' }
     ]
   },
   {
     group: '图库下载（仅主人）',
     auth: 'master',
     list: [
-      { icon: 87, title: '#下载主图库', desc: '克隆主图库并确保角色级 junction' },
+      { icon: 87, title: '#下载主图库', desc: '克隆主图库并注册为图库源' },
       { icon: 88, title: '#强制下载主图库', desc: '删除现有仓库后重新克隆主图库' },
       { icon: 87, title: '#下载屏蔽图库', desc: '克隆屏蔽图库' },
       { icon: 88, title: '#强制下载屏蔽图库', desc: '删除现有仓库后重新克隆屏蔽图库' },
-      { icon: 89, title: '#下载第三方图库 <URL>', desc: '克隆第三方图库并注册到配置' }
+      { icon: 89, title: '#下载第三方图库 <URL>', desc: '克隆第三方图库，自动探测目录结构并注册为图库源' }
     ]
   },
   {
     group: '图库状态',
     list: [
-      { icon: 80, title: '#图库状态', desc: '查看主图库与屏蔽图库总览' },
-      { icon: 80, title: '#主图库状态', desc: '查看主图库各仓库详细信息' },
+      { icon: 80, title: '#图库状态', desc: '查看全部图库源与屏蔽图库总览' },
+      { icon: 80, title: '#主图库状态', desc: '查看各主仓库的规模与路径' },
       { icon: 80, title: '#屏蔽图库状态', desc: '查看屏蔽图库详细信息' }
     ]
   },
@@ -40,9 +39,8 @@ export const helpList = [
       { icon: 88, title: '#主图库强制更新', desc: '强制同步所有主图库仓库' },
       { icon: 87, title: '#屏蔽图库更新', desc: '拉取屏蔽图库最新版本' },
       { icon: 88, title: '#屏蔽图库强制更新', desc: '强制同步屏蔽图库' },
-      { icon: 87, title: '#更新第三方图库 [图库名]', desc: '更新第三方图库并复制新图到主图库' },
-      { icon: 88, title: '#删除第三方图库 <图库名>', desc: '删除第三方图库（清理副本 + 移除配置）' },
-      { icon: 87, title: '#刷新图库副本 [default/图库名]', desc: '修复角色级 junction + default/第三方副本遗漏' }
+      { icon: 87, title: '#更新第三方图库 [图库名]', desc: '拉取第三方图库最新版本（不复制图片）' },
+      { icon: 88, title: '#删除第三方图库 <图库名>', desc: '删除第三方图库（移除配置与仓库目录）' }
     ]
   },
   {

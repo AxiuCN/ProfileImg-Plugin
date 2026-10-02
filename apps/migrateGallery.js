@@ -1,26 +1,20 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { BACKUP_DIR } from '../components/constants.js'
-import { checkProfileJunction } from '../model/gallery.js'
-import { notifyMaster } from '../components/notify.js'
-import { parseFilename } from '../components/panelUtils.js'
-import { getDefaultDir } from '../model/galleryConfig.js'
-import { copyDefaultToMain } from '../model/copier.js'
-
-const IMG_RE = /\.(webp|png|jpg|jpeg|gif)$/i
+import { precheckMultiSrc, migrateToMultiSrc } from '../model/migrateMultiSrc.js'
 
 /**
- * #迁移图库 — 将 backup 中的旧图库数据迁入 default 图库，再复制到主图库
- * 前置条件：图库已初始化，backup 目录存在，已配置 default 图库
+ * #迁移图库 — 升级到 miao 多图库源布局（自定义图库路径）
  *
- * 迁移目标：default 图库（普通目录）→ 复制到主仓库（本地默认图库前缀）
- * 不再创建 Profile-old 目录
+ * 两步交互：
+ * 1. 预检报告（只读）：当前布局、default 存量、主仓库副本构成、第三方可直读情况、将执行的动作
+ * 2. 发送 #确认 后执行迁移（一次切换），完成后必须重启 Yunzai
+ *
+ * 确认机制沿用框架内置 setContext（同 #图库初始化）。
+ * 旧功能（backup → default → 主仓库）已随多图库源布局退役。
  */
 export class MigrateGallery extends plugin {
   constructor() {
     super({
       name: '[面板图图库管理器]迁移',
-      dsc: '将备份图库迁移到 default 图库并复制到主图库',
+      dsc: '迁移到 miao 多图库源布局（自定义图库路径）',
       event: 'message',
       priority: 5,
       rule: [
@@ -29,138 +23,105 @@ export class MigrateGallery extends plugin {
     })
   }
 
-  async migrate(e) {
-    // 检查前置条件
-    const backupProfile = path.join(BACKUP_DIR, 'profile')
-    if (!fs.existsSync(backupProfile)) {
-      return e.reply('[面板图图库管理器] 没有找到备份数据，请先执行 #备份图库。')
+  /** 第一步：预检并提示确认 */
+  async migrate (e) {
+    if (!e) return // 避免与 loader 生命周期 init 冲突（加载时无参调用）
+    const pre = precheckMultiSrc()
+    if (!pre.supported) {
+      return e.reply([
+        '[面板图图库管理器] 无法迁移\n',
+        'miao-plugin 不支持多图库源（profileImgSrc），请先升级 miao-plugin 到 2.5.20 及以上。'
+      ].join(''))
+    }
+    if (pre.state === 'ready') {
+      return e.reply('[面板图图库管理器] 当前已是多图库源布局，无需迁移。')
+    }
+    if (pre.state === 'fresh') {
+      return e.reply([
+        '[面板图图库管理器] 当前没有可迁移的旧图库布局。\n',
+        '新装用户请发送 #图库初始化 完成初始化。'
+      ].join(''))
     }
 
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) {
-      return e.reply(jCheck.msg)
+    this.setContext('confirmMigrate')
+    return e.reply(this._formatPrecheck(pre))
+  }
+
+  /** 由 setContext 在用户确认后自动调用 */
+  async confirmMigrate () {
+    const msg = this.e?.msg?.replace(/^#/, '') || ''
+    if (msg.startsWith('取消')) {
+      this.finish('confirmMigrate')
+      return this.e.reply('[面板图图库管理器] 多图库源迁移已取消')
     }
-
-    const defaultDir = getDefaultDir()
-    if (!defaultDir) {
-      return e.reply('[面板图图库管理器] default 图库不可用，无法迁移。')
+    if (!msg.startsWith('确认')) {
+      // 不匹配确认/取消时放行，不阻塞其他插件
+      return 'continue'
     }
+    this.finish('confirmMigrate')
+    const e = this.e
+    await e.reply('[面板图图库管理器] 开始迁移，请稍候（期间请勿操作图库）...')
 
-    // 先发送"开始"提示，避免同步复制阻塞事件循环导致消息延迟到完成后才送达
-    await e.reply('[面板图图库管理器] 开始迁移图库，请稍候...')
+    const report = migrateToMultiSrc()
+    return e.reply(this._formatReport(report))
+  }
 
-    try {
-      let migratedChars = 0
-      let migratedImgs = 0
-      let renamedImgs = 0
-      let copiedToMain = 0
-
-      const types = ['normal-character', 'super-character']
-
-      // ========== 第一阶段：复制 backup → default 图库 ==========
-      for (const type of types) {
-        const backupTypeDir = path.join(backupProfile, type)
-        if (!fs.existsSync(backupTypeDir)) continue
-
-        const chars = fs.readdirSync(backupTypeDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-
-        for (const charDir of chars) {
-          const charName = charDir.name
-          const targetDir = path.join(defaultDir, type, charName)
-          const sourceDir = path.join(backupTypeDir, charName)
-
-          if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true })
-          }
-
-          const files = fs.readdirSync(sourceDir, { withFileTypes: true })
-            .filter(f => f.isFile() && IMG_RE.test(f.name))
-
-          for (const file of files) {
-            const src = path.join(sourceDir, file.name)
-            const dest = path.join(targetDir, file.name)
-            if (!fs.existsSync(dest)) {
-              fs.copyFileSync(src, dest)
-              migratedImgs++
-            }
-          }
-          migratedChars++
-        }
+  /** 预检报告文本 */
+  _formatPrecheck (pre) {
+    const lines = ['[面板图图库管理器] 多图库源迁移预检', '']
+    lines.push(`当前布局：${pre.state === 'legacy' ? '旧版 junction 布局（需迁移）' : '未初始化'}`)
+    lines.push(`默认图库存量：${pre.defaultStat.normal.roles + pre.defaultStat.super.roles} 个角色 / ${pre.defaultStat.normal.images + pre.defaultStat.super.images} 张图`)
+    for (const repo of pre.repos) {
+      if (!repo.exists) {
+        lines.push(`仓库 ${repo.id}：目录不存在（跳过）`)
+        continue
       }
-
-      // ========== 第二阶段：default 图库内重命名非标准文件为 角色_n.ext ==========
-      for (const type of types) {
-        const defaultTypeDir = path.join(defaultDir, type)
-        if (!fs.existsSync(defaultTypeDir)) continue
-
-        const chars = fs.readdirSync(defaultTypeDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-
-        for (const charDir of chars) {
-          const charName = charDir.name
-          const targetDir = path.join(defaultTypeDir, charName)
-          if (!fs.existsSync(targetDir)) continue
-
-          const imgNames = fs.readdirSync(targetDir).filter(f => IMG_RE.test(f))
-
-          let maxSeq = 0
-          for (const fname of imgNames) {
-            const parsed = parseFilename(fname, charName)
-            if (parsed.isStandard && parsed.seq > maxSeq) maxSeq = parsed.seq
-          }
-
-          let nextSeq = maxSeq + 1
-          for (const fname of imgNames) {
-            const parsed = parseFilename(fname, charName)
-            // 标准命名（含版权/无版权）保留原名
-            if (parsed.isStandard) continue
-
-            const ext = path.extname(fname)
-            let newName = `${charName}_${nextSeq}${ext}`
-            let counter = 1
-            while (fs.existsSync(path.join(targetDir, newName))) {
-              newName = `${charName}_${nextSeq}_${counter}${ext}`
-              counter++
-            }
-            if (fname !== newName) {
-              fs.renameSync(path.join(targetDir, fname), path.join(targetDir, newName))
-              renamedImgs++
-            }
-            nextSeq++
-          }
-        }
-      }
-
-      // ========== 第三阶段：复制 default → 主仓库（本地默认图库前缀） ==========
-      for (const type of ['normal', 'super']) {
-        const defaultTypeDir = path.join(defaultDir, `${type}-character`)
-        if (!fs.existsSync(defaultTypeDir)) continue
-
-        const chars = fs.readdirSync(defaultTypeDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-
-        for (const charDir of chars) {
-          const charName = charDir.name
-          const roleDir = path.join(defaultTypeDir, charName)
-          if (!fs.existsSync(roleDir)) continue
-          const files = fs.readdirSync(roleDir).filter(f => IMG_RE.test(f))
-          for (const f of files) {
-            const r = copyDefaultToMain(path.join(roleDir, f), charName, type)
-            if (r.ok) copiedToMain++
-          }
-        }
-      }
-
-      const msg = `原图库迁移已完成，共迁移 ${migratedChars} 个角色 / ${migratedImgs} 张图片\n` +
-        `重命名：${renamedImgs} / 复制到主图库：${copiedToMain}\n` +
-        `目标：default 图库（本地默认图库前缀）\n` +
-        `你可以手动删除 ProfileImg-Plugin/resources/gallery/backup 的原图库备份。`
-      notifyMaster(msg)
-      return e.reply(msg)
-    } catch (err) {
-      logger.error('[ProfileImg-Plugin] 迁移失败:', err)
-      return e.reply('[面板图图库管理器] 迁移失败: ' + err.message)
+      lines.push(`仓库 ${repo.id}：主图库 ${repo.images.main} 张 / default 副本 ${repo.images.defaultCopy} 张 / 第三方副本 ${repo.images.thirdCopy} 张`)
     }
+    if (pre.thirdParty.length) {
+      const tp = pre.thirdParty.map(t => `${t.name}（${t.level === 'unsupported' ? '不可直读：' + t.reason : t.level === 'flat' ? '平铺' : 'tier'}）`)
+      lines.push(`第三方图库：${tp.join('；')}`)
+    }
+    lines.push('', '将执行：')
+    pre.actions.forEach((a, i) => lines.push(`  ${i + 1}. ${a}`))
+    if (pre.srcSkipped.length) {
+      lines.push('', `⚠️ ${pre.srcSkipped.length} 个仓库无法直读，迁移后不会被读取：`)
+      pre.srcSkipped.forEach(s => lines.push(`  - ${s.label}：${s.reason}`))
+    }
+    lines.push('', '备份：map.json / miao profile.js / gallery_config.yaml 将存入 gallery/backup/migrate-<时间>')
+    lines.push('⚠️ 迁移完成后必须重启 Yunzai，重启前自定义图库的图暂不可见。')
+    lines.push('发送【#确认】开始迁移，发送【#取消】放弃。')
+    return lines.join('\n')
+  }
+
+  /** 执行结果报告文本 */
+  _formatReport (r) {
+    if (!r.ok) {
+      return [
+        '[面板图图库管理器] 迁移失败',
+        r.error || '未知错误',
+        r.steps?.length ? '\n已执行步骤：\n' + r.steps.join('\n') : '',
+        r.backupDir ? `\n配置备份：${r.backupDir}` : ''
+      ].join('\n')
+    }
+    if (r.already) {
+      return '[面板图图库管理器] 当前已是多图库源布局，无需迁移。'
+    }
+    const lines = ['[面板图图库管理器] 迁移完成 ✅', '']
+    lines.push(`配置备份：${r.backupDir}`)
+    lines.push(`搬迁 default：${r.movedRoles} 个角色 / ${r.movedImages} 张图`)
+    lines.push(`段位规范化：重命名 ${r.renamedDefaults || 0} 张 / 保持屏蔽 ${r.blockedKept || 0} 张`)
+    lines.push(`清理副本：default ${r.removedDefaultCopies} 张 / 第三方 ${r.removedThirdCopies} 张`)
+    if (r.thirdBlockedKept) lines.push(`第三方源保持屏蔽：${r.thirdBlockedKept} 张`)
+    if (r.keptThirdCopies) lines.push(`保留副本：${r.keptThirdCopies} 张（来源仓库不可直读，避免丢图）`)
+    lines.push(`移除 junction：${r.removedJunctions} 个`)
+    lines.push('', `图库源列表（${r.srcList?.length || 0} 个）：`)
+    for (const [i, v] of (r.srcList || []).entries()) lines.push(`  ${i + 1}. ${v}`)
+    if (r.warnings?.length) {
+      lines.push('', '⚠️ 提示：')
+      r.warnings.forEach(w => lines.push(`  - ${w}`))
+    }
+    lines.push('', '⚠️ 请立即重启 Yunzai 使源列表生效（重启前自定义图库的图暂不可见）。')
+    return lines.join('\n')
   }
 }

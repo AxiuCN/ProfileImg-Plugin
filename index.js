@@ -6,11 +6,10 @@ import { fileURLToPath } from 'url'
 import { buildAliasMap, watchCustomAliasFiles } from './modules/alias.js'
 import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
-import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from './components/constants.js'
-import { isJunction, ensureJunction } from './model/junction.js'
-import { checkProfileJunction } from './model/gallery.js'
+import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
-import { ensureAllCharJunctions } from './model/copier.js'
+import { getLayoutState } from './model/migrateMultiSrc.js'
+import { syncProfileImgSrc } from './model/profileSrc.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -51,35 +50,25 @@ ensureGalleryConfigFile()
 ensureManagerConfigFile()
 
 // ============================================================
-// 5. Junction 完整性检查（若已初始化则验证并修复）+ 角色级 junction
-//    模式 A：MIAO_PROFILE_LINK 本身为 junction（标准架构）
-//    模式 B：MIAO_PROFILE_LINK 为真实目录，normal/super-character 子目录为 junction（升级兼容）
+// 5. 布局检测（多图库源布局）
+//    ready  — 已注册图库源，启动时同步源列表（幂等，变更需重启 miao 生效）
+//    legacy — 旧 junction 聚合布局，提示 #迁移图库
+//    fresh  — 未初始化，提示 #图库初始化
 // ============================================================
-const jState = checkProfileJunction()
-if (isJunction(MIAO_PROFILE_LINK)) {
-  logger.info('[ProfileImg-Plugin] 检测到 profile junction，验证中...')
-  const jResult = ensureJunction(PROFILE_DIR, MIAO_PROFILE_LINK)
-  if (!jResult.ok) {
-    logger.warn('[ProfileImg-Plugin] profile junction 异常:', jResult.error)
-  } else if (jResult.created) {
-    logger.info('[ProfileImg-Plugin] profile junction 已重新创建')
+const layoutState = getLayoutState()
+if (layoutState === 'ready') {
+  const synced = syncProfileImgSrc()
+  if (!synced.ok) {
+    logger.warn('[ProfileImg-Plugin] 图库源列表同步失败:', synced.error)
+  } else if (synced.changed) {
+    logger.info('[ProfileImg-Plugin] 已更新 miao 图库源列表（profileImgSrc），重启 Yunzai 后生效')
   } else {
-    logger.info('[ProfileImg-Plugin] profile junction 正常')
+    logger.info(`[ProfileImg-Plugin] 图库源列表正常，共 ${synced.list.length} 个源`)
   }
-} else if (fs.existsSync(MIAO_PROFILE_LINK)) {
-  if (jState.ok) {
-    logger.info('[ProfileImg-Plugin] profile 为真实目录 + 子目录 junction（模式 B），聚合层正常')
-  } else {
-    logger.info('[ProfileImg-Plugin] profile 目录为真实目录（未初始化），发送 #图库初始化 进行初始化')
-  }
+} else if (layoutState === 'legacy') {
+  logger.warn('[ProfileImg-Plugin] 检测到旧版图库布局（junction 聚合），发送 #迁移图库 升级到多图库源布局')
 } else {
-  logger.info('[ProfileImg-Plugin] profile 目录不存在，发送 #图库初始化 进行初始化')
-}
-
-// 已初始化（模式 A / B）时确保所有活跃主仓库的角色级 junction 存在
-if (jState.ok) {
-  const charCount = ensureAllCharJunctions()
-  logger.info(`[ProfileImg-Plugin] 角色级 junction 检查完成，共 ${charCount} 个`)
+  logger.info('[ProfileImg-Plugin] 图库未初始化，发送 #图库初始化 进行初始化')
 }
 
 // ============================================================

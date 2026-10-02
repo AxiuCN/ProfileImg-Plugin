@@ -1,4 +1,4 @@
-/** 图库更新模块 Schema — 统一自动更新 / 主图库 / 屏蔽图库 / 第三方图库更新 / 刷新副本 */
+/** 图库更新模块 Schema — 统一自动更新 / 主图库 / 屏蔽图库 / 第三方图库更新 */
 
 export function getSchema () {
   return [
@@ -15,7 +15,7 @@ export function getSchema () {
     {
       field: 'gallery.autoUpdate.cron',
       label: '更新时间',
-      helpMessage: '所有图库统一的自动检查 cron 表达式（默认每天 5:30），按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行',
+      helpMessage: '所有图库统一的自动检查 cron 表达式（默认每天 5:30），按主图库 → 屏蔽图库 → 第三方图库 → 图库源同步顺序执行',
       component: 'EasyCron',
       required: true,
       componentProps: {
@@ -66,15 +66,6 @@ export function getSchema () {
       field: 'gallery.thirdPartyUpdate.enabled',
       label: '参与自动更新',
       bottomHelpMessage: '第三方图库是否参与统一自动更新，默认开启',
-      component: 'Switch'
-    },
-
-    // 刷新副本
-    { label: '刷新副本', component: 'Divider' },
-    {
-      field: 'gallery.refreshCopies.enabled',
-      label: '自动刷新副本',
-      bottomHelpMessage: '每次自动更新后执行 #刷新图库副本（角色级 junction + default/第三方副本），默认开启',
       component: 'Switch'
     }
   ]

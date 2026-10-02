@@ -7,7 +7,7 @@ import { compressToTarget } from '../modules/compress.js'
 import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
 import { getRepoDir } from '../components/constants.js'
 import { getUploadDir, getDefaultDir } from '../model/galleryConfig.js'
-import { copyDefaultToMain } from '../model/copier.js'
+import { guardLayout } from '../model/layoutGuard.js'
 
 /**
  * 面板图上传（版权信息可选）
@@ -15,9 +15,10 @@ import { copyDefaultToMain } from '../model/copier.js'
  * 含版权：角色名_n_作者_来源[_备注].扩展名 — #添加琴面板图 张三 米游社
  * 无版权：角色名_n.扩展名 — #添加琴面板图
  *
- * 写入目标（成员恒为 default 图库源目录；主人可配置手动上传目录）：
- *   - 成员上传始终写入 default 图库源目录 gallery/ProfileImg/default，再复制到主仓库（带"本地默认图库"前缀）
- *   - 主人可配置 config.yaml 的 gallery.defaultDir 作为手动上传目录；配置为主仓库目录时直写主仓库
+ * 写入目标（多图库源布局）：
+ *   - 成员上传始终写入默认图库（miao-plugin/resources/profile），文件名取 default 段位（10001+）
+ *   - 主人可配置 config.yaml 的 gallery.defaultDir 作为手动上传目录；配置为主仓库目录时直写主仓库（main 段位）
+ *   - 不再复制到主仓库：各图库仓库作为独立源由 miao 直接读取
  *
  * 优先级 1，高于 miao-plugin 默认优先级，确保先匹配
  */
@@ -73,6 +74,9 @@ export class UploadWithCompress extends plugin {
     const { author, source, modifications } = attribution
     const hasCopyright = !!(author && source)
 
+    // 布局守卫：旧布局（junction 聚合）必须先迁移；未初始化需先初始化
+    if (!(await guardLayout(e))) return true
+
     // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
     if (!isManager(e)) {
       return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
@@ -113,17 +117,17 @@ export class UploadWithCompress extends plugin {
     const format = uploadCfg.format || 'webp'
     const ext = `.${format}`
 
-    // 成员上传始终写入 default 图库源目录（权限授权的图库），
+    // 成员上传始终写入默认图库（权限授权的图库），
     // 与 gallery.defaultDir（手动上传存放目录）解耦，防止配置成主仓库时越权写 main
     const isMember = !e.isMaster
     const uploadDir = isMember ? getDefaultDir() : getUploadDir()
-    // 主人将手动上传目录配置为主仓库 → 直写主仓库（main 段位，无需复制）；成员恒走 default 流程
+    // 主人将手动上传目录配置为主仓库 → 直写主仓库（main 段位）；其余（含成员）写默认图库（default 段位）
     const directMain = !isMember && getActiveRepoIds().some(id => getRepoDir(id) === uploadDir)
     const writeDir = path.join(uploadDir, 'normal-character', roleName)
     if (!fs.existsSync(writeDir)) fs.mkdirSync(writeDir, { recursive: true })
 
-    const seqEnd = directMain ? SEGMENTS.main.end : 9999999
-    let nextNum = this._getNextSeq(writeDir, roleName, seqEnd)
+    const seg = directMain ? SEGMENTS.main : SEGMENTS.default
+    let nextNum = this._getNextSeq(writeDir, roleName, seg.start, seg.end)
 
     let addedCount = 0
 
@@ -167,12 +171,6 @@ export class UploadWithCompress extends plugin {
 
         fs.writeFileSync(filePath, finalBuffer)
 
-        // 非直写主仓库时才复制到主仓库（直写主仓库时已在主仓库内）
-        if (!directMain) {
-          const r = copyDefaultToMain(filePath, roleName, 'normal')
-          if (!r.ok) logger.warn(`[ProfileImg-Plugin] 复制到主仓库失败: ${r.error}`)
-        }
-
         addedCount++
         nextNum++
       } catch (err) {
@@ -200,15 +198,16 @@ export class UploadWithCompress extends plugin {
   }
 
   /**
-   * 计算下一个可用序号（扫描目录内所有该角色文件）
+   * 计算下一个可用序号（段位内最小空缺，扫描目录内所有该角色文件）
    * @param {string} dir - 角色目录
    * @param {string} roleName - 角色名
-   * @param {number} seqEnd - 序号上限（default 目录用宽松上限，主仓库用 9999）
+   * @param {number} start - 段位起点
+   * @param {number} end - 段位终点
    * @returns {number}
    */
-  _getNextSeq(dir, roleName, seqEnd) {
-    const n = getNextSeqInRange(dir, roleName, 1, seqEnd)
-    return n < 0 ? 1 : n
+  _getNextSeq(dir, roleName, start, end) {
+    const n = getNextSeqInRange(dir, roleName, start, end)
+    return n < 0 ? start : n
   }
 
   /**

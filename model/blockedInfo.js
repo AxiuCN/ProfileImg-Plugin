@@ -1,11 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { BLOCKED_REPO_DIR } from '../components/constants.js'
-import { getRepoForChar } from './mapJson.js'
-import { getRepoDir } from '../components/constants.js'
 import { getDirSize } from '../components/format.js'
-import { sortPanelFiles, listRoleFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
-import { normalizeRoleName } from '../modules/proMap.js'
+import { sortPanelFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
+import { listRoleImages, listRoleBlocked } from './galleryIndex.js'
 
 /** 非标准文件在屏蔽列表中的 display n 兜底池（不与任何段位冲突） */
 export const BAK_DISPLAY_BASE = 9999999
@@ -13,8 +11,8 @@ export const BAK_DISPLAY_BASE = 9999999
 /**
  * 屏蔽图库统计 + 角色面板图查询
  *
- * 新架构：聚合层为角色级 junction，直接读主仓库角色目录，
- * 不再遍历多仓库注册表。
+ * 多图库源布局：面板图列表由 galleryIndex 跨源汇总；
+ * 屏蔽 = 屏蔽图库（主图库移入）+ 各源（默认图库 / 主仓库）内的 .bak 文件。
  */
 
 /**
@@ -43,12 +41,8 @@ export function getBlockedInfo() {
  * @returns {Array} listRoleFiles 结果（含 name/displayN/source/filePath）
  */
 export function getRoleFiles(roleName, type = 'normal') {
-  // Pro 角色归一到基础角色目录（共享图库）
-  const dirName = normalizeRoleName(roleName)
-  const repoId = getRepoForChar(dirName)
-  const repoDir = getRepoDir(repoId)
-  const roleDir = path.join(repoDir, `${type}-character`, dirName)
-  return listRoleFiles(roleDir, dirName)
+  // 多图库源：默认图库 + 主仓库按段位寻址，第三方标源名（displayN 为 null）
+  return listRoleImages(roleName, type)
 }
 
 /**
@@ -88,25 +82,17 @@ export function getBlockedAggregated(roleName) {
     }
   }
 
-  // 2. 主仓库角色目录 .bak 文件（default / 第三方 屏蔽）
-  const repoId = getRepoForChar(roleName)
-  const repoDir = getRepoDir(repoId)
-  const mainRoleDir = path.join(repoDir, 'normal-character', roleName)
-  if (fs.existsSync(mainRoleDir)) {
-    const baks = fs.readdirSync(mainRoleDir)
-      .filter(f => f.endsWith('.bak'))
-      .sort()
-    for (const f of baks) {
-      const bareName = f.slice(0, -4)
-      const parsed = parseFilename(bareName, roleName)
-      result.push({
-        name: bareName,
-        displayN: parsed.isStandard ? parsed.seq : (BAK_DISPLAY_BASE + result.length),
-        isBak: true,
-        source: parsed.isStandard ? resolveNRange(parsed.seq).source : 'unknown',
-        filePath: path.join(mainRoleDir, f)
-      })
-    }
+  // 2. 各源（默认图库 / 主仓库）内的 .bak 文件
+  for (const item of listRoleBlocked(roleName, 'normal')) {
+    const parsed = parseFilename(item.baseName, roleName)
+    result.push({
+      name: item.baseName,
+      displayN: parsed.isStandard ? parsed.seq : (BAK_DISPLAY_BASE + result.length),
+      isBak: true,
+      source: parsed.isStandard ? resolveNRange(parsed.seq).source : 'unknown',
+      label: item.label,
+      filePath: item.filePath
+    })
   }
 
   return result

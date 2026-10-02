@@ -25,7 +25,6 @@ const defaultValues = {
   gallery_blocked_enabled: true,
   gallery_blocked_remoteUrl: 'https://github.com/AxiuCN/miao-plugin-ProfileImg-Blocked.git',
   gallery_thirdPartyUpdate_enabled: true,
-  gallery_refreshCopies_enabled: true,
   gallery_defaultDir: '',
   upload_enabled: false,
   upload_format: 'webp',
@@ -125,7 +124,6 @@ export function supportGuoba() {
         const blocked = gallery.blocked || {}
         const tpUpdate = gallery.thirdPartyUpdate || {}
         const autoUpdate = gallery.autoUpdate || {}
-        const refreshCopies = gallery.refreshCopies || {}
         const upload = userConfig.upload || {}
         const galleryCfg = getGalleryConfig()
         const managerCfg = getManagerConfig()
@@ -138,7 +136,6 @@ export function supportGuoba() {
           'gallery.blocked.enabled': blocked.enabled ?? defaultValues.gallery_blocked_enabled,
           'gallery.blocked.remoteUrl': blocked.remoteUrl ?? defaultValues.gallery_blocked_remoteUrl,
           'gallery.thirdPartyUpdate.enabled': tpUpdate.enabled ?? defaultValues.gallery_thirdPartyUpdate_enabled,
-          'gallery.refreshCopies.enabled': refreshCopies.enabled ?? defaultValues.gallery_refreshCopies_enabled,
           'gallery.defaultDir': gallery.defaultDir ?? defaultValues.gallery_defaultDir,
           'gallery.thirdParty': galleryCfg.thirdParty ?? [],
           'managers': managerCfg.managers ?? [],

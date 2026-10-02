@@ -4,11 +4,11 @@ import { installRepoAsync, getLocalSha, acquireLock, gitExecAsync } from '../mod
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
 import { notifyMaster } from '../components/notify.js'
-import { checkProfileJunction, checkRepo } from '../model/gallery.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { ensureAllCharJunctions, syncThirdPartyRepo } from '../model/copier.js'
 import { getThirdPartyRepos } from '../model/galleryConfig.js'
-import { removeThirdPartyCopies } from '../model/copier.js'
+import { syncProfileImgSrc } from '../model/profileSrc.js'
+import { probeRepo } from '../model/srcProbe.js'
+import { guardLayout } from '../model/layoutGuard.js'
 import {
   BLOCKED_REPO_DIR, BLOCKED_REPO_URL, getRepoDir, getRepoConfig, PROFILE_IMG_DIR
 } from '../components/constants.js'
@@ -17,6 +17,9 @@ import {
  * 图库下载管理（全程异步，不阻塞 Bot）
  * #下载主图库 / #下载屏蔽图库 — 首次下载
  * #强制下载主图库 / #强制下载屏蔽图库 — 重新下载
+ *
+ * 多图库源布局：clone 完成后调用 syncProfileImgSrc() 把各仓库注册为 miao 图库源
+ * （miao config/profile.js 的 profileImgSrc），不再创建 junction、不再做复制聚合。
  */
 export class Download extends plugin {
   constructor() {
@@ -36,12 +39,26 @@ export class Download extends plugin {
     })
   }
 
+  /**
+   * 注册 miao 图库源并生成提示（clone / 删除后调用，幂等）
+   * @returns {string} 追加到回复末尾的提示文本（无可提示内容时为空串）
+   */
+  _syncSources() {
+    const synced = syncProfileImgSrc()
+    if (!synced.ok) return `\n⚠️ 注册图库源失败：${synced.error || '未知错误'}`
+    const lines = []
+    if (synced.skipped.length) {
+      lines.push(`\n⚠️ ${synced.skipped.length} 个图库仓库无法直读，未注册：` +
+        synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
+    }
+    if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
+    return lines.join('')
+  }
+
   /** 首次下载主图库 */
   async downloadMain(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) {
-      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
-    }
+    // 布局守卫：旧布局（junction 聚合）必须先 #迁移图库；新装用户放行下载
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
 
     const activeIds = getActiveRepoIds()
     const total = activeIds.length
@@ -79,16 +96,16 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._ensureJunctions(activeIds)
-
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}\n角色 junction 数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}${this._syncSources()}`
     notifyMaster(msg)
     return e.reply(msg)
   }
 
   /** 首次下载屏蔽图库 */
   async downloadBlocked(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
@@ -99,8 +116,9 @@ export class Download extends plugin {
 
     try {
       e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
-      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
-      return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg)
+      const branch = await this._detectRemoteBranch(blockedUrl)
+      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch)
+      return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg + this._syncSources())
     } finally {
       lock.release()
     }
@@ -127,9 +145,11 @@ export class Download extends plugin {
    * 支持两种参数：
    *   #下载第三方图库 <Git仓库URL>        — clone 到 PROFILE_IMG_DIR 并注册到 gallery_config.yaml
    *   #下载第三方图库 <已配置图库名>       — 按名称匹配已有配置，clone 到其 dir
-   * 下载完成后同步复制图片到主图库
+   * 下载完成后用 srcProbe 探测目录结构并注册为 miao 图库源（不再复制图片到主图库）
    */
   async downloadThirdParty(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const arg = e.msg.replace(/^#下载第三方图库\s+/, '').trim()
     if (!arg) {
       return e.reply('[面板图图库管理器] 用法：\n#下载第三方图库 <Git仓库URL>\n#下载第三方图库 <已配置图库名>')
@@ -177,7 +197,8 @@ export class Download extends plugin {
         return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载失败\n${result.msg}`)
       }
 
-      // URL 模式且未注册：追加到 gallery_config.yaml（目录结构未知，normalPath/superPath 留空待用户配置）
+      // URL 模式且未注册：追加到 gallery_config.yaml
+      // 目录结构由 srcProbe 自动探测，normalPath/superPath 仅为旧字段兼容而留空
       if (isUrl && !existingTp) {
         const cfg = getGalleryConfig()
         const list = Array.isArray(cfg.thirdParty) ? cfg.thirdParty : []
@@ -196,23 +217,11 @@ export class Download extends plugin {
         }
       }
 
-      // 同步复制到主图库：仅当已配置角色目录结构（normalPath/superPath 非空）时自动执行
-      const tp = getThirdPartyRepos().find(t => t.dir === targetDir)
-      let syncMsg = ''
-      let configured = false
-      if (tp) {
-        configured = !!(tp.normalPath || tp.superPath)
-        if (configured) {
-          const sync = syncThirdPartyRepo(tp, tp.idx)
-          syncMsg = `\n复制 ${sync.copied}，跳过 ${sync.skipped}，清理 ${sync.removed}`
-        }
-      }
+      // 目录结构探测：可直读则注册为图库源，不可直读则提示整理结构
+      const probe = probeRepo(targetDir)
+      const probeMsg = this._probeHint(probe)
 
-      const hint = configured
-        ? ''
-        : '\n各仓库目录结构不同，请在锅巴后台「第三方图库」中配置该图库的 normalPath/superPath，配置后发送 #更新第三方图库 ' + repoName + ' 同步图片'
-
-      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${syncMsg}${hint}`)
+      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${probeMsg}${this._syncSources()}`)
     } catch (err) {
       return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载异常\n${err.message}`)
     } finally {
@@ -221,11 +230,30 @@ export class Download extends plugin {
   }
 
   /**
+   * 生成目录结构探测提示
+   * @param {object} probe - probeRepo 结果
+   * @returns {string} 提示文本
+   */
+  _probeHint(probe) {
+    if (probe.level === 'unsupported') {
+      return [
+        `\n⚠️ 目录结构无法直读：${probe.reason}`,
+        '\n请整理为以下任一结构后重新执行 #下载第三方图库 或 #更新第三方图库：',
+        '\n  · normal-character/{角色}/ 与 super-character/{角色}/（分层）',
+        '\n  · {角色}/（平铺，仓库根下不要放 docs 等含图的非角色目录）'
+      ].join('')
+    }
+    return `\n目录结构：${probe.reason}`
+  }
+
+  /**
    * 删除第三方图库
-   * #删除第三方图库 <图库名> — 移除配置 + 清理主图库副本 + 删除仓库目录
+   * #删除第三方图库 <图库名> — 移除配置 + 删除仓库目录，并重新注册图库源
    * 不允许删除 default 图库与主图库
    */
   async deleteThirdParty(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const arg = e.msg.replace(/^#删除第三方图库\s+/, '').trim()
     if (!arg) {
       return e.reply('[面板图图库管理器] 用法：#删除第三方图库 <图库名>')
@@ -241,22 +269,29 @@ export class Download extends plugin {
       return e.reply(`[面板图图库管理器] 未找到第三方图库「${arg}」`)
     }
 
+    // 安全校验：只允许删除位于图库目录（gallery/ProfileImg/）内的仓库目录，
+    // 防止第三方 dir 被配置成外部绝对路径时误删
+    const galleryBase = path.resolve(PROFILE_IMG_DIR)
+    for (const tp of tps) {
+      const resolved = path.resolve(tp.dir)
+      if (!resolved.startsWith(galleryBase + path.sep)) {
+        return e.reply(`[面板图图库管理器] 已拒绝删除：图库「${arg}」的目录不在图库目录内（${path.basename(resolved)}）`)
+      }
+    }
+
     const lock = acquireLock(`tp-del-${arg}`, '删除第三方图库', 'update')
     if (!lock.ok) {
       return e.reply(`[面板图图库管理器] ${lock.msg}`)
     }
 
     try {
-      // 清理主图库中该图库的所有副本（含 .bak）
-      const removed = removeThirdPartyCopies(arg)
-
       // 从 gallery_config.yaml 移除配置
       const cfg = getGalleryConfig()
       if (Array.isArray(cfg.thirdParty)) {
         cfg.thirdParty = cfg.thirdParty.filter(tp => tp.name !== arg)
         const w = writeGalleryConfig(cfg)
         if (!w.ok) {
-          return e.reply(`[面板图图库管理器] 副本已清理但写入配置失败：${w.error}`)
+          return e.reply(`[面板图图库管理器] 写入配置失败：${w.error}`)
         }
       }
 
@@ -269,7 +304,7 @@ export class Download extends plugin {
         }
       }
 
-      return e.reply(`[面板图图库管理器] 第三方图库「${arg}」已删除\n清理副本 ${removed} 个${dirMsg}`)
+      return e.reply(`[面板图图库管理器] 第三方图库「${arg}」已删除${dirMsg}${this._syncSources()}`)
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 删除第三方图库失败:', err)
       return e.reply('[面板图图库管理器] 删除第三方图库失败: ' + err.message)
@@ -280,10 +315,7 @@ export class Download extends plugin {
 
   /** 强制重新下载主图库 */
   async forceDownload(e) {
-    const jCheck = checkProfileJunction()
-    if (!jCheck.ok) {
-      return e.reply('[面板图图库管理器] 图库尚未初始化，请发送 #图库初始化')
-    }
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
 
     const activeIds = getActiveRepoIds()
     const total = activeIds.length
@@ -324,16 +356,16 @@ export class Download extends plugin {
       }
     }
 
-    const jCount = this._ensureJunctions(activeIds)
-
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}\n角色 junction 数量：${jCount}`
+    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}${this._syncSources()}`
     notifyMaster(msg)
     return e.reply(msg)
   }
 
   /** 强制重新下载屏蔽图库 */
   async forceDownloadBlocked(e) {
+    if (!(await guardLayout(e, { allowFresh: true }))) return true
+
     const config = getPluginConfig()
     const blockedUrl = config?.gallery?.blocked?.remoteUrl || BLOCKED_REPO_URL
 
@@ -347,19 +379,11 @@ export class Download extends plugin {
       if (fs.existsSync(BLOCKED_REPO_DIR)) {
         fs.rmSync(BLOCKED_REPO_DIR, { recursive: true, force: true })
       }
-      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR)
-      return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg)
+      const branch = await this._detectRemoteBranch(blockedUrl)
+      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch)
+      return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg + this._syncSources())
     } finally {
       lock.release()
     }
-  }
-
-  /**
-   * 确保所有仓库的角色级 junction 存在（下载完成后调用）
-   * @param {number[]} activeIds - 下载的仓库编号
-   * @returns {number} 角色级 junction 数量
-   */
-  _ensureJunctions(activeIds) {
-    return ensureAllCharJunctions(activeIds)
   }
 }

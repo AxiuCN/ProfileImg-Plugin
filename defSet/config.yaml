@@ -4,7 +4,7 @@
 # ==============================================================
 gallery:
   # ---------- 统一自动更新 ----------
-  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 刷新副本顺序执行
+  # 所有图库共用此 cron，按主图库 → 屏蔽图库 → 第三方图库 → 图库源同步顺序执行
   autoUpdate:
     enabled: ${gallery_autoUpdate_enabled}
     cron: "${gallery_autoUpdate_cron}"
@@ -17,8 +17,8 @@ gallery:
       remoteUrl: "${gallery_repos_0_remoteUrl}"
       autoUpdate: ${gallery_repos_0_autoUpdate}
 
-  # ---------- default 图库 ----------
-  # 手动上传面板图的默认存放目录名（位于 gallery/ProfileImg/ 下），为空时使用默认图库 default
+  # ---------- 默认图库 ----------
+  # 主人手动上传面板图的存放目录（空则写入默认图库 miao-plugin/resources/profile）
   defaultDir: "${gallery_defaultDir}"
 
   # ---------- 屏蔽图库 ----------
@@ -29,10 +29,6 @@ gallery:
   # ---------- 第三方图库自动更新 ----------
   thirdPartyUpdate:
     enabled: ${gallery_thirdPartyUpdate_enabled}
-
-  # ---------- 刷新副本 ----------
-  refreshCopies:
-    enabled: ${gallery_refreshCopies_enabled}
 
 # ---------- 上传压缩设置 ----------
 upload:
