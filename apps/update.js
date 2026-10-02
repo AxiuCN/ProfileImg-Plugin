@@ -51,10 +51,13 @@ export class Update extends plugin {
   _syncSources() {
     const synced = syncProfileImgSrc()
     if (!synced.ok) return `\n⚠️ 注册图库源失败：${synced.error || '未知错误'}`
-    const lines = []
+    const lines = [`\n当前已注册图库源：${synced.list.length} 个（含默认图库）`]
     if (synced.skipped.length) {
-      lines.push(`\n⚠️ ${synced.skipped.length} 个图库仓库无法直读，未注册：` +
-        synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
+      lines.push(`\nℹ️ 另有 ${synced.skipped.length} 个已配置图库未注册（与本次操作无关）：`)
+      for (const s of synced.skipped) {
+        lines.push(`  · ${s.label}：${s.reason}`)
+        lines.push('    修复：确认仓库已完整克隆（可用 #下载第三方图库 <URL> 重新下载，或 #删除第三方图库 <名> 后重下），目录需为 normal-character/{角色}/ 或平铺 {角色}/')
+      }
     }
     if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
     return lines.join('')

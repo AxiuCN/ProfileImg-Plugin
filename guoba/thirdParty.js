@@ -9,7 +9,7 @@ export function getSchema () {
     {
       field: 'gallery.thirdParty',
       label: '第三方图库列表',
-      bottomHelpMessage: '第三方仓库作为独立只读图库源注册（保存在 config/gallery_config.yaml）；目录结构自动探测，支持 normal-character/{角色}/ 与 super-character/{角色}/ 或平铺 {角色}/',
+      bottomHelpMessage: '首次使用请先在 QQ 中完成 #图库初始化 与 #下载主图库；第三方图库推荐先发送 #下载第三方图库 <Git地址>（自动克隆并注册），再回到此处调整名称 / 启用状态。若图库已自行下载到 gallery/ProfileImg 下，也可直接在此新增配置（dir 填该目录名）。修改配置后需重启 Yunzai 才会被 miao 读取；目录不存在或结构不符的条目不会被注册',
       component: 'GSubForm',
       componentProps: {
         multiple: true,
@@ -25,7 +25,7 @@ export function getSchema () {
           {
             field: 'dir',
             label: '目录名',
-            bottomHelpMessage: 'gallery/ProfileImg 下的子目录名，如 xxx-fan-repo',
+            bottomHelpMessage: 'gallery/ProfileImg 下的子目录名（需已存在该仓库目录；不存在则不会被注册，可先用 #下载第三方图库 克隆）',
             component: 'Input',
             required: true,
             componentProps: { placeholder: 'gallery/ProfileImg 下的子目录名，如：xxx-fan-repo' }
