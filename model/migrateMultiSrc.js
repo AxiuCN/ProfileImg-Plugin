@@ -551,7 +551,11 @@ export function migrateToMultiSrc () {
     report.srcSkipped = synced.skipped
     report.steps.push(`已写入 profileImgSrc（${synced.list.length} 个源）`)
     if (synced.skipped.length) {
-      report.warnings.push(`${synced.skipped.length} 个图库仓库无法直读，未注册：` + synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
+      report.warnings.push(
+        `${synced.skipped.length} 个图库仓库无法直读，未注册：` +
+        synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；') +
+        '。请把仓库目录整理为 normal-character/{角色}/ 或平铺 {角色}/（根目录不要放 docs 等含图目录），整理后执行 #更新第三方图库 或重启 Yunzai 重新注册'
+      )
     }
     report.needRestart = true
     report.ok = true

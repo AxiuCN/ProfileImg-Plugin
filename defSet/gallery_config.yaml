@@ -3,13 +3,13 @@
 # 变量格式：${变量名}，由锅巴表单数据替换
 # ==============================================================
 
-# ---------- 第三方图库（只读，git pull 更新后复制到主图库） ----------
-# 第三方仓库的目录结构通常与 miao-plugin-ProfileImg 不同，
-# 需用 normalPath / superPath 指定角色目录相对【仓库根】的路径：
-#   "normal-character" → 仓库根/normal-character/角色名/   （有类型层）
-#   "."                → 角色目录直接挂在仓库根（仓库根/角色名/）
-#   空                 → 该类型不存在
-# dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名
-# 可用 #下载第三方图库 <URL> 命令自动下载并注册，下载后需在此配置目录结构
+# ---------- 第三方图库（只读 git 图库源，目录结构自动探测） ----------
+# 第三方仓库作为独立只读图库源注册给 miao（不再复制到主图库），支持两种结构：
+#   normal-character/{角色}/ 与 super-character/{角色}/   （分层，含彩蛋立绘）
+#   {角色}/                                             （平铺，仅普通立绘；仓库根不要放 docs 等含图目录）
+# 结构无法直读时不会被注册，命令会提示整理目录；整理后执行 #更新第三方图库 或重启 Yunzai 重新注册
+# normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可留空或删除）
+# dir 为 PROFILE_IMG_DIR（gallery/ProfileImg/）下的子目录名，也可填绝对路径
+# 可用 #下载第三方图库 <URL> 自动下载并注册为图库源
 thirdParty:
 ${gallery_thirdParty}

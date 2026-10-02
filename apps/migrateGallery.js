@@ -87,6 +87,7 @@ export class MigrateGallery extends plugin {
     if (pre.srcSkipped.length) {
       lines.push('', `⚠️ ${pre.srcSkipped.length} 个仓库无法直读，迁移后不会被读取：`)
       pre.srcSkipped.forEach(s => lines.push(`  - ${s.label}：${s.reason}`))
+      lines.push('  请整理为 normal-character/{角色}/ 或平铺 {角色}/（根目录不要放 docs 等含图目录），整理后执行 #更新第三方图库 或重启 Yunzai 重新注册')
     }
     lines.push('', '备份：map.json / miao profile.js / gallery_config.yaml 将存入 gallery/backup/migrate-<时间>')
     lines.push('⚠️ 迁移完成后必须重启 Yunzai，重启前自定义图库的图暂不可见。')

@@ -9,7 +9,7 @@ export function getSchema () {
     {
       field: 'gallery.thirdParty',
       label: '第三方图库列表',
-      bottomHelpMessage: '管理第三方图库仓库（保存在 config/gallery_config.yaml），保存后可用 #更新第三方图库 同步',
+      bottomHelpMessage: '第三方仓库作为独立只读图库源注册（保存在 config/gallery_config.yaml）；目录结构自动探测，支持 normal-character/{角色}/ 与 super-character/{角色}/ 或平铺 {角色}/',
       component: 'GSubForm',
       componentProps: {
         multiple: true,
@@ -39,23 +39,9 @@ export function getSchema () {
             componentProps: { placeholder: 'https://github.com/xxx/xxx.git' }
           },
           {
-            field: 'normalPath',
-            label: '普通角色目录',
-            bottomHelpMessage: '角色目录相对仓库根的路径："normal-character"=有类型层，"."=角色目录在根，空=无',
-            component: 'Input',
-            componentProps: { placeholder: 'normal-character / .（角色目录在根）/ 留空（无）' }
-          },
-          {
-            field: 'superPath',
-            label: '彩蛋角色目录',
-            bottomHelpMessage: '角色目录相对仓库根的路径（同 normalPath），为空表示该类型不存在',
-            component: 'Input',
-            componentProps: { placeholder: 'super-character / .（角色目录在根）/ 留空（无）' }
-          },
-          {
             field: 'enabled',
             label: '启用',
-            bottomHelpMessage: '关闭后跳过该图库的同步与更新',
+            bottomHelpMessage: '关闭后跳过该图库的更新与图库源注册',
             component: 'Switch'
           }
         ]
