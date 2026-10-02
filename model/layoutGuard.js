@@ -5,7 +5,7 @@ import { getLayoutState } from './migrateMultiSrc.js'
  *
  * 本插件已完成「多图库源布局」切换，旧布局（junction 聚合）不再支持：
  *   legacy — 必须发送 #迁移图库 升级（提示后拒绝执行）
- *   fresh  — 未初始化，需先 #图库初始化（allowFresh 为 true 的下载/初始化类命令放行）
+ *   fresh  — 未注册任何自有图库源（可直接下载图库，或用 #图库初始化 检查补齐；allowFresh 为 true 的下载/初始化类命令放行）
  *   ready  — 正常执行
  *
  * 用法：图库数据类命令（上传/删除/列表/可视化/屏蔽/重命名/状态）开头调用；
@@ -27,7 +27,7 @@ export async function guardLayout (e, opts = {}) {
     return false
   }
   if (state === 'fresh' && !allowFresh) {
-    await e.reply('[面板图图库管理器]\n图库尚未初始化，请先发送 #图库初始化。')
+    await e.reply('[面板图图库管理器]\n图库尚未就绪（未注册任何自有图库源）。\n请发送 #下载主图库 或 #下载第三方图库 <URL>；也可发送 #图库初始化 检查并补齐初始化项。')
     return false
   }
   return true

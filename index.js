@@ -8,7 +8,7 @@ import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile, refreshGalleryConfigFile } from './components/config.js'
-import { autoRegisterUnregisteredRepos, listUnregisteredRepos } from './model/galleryConfig.js'
+import { autoRegisterUnregisteredRepos } from './model/galleryConfig.js'
 import { getLayoutState } from './model/migrateMultiSrc.js'
 import { syncProfileImgSrc, buildSrcList } from './model/profileSrc.js'
 import { notifyLayout } from './model/layoutNotice.js'
@@ -71,20 +71,14 @@ function scheduleLayoutNotice (state) {
 }
 
 /**
- * 输出图库源诊断日志：已配置但未就绪的图库 / 仍未登记的目录
- * 第三方图库必须登记在 gallery_config.yaml 才会被读取（跨盘仓库只能由用户直接写配置）
+ * 输出图库源诊断日志：已配置但未就绪的图库
+ * 登记缺失的目录已由 autoRegisterUnregisteredRepos() 处理并单独记录，这里不再重复扫描
  * @param {Array<{label: string, reason: string}>} skipped - syncProfileImgSrc 的 skipped
  */
-function logSourceDiagnostics (skipped = []) {
-  if (skipped.length) {
-    logger.warn('[ProfileImg-Plugin] 已配置但未注册的图库：' +
-      skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
-  }
-  const unregistered = listUnregisteredRepos()
-  if (unregistered.length) {
-    logger.warn('[ProfileImg-Plugin] 仍未登记的图库目录（下次启动自动登记）：' +
-      unregistered.map(u => u.name).join('、'))
-  }
+function logSkippedSources (skipped = []) {
+  if (!skipped.length) return
+  logger.warn('[ProfileImg-Plugin] 已配置但未注册的图库：' +
+    skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
 }
 
 // ① 布局检测（legacy 下不补登记：此时 ProfileImg/default 是旧 default 图库，须由 #迁移图库 处理）
@@ -123,7 +117,7 @@ if (layoutState === 'ready') {
   } else {
     logger.info(`[ProfileImg-Plugin] 图库源列表正常，共 ${synced.list.length} 个源`)
   }
-  logSourceDiagnostics(synced.ok ? synced.skipped : [])
+  logSkippedSources(synced.ok ? synced.skipped : [])
 } else if (layoutState === 'legacy') {
   logger.warn('[ProfileImg-Plugin] 检测到旧版图库布局（junction 聚合），发送 #迁移图库 升级到多图库源布局')
   scheduleLayoutNotice('legacy')
@@ -138,9 +132,9 @@ if (layoutState === 'ready') {
       logger.info(`[ProfileImg-Plugin] 检测到本地图库源，已注册 ${synced.list.length} 个源，重启 Yunzai 后生效`)
       if (synced.changed) scheduleLayoutNotice('srcPending')
     }
-    logSourceDiagnostics(synced.ok ? synced.skipped : [])
+    logSkippedSources(synced.ok ? synced.skipped : [])
   } else {
-    logger.info('[ProfileImg-Plugin] 图库未初始化，发送 #图库初始化 进行初始化')
+    logger.info('[ProfileImg-Plugin] 图库尚未就绪（无自有图库源），可发送 #下载主图库 或 #图库初始化')
     scheduleLayoutNotice('fresh')
   }
 }

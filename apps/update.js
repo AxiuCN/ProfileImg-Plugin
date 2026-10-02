@@ -1,6 +1,6 @@
 import { gitExecAsync, getRemoteShaAsync, getLocalSha, fastForwardPullAsync, forceResetAsync, acquireLock, getRepoBranch } from '../model/git.js'
 import { checkRepo, checkBlockedGallery } from '../model/gallery.js'
-import { notifyMaster, restartHint } from '../components/notify.js'
+import { notifyMaster, restartHint, buildSyncReport } from '../components/notify.js'
 import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
@@ -42,25 +42,6 @@ export class Update extends plugin {
   _recordRepoVersion(repoId) {
     const sha = getLocalSha(getRepoDir(repoId))
     if (sha) setRepoVersion(repoId, sha)
-  }
-
-  /**
-   * 注册 miao 图库源并生成提示（更新后调用，幂等）
-   * @returns {string} 追加到回复末尾的提示文本（无可提示内容时为空串）
-   */
-  _syncSources() {
-    const synced = syncProfileImgSrc()
-    if (!synced.ok) return `\n⚠️ 注册图库源失败：${synced.error || '未知错误'}`
-    const lines = [`\n当前已注册图库源：${synced.list.length} 个（含默认图库）`]
-    if (synced.skipped.length) {
-      lines.push(`\nℹ️ 另有 ${synced.skipped.length} 个已配置图库未注册（与本次操作无关）：`)
-      for (const s of synced.skipped) {
-        lines.push(`  · ${s.label}：${s.reason}`)
-        lines.push('    修复：确认仓库已完整克隆（可用 #下载第三方图库 <URL> 重新下载，或 #删除第三方图库 <名> 后重下），目录需为 normal-character/{角色}/ 或平铺 {角色}/')
-      }
-    }
-    if (synced.changed) lines.push(restartHint())
-    return lines.join('')
   }
 
   _registerCronTasks() {
@@ -238,7 +219,7 @@ export class Update extends plugin {
         lock.release()
       }
     }
-    return e.reply('[面板图图库管理器] 第三方图库更新\n' + results.join('\n') + this._syncSources())
+    return e.reply('[面板图图库管理器] 第三方图库更新\n' + results.join('\n') + buildSyncReport(syncProfileImgSrc()))
   }
 
   async updateMain(e) {
@@ -277,7 +258,7 @@ export class Update extends plugin {
         lock.release()
       }
     }
-    return e.reply('[面板图图库管理器] 主图库更新\n' + results.join('\n') + this._syncSources())
+    return e.reply('[面板图图库管理器] 主图库更新\n' + results.join('\n') + buildSyncReport(syncProfileImgSrc()))
   }
 
   async forceUpdateMain(e) {
@@ -319,7 +300,7 @@ export class Update extends plugin {
         e.reply(`[面板图图库管理器] 强制更新进度：${completed}/${total}\n仓库${repo.id}：${results[results.length - 1]}`)
       }
     }
-    return e.reply('[面板图图库管理器] 主图库强制更新\n' + results.join('\n') + this._syncSources())
+    return e.reply('[面板图图库管理器] 主图库强制更新\n' + results.join('\n') + buildSyncReport(syncProfileImgSrc()))
   }
 
   async updateBlocked(e) {

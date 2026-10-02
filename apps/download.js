@@ -3,7 +3,7 @@ import path from 'node:path'
 import { installRepoAsync, getLocalSha, acquireLock, gitExecAsync } from '../model/git.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
-import { notifyMaster, restartHint } from '../components/notify.js'
+import { notifyMaster, buildSyncReport } from '../components/notify.js'
 import { setRepoVersion } from '../model/repoVersions.js'
 import { getThirdPartyRepos, resolveThirdPartyDir, addThirdPartyRepo } from '../model/galleryConfig.js'
 import { syncProfileImgSrc } from '../model/profileSrc.js'
@@ -38,26 +38,6 @@ export class Download extends plugin {
         { reg: '^#强制下载屏蔽图库$', fnc: 'forceDownloadBlocked', permission: 'master' }
       ]
     })
-  }
-
-  /**
-   * 注册 miao 图库源并生成提示（clone / 删除后调用，幂等）
-   * @returns {string} 追加到回复末尾的提示文本（无可提示内容时为空串）
-   */
-  _syncSources() {
-    const synced = syncProfileImgSrc()
-    if (!synced.ok) return `\n⚠️ 注册图库源失败：${synced.error || '未知错误'}`
-    const lines = [`\n当前已注册图库源：${synced.list.length} 个（含默认图库）`]
-    if (synced.skipped.length) {
-      // 「已配置但未就绪」的条目：目录不存在或结构不符；不影响已注册的源
-      lines.push(`\nℹ️ 另有 ${synced.skipped.length} 个已配置图库未注册（与本次操作无关）：`)
-      for (const s of synced.skipped) {
-        lines.push(`  · ${s.label}：${s.reason}`)
-        lines.push('    修复：确认仓库已完整克隆（可用 #下载第三方图库 <URL> 重新下载，或 #删除第三方图库 <名> 后重下），目录需为 normal-character/{角色}/ 或平铺 {角色}/')
-      }
-    }
-    if (synced.changed) lines.push(restartHint())
-    return lines.join('')
   }
 
   /** 首次下载主图库 */
@@ -104,7 +84,7 @@ export class Download extends plugin {
     }
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}${this._syncSources()}`
+    const msg = `[面板图图库管理器] 主图库下载完成\n${summary}${buildSyncReport(syncProfileImgSrc())}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -127,7 +107,7 @@ export class Download extends plugin {
       const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch, {
         refuseHint: '如确认要重建屏蔽图库，请先手动清空该目录，或发送 #强制下载屏蔽图库'
       })
-      return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg + this._syncSources())
+      return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg + buildSyncReport(syncProfileImgSrc()))
     } finally {
       lock.release()
     }
@@ -228,7 +208,7 @@ export class Download extends plugin {
       }
 
       // URL 模式且未登记：写入 gallery_config.yaml（dir 一律绝对路径）
-      // 配置是唯一凭证：先登记配置，再由 _syncSources() 从配置注册 miao
+      // 配置是唯一凭证：先登记配置，再由 buildSyncReport 从配置注册 miao 并生成提示
       if (isUrl && !existingTp) {
         const w = addThirdPartyRepo({ name: repoName, dir: targetDir, remoteUrl })
         if (!w.ok) {
@@ -240,7 +220,7 @@ export class Download extends plugin {
       const probe = probeRepo(targetDir)
       const probeMsg = this._probeHint(probe)
 
-      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${probeMsg}${this._syncSources()}`)
+      return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载完成\n${result.msg}${probeMsg}${buildSyncReport(syncProfileImgSrc())}`)
     } catch (err) {
       return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载异常\n${err.message}`)
     } finally {
@@ -330,7 +310,7 @@ export class Download extends plugin {
         }
       }
 
-      return e.reply(`[面板图图库管理器] 第三方图库「${arg}」已删除${dirMsg}${this._syncSources()}`)
+      return e.reply(`[面板图图库管理器] 第三方图库「${arg}」已删除${dirMsg}${buildSyncReport(syncProfileImgSrc())}`)
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 删除第三方图库失败:', err)
       return e.reply('[面板图图库管理器] 删除第三方图库失败: ' + err.message)
@@ -383,7 +363,7 @@ export class Download extends plugin {
     }
 
     const summary = results.join('\n')
-    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}${this._syncSources()}`
+    const msg = `[面板图图库管理器] 主图库强制下载完成\n${summary}${buildSyncReport(syncProfileImgSrc())}`
     notifyMaster(msg)
     return e.reply(msg)
   }
@@ -407,7 +387,7 @@ export class Download extends plugin {
       }
       const branch = await this._detectRemoteBranch(blockedUrl)
       const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch)
-      return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg + this._syncSources())
+      return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg + buildSyncReport(syncProfileImgSrc()))
     } finally {
       lock.release()
     }

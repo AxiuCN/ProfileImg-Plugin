@@ -8,7 +8,7 @@ export const helpList = [
     group: '图库初始化（仅主人）',
     auth: 'master',
     list: [
-      { icon: 87, title: '#图库初始化', desc: '初始化多图库源布局（生成 miao config/profile.js 并注册图库源；源列表有变化需重启 Yunzai）' },
+      { icon: 87, title: '#图库初始化', desc: '检查并补齐图库初始化项（目录 / 配置 / 图库源登记，幂等；有变更需重启 Yunzai）' },
       { icon: 89, title: '#迁移图库', desc: '旧版图库布局升级到多图库源布局（完成后需重启 Yunzai）' }
     ]
   },

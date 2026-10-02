@@ -158,35 +158,72 @@ export function findBlockedByN (roleName, type, n) {
 }
 
 /**
- * 统计各源的图片数量（状态命令用）
- * @returns {Array<{kind: string, label: string, dir: string, roles: number, images: number}>}
+ * 单源规模统计：一次遍历同时得到角色数 / 图片数 / 体积
+ * 分层源统计 normal-character 与 super-character 两层；平铺源统计源根
+ * 体积按目录内全部文件累计（与旧口径一致），跳过 `.git` 等版本目录
+ * @param {{kind: string, label: string, dir: string, level: string}} source - getSources 元素
+ * @returns {{roles: number, images: number, size: number}}
  */
-export function countSourceImages () {
-  const out = []
-  for (const source of getSources()) {
-    const stat = { kind: source.kind, label: source.label, dir: source.dir, roles: 0, images: 0 }
-    for (const type of ['normal', 'super']) {
-      const typeDir = source.level === 'flat' ? source.dir : path.join(source.dir, `${type}-character`)
-      if (!typeDir || !fs.existsSync(typeDir)) continue
-      if (source.level === 'flat' && type === 'super') continue
-      let entries = []
-      try {
-        entries = fs.readdirSync(typeDir, { withFileTypes: true })
-      } catch {
-        continue
-      }
-      for (const e of entries) {
-        if (e.isDirectory()) {
-          stat.roles++
-          try {
-            stat.images += fs.readdirSync(path.join(typeDir, e.name)).filter(f => IMG_RE.test(f)).length
-          } catch { /* 忽略 */ }
-        } else if (IMG_RE.test(e.name)) {
-          stat.images++
-        }
+export function statSource (source) {
+  const stat = { roles: 0, images: 0, size: 0 }
+  const roots = source.level === 'flat'
+    ? [source.dir]
+    : [path.join(source.dir, 'normal-character'), path.join(source.dir, 'super-character')]
+
+  /** 累计目录内全部文件体积（递归，跳过 .git） */
+  const addSize = (dir) => {
+    let entries = []
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (e.name === '.git') continue
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) addSize(p)
+      else if (e.isFile()) {
+        try { stat.size += fs.statSync(p).size } catch { /* 忽略 */ }
       }
     }
-    out.push(stat)
   }
-  return out
+
+  for (const typeDir of roots) {
+    if (!typeDir || !fs.existsSync(typeDir)) continue
+    let entries = []
+    try {
+      entries = fs.readdirSync(typeDir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const e of entries) {
+      if (e.name === '.git') continue
+      const p = path.join(typeDir, e.name)
+      if (e.isDirectory()) {
+        // 角色目录：图片数按目录内文件算，体积递归累计
+        stat.roles++
+        addSize(p)
+        try {
+          stat.images += fs.readdirSync(p).filter(f => IMG_RE.test(f)).length
+        } catch { /* 忽略 */ }
+      } else if (e.isFile()) {
+        if (IMG_RE.test(e.name)) stat.images++
+        try { stat.size += fs.statSync(p).size } catch { /* 忽略 */ }
+      }
+    }
+  }
+  return stat
+}
+
+/**
+ * 统计各源的规模（状态命令用）
+ * @returns {Array<{kind: string, label: string, dir: string, roles: number, images: number, size: number}>}
+ */
+export function countSourceImages () {
+  return getSources().map(source => ({
+    kind: source.kind,
+    label: source.label,
+    dir: source.dir,
+    ...statSource(source)
+  }))
 }

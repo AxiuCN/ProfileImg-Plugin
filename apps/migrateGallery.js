@@ -40,7 +40,7 @@ export class MigrateGallery extends plugin {
     if (pre.state === 'fresh') {
       return e.reply([
         '[面板图图库管理器] 当前没有可迁移的旧图库布局。\n',
-        '新装用户请发送 #图库初始化 完成初始化。'
+        '新装用户请发送 #下载主图库 下载图库（或用 #图库初始化 检查初始化项）。'
       ].join(''))
     }
 

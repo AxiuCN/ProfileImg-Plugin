@@ -58,8 +58,19 @@ const notify = await import(mod('components/notify.js'))
 const hint = notify.restartHint()
 check('restartHint 提示重启 Yunzai', hint.includes('重启 Yunzai'))
 check('restartHint 不含具体重启方式', !/pm2|node \.|systemctl|service |bat|脚本/.test(hint), hint.trim())
-check('四个命令模块统一复用 restartHint()',
+
+const syncedChanged = { ok: true, changed: true, list: ['profile', 'E:/fan'], skipped: [] }
+const syncedSame = { ok: true, changed: false, list: ['profile'], skipped: [] }
+const report = notify.buildSyncReport(syncedChanged)
+check('buildSyncReport 报告源数量并在有变更时带重启提示',
+  report.includes('2 个') && report.includes('请重启 Yunzai'))
+check('buildSyncReport 未变更时不提示重启', !notify.buildSyncReport(syncedSame).includes('请重启'))
+check('buildSyncReport 失败时给出原因', notify.buildSyncReport({ ok: false, error: '写入失败' }).includes('写入失败'))
+check('buildSyncReport 报告未注册图库',
+  notify.buildSyncReport({ ok: true, changed: false, list: ['profile'], skipped: [{ label: 'X', reason: '目录不存在' }] })
+    .includes('X：目录不存在'))
+check('四个命令模块复用统一文案来源',
   ['download.js', 'update.js', 'initGallery.js', 'migrateGallery.js']
-    .every(f => fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8').includes('restartHint')))
+    .every(f => /restartHint|buildSyncReport/.test(fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8'))))
 
 finish()

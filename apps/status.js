@@ -1,10 +1,9 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { checkBlockedGallery } from '../model/gallery.js'
-import { formatSize, getDirSize } from '../components/format.js'
+import { formatSize } from '../components/format.js'
 import { getLocalVersionAt } from '../model/version.js'
 import { getBlockedInfo } from '../model/blockedInfo.js'
-import { countSourceImages, getSources } from '../model/galleryIndex.js'
+import { statSource, getSources } from '../model/galleryIndex.js'
 import { listUnregisteredRepos } from '../model/galleryConfig.js'
 import { BLOCKED_REPO_DIR } from '../components/constants.js'
 import { guardLayout } from '../model/layoutGuard.js'
@@ -16,8 +15,8 @@ const KIND_LABEL = { default: '默认图库', main: '主仓库', thirdParty: '�
  * 图库状态（多图库源布局）
  *
  * 面板图由「默认图库 + 各主仓库 + 可直读的第三方仓库」多源提供：
- * 统计取 countSourceImages()（各源角色数 / 图片数）与 getBlockedInfo()（屏蔽图库），
- * 展示每个源的规模与路径；不再有 junction / 副本概念。
+ * 统计走 galleryIndex.statSource()（一次遍历得到角色数 / 图片数 / 体积）与 getBlockedInfo()（屏蔽图库），
+ * 展示每个源的规模与目录名；不再有 junction / 副本概念。
  */
 export class Status extends plugin {
   constructor() {
@@ -35,47 +34,15 @@ export class Status extends plugin {
   }
 
   /**
-   * 统计单个源的图片体积
-   * 分层源统计 normal/super-character；平铺源逐个子目录累计并跳过 .git 等版本目录
-   * @param {object} source - getSources 元素
-   * @returns {number} 字节数
-   */
-  _sourceSize(source) {
-    if (source.level === 'flat') {
-      let size = 0
-      let entries = []
-      try {
-        entries = fs.readdirSync(source.dir, { withFileTypes: true })
-      } catch {
-        return 0
-      }
-      for (const e of entries) {
-        if (e.name === '.git') continue
-        const p = path.join(source.dir, e.name)
-        if (e.isDirectory()) size += getDirSize(p)
-        else if (e.isFile()) size += fs.statSync(p).size
-      }
-      return size
-    }
-    let size = 0
-    for (const type of ['normal-character', 'super-character']) {
-      const d = path.join(source.dir, type)
-      if (fs.existsSync(d)) size += getDirSize(d)
-    }
-    return size
-  }
-
-  /**
    * 生成单个源的展示行（规模 + 目录名）
    * 状态命令对所有人生效，只展示仓库目录名，不回显服务器绝对路径
    * @param {object} source - getSources 元素
-   * @param {{ roles: number, images: number }} stat - countSourceImages 元素
-   * @param {number} size - 源图片体积（字节）
+   * @param {{ roles: number, images: number, size: number }} stat - statSource 结果
    * @returns {string}
    */
-  _sourceLine(source, stat, size) {
+  _sourceLine(source, stat) {
     const kind = KIND_LABEL[source.kind] || source.kind
-    return `  ${source.label}（${kind}）：${stat.roles} 角色 / ${stat.images} 图片 / ${formatSize(size)}\n` +
+    return `  ${source.label}（${kind}）：${stat.roles} 角色 / ${stat.images} 图片 / ${formatSize(stat.size)}\n` +
       `    目录：${path.basename(source.dir)}\n`
   }
 
@@ -83,7 +50,7 @@ export class Status extends plugin {
   async status(e) {
     if (!(await guardLayout(e))) return true
 
-    const statByDir = new Map(countSourceImages().map(s => [s.dir, s]))
+    const statByDir = new Map(getSources().map(s => [s.dir, statSource(s)]))
     const mains = getSources().filter(s => s.kind === 'main')
     if (mains.length === 0) {
       return e.reply('[面板图图库管理器] 未找到主图库仓库，请发送 #下载主图库')
@@ -92,8 +59,8 @@ export class Status extends plugin {
     let msg = '[面板图图库管理器] 主图库\n'
     let totalRoles = 0, totalImages = 0
     for (const source of mains) {
-      const stat = statByDir.get(source.dir) || { roles: 0, images: 0 }
-      msg += '\n' + this._sourceLine(source, stat, this._sourceSize(source))
+      const stat = statByDir.get(source.dir) || { roles: 0, images: 0, size: 0 }
+      msg += '\n' + this._sourceLine(source, stat)
       const ver = getLocalVersionAt(source.dir)
       msg += ver ? `    版本：${ver.sha} / ${ver.date}\n` : '    版本：未知\n'
       totalRoles += stat.roles
@@ -130,17 +97,16 @@ export class Status extends plugin {
   async overallStatus(e) {
     if (!(await guardLayout(e))) return true
 
-    const statByDir = new Map(countSourceImages().map(s => [s.dir, s]))
     const sources = getSources()
+    const statByDir = new Map(sources.map(s => [s.dir, statSource(s)]))
     let msg = `[面板图图库管理器] 总览（图库源 ${sources.length} 个）\n`
     let totalRoles = 0, totalImages = 0, totalSize = 0
     for (const source of sources) {
-      const stat = statByDir.get(source.dir) || { roles: 0, images: 0 }
-      const size = this._sourceSize(source)
-      msg += '\n' + this._sourceLine(source, stat, size)
+      const stat = statByDir.get(source.dir) || { roles: 0, images: 0, size: 0 }
+      msg += '\n' + this._sourceLine(source, stat)
       totalRoles += stat.roles
       totalImages += stat.images
-      totalSize += size
+      totalSize += stat.size
     }
     msg += `\n合计：${totalRoles} 角色 / ${totalImages} 图片 / ${formatSize(totalSize)}\n`
 
