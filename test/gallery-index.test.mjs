@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { mod, checker, installFrameworkStubs, requireMiaoPlugin } from './_helper.mjs'
+import { mod, checker, installFrameworkStubs, requireMiaoPlugin, ensureTmpDir } from './_helper.mjs'
 
 installFrameworkStubs()
 requireMiaoPlugin()
@@ -16,6 +16,7 @@ const { listRoleImages, listRoleBlocked, findImageByN, getSources, countSourceIm
 const { MIAO_PROFILE_LINK } = await import(mod('components/constants.js'))
 
 const { check, finish } = checker()
+const tmpDir = ensureTmpDir()
 
 // ---- 只读断言（不依赖夹具）----
 const sources = getSources()
@@ -63,5 +64,26 @@ try {
 }
 
 check('夹具已清理（测试角色目录不存在）', !fs.existsSync(dir))
+
+// ---- 一层分组源的读取入口（第三方支持，主仓库不支持）----
+const groupRoot = path.join(tmpDir, 'group-index')
+fs.rmSync(groupRoot, { recursive: true, force: true })
+for (const [group, role] of [['gs-character', '琴'], ['sr-character', '三月七']]) {
+  fs.mkdirSync(path.join(groupRoot, group, role), { recursive: true })
+  fs.writeFileSync(path.join(groupRoot, group, role, 'a.webp'), 'x')
+}
+const grouped = getSources({ thirdParty: [{ name: 'MBT', dir: groupRoot, enabled: true }] })
+const tpSources = grouped.filter(s => s.kind === 'thirdParty')
+check('第三方分组源展开为两个源', tpSources.length === 2, JSON.stringify(tpSources.map(s => s.label)))
+check('分组源标签用原始目录名且 level 为 flat',
+  tpSources.some(s => s.label === 'MBT·gs-character' && s.level === 'flat') &&
+  tpSources.some(s => s.label === 'MBT·sr-character' && s.level === 'flat'),
+  JSON.stringify(tpSources.map(s => `${s.label}:${s.level}`)))
+check('分组源目录指向子图库',
+  tpSources.every(s => path.basename(path.dirname(s.dir)) === 'group-index'),
+  JSON.stringify(tpSources.map(s => s.dir)))
+const noGroup = getSources({ thirdParty: [{ name: '空', dir: path.join(tmpDir, 'nope'), enabled: true }] })
+check('不可直读的第三方源不进源列表', noGroup.every(s => s.kind !== 'thirdParty') || noGroup.some(s => s.label === '空') === false)
+fs.rmSync(groupRoot, { recursive: true, force: true })
 
 finish()

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { getRepoDir } from '../components/constants.js'
 import { getActiveRepoIds } from './mapJson.js'
 import { getThirdPartyRepos } from './galleryConfig.js'
-import { probeAll } from './srcProbe.js'
+import { probeAll, resolveSourceDirs } from './srcProbe.js'
 
 /**
  * miao-plugin 图库源配置读写（`config/profile.js` 的 `profileImgSrc`）
@@ -139,31 +139,46 @@ export function writeProfileImgSrc (list, opts = {}) {
 
 /**
  * 构建目标源列表：默认图库 + 可注册的主仓库 / 第三方仓库
- * 只收录结构可直读的源（tier / 安全的平铺），不可读的写入 skipped 供报告
+ * 只收录结构可直读的源（tier / 安全的平铺）；第三方仓库额外支持「一层分组」
+ * （如按游戏分层的 gs-character / sr-character：每个子图库各自注册为平铺源）
+ * @param {object} [opts]
+ * @param {Array<{dir: string, label: string, kind: string}>} [opts.items] - 指定待注册项（套件用）
  * @returns {{
  *   list: string[],
  *   entries: Array<{ value: string, kind: string, label: string, level: string }>,
  *   skipped: Array<{ dir: string, label: string, kind: string, reason: string }>
  * }}
  */
-export function buildSrcList () {
-  const items = []
-  for (const repoId of getActiveRepoIds()) {
-    items.push({ dir: getRepoDir(repoId), label: repoId === 0 ? '主图库' : `主图库-${repoId}`, kind: 'main' })
-  }
-  for (const tp of getThirdPartyRepos()) {
-    if (tp.enabled === false) continue
-    items.push({ dir: tp.dir, label: tp.name, kind: 'thirdParty' })
+export function buildSrcList (opts = {}) {
+  let items = opts.items
+  if (!items) {
+    items = []
+    for (const repoId of getActiveRepoIds()) {
+      items.push({ dir: getRepoDir(repoId), label: repoId === 0 ? '主图库' : `主图库-${repoId}`, kind: 'main' })
+    }
+    for (const tp of getThirdPartyRepos()) {
+      if (tp.enabled === false) continue
+      items.push({ dir: tp.dir, label: tp.name, kind: 'thirdParty' })
+    }
   }
 
   const probes = probeAll(items)
   const entries = [{ value: DEFAULT_SRC_VALUE, kind: 'default', label: '默认图库', level: 'tier' }]
   const skipped = []
   for (const p of probes) {
-    if (p.level === 'tier' || p.level === 'flat') {
-      entries.push({ value: toPosix(p.dir), kind: p.kind, label: p.label, level: p.level })
-    } else {
+    // 只有第三方图库允许一层分组展开（主仓库 / 默认图库仍要求 tier 或平铺）
+    const dirs = resolveSourceDirs(p, { allowGroup: p.kind === 'thirdParty' })
+    if (dirs.length === 0) {
       skipped.push({ dir: p.dir, label: p.label, kind: p.kind, reason: p.reason })
+      continue
+    }
+    for (const d of dirs) {
+      entries.push({
+        value: toPosix(d.dir),
+        kind: p.kind,
+        label: d.groupName ? `${p.label}·${d.groupName}` : p.label,
+        level: d.level
+      })
     }
   }
   const seen = new Set()

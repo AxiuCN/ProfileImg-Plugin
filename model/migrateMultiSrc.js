@@ -554,7 +554,7 @@ export function migrateToMultiSrc () {
       report.warnings.push(
         `${synced.skipped.length} 个图库仓库无法直读，未注册：` +
         synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；') +
-        '。请把仓库目录整理为 normal-character/{角色}/ 或平铺 {角色}/（根目录不要放 docs 等含图目录），整理后执行 #更新第三方图库 或重启 Yunzai 重新注册'
+        '。请把仓库目录整理为 normal-character/{角色}/、平铺 {角色}/，或一层分组 {分组}/{角色}/（如 gs-character/{角色}/），整理后执行 #更新第三方图库 或重启 Yunzai 重新注册'
       )
     }
     report.needRestart = true

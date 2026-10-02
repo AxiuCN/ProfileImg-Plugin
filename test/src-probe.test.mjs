@@ -8,7 +8,7 @@ import { mod, ensureTmpDir, checker, installFrameworkStubs } from './_helper.mjs
 
 installFrameworkStubs()
 
-const { probeRepo } = await import(mod('model/srcProbe.js'))
+const { probeRepo, resolveSourceDirs } = await import(mod('model/srcProbe.js'))
 
 const tmp = ensureTmpDir()
 const root = path.join(tmp, 'probe')
@@ -72,5 +72,57 @@ check('大小写后缀计入（webp/PNG/JpEg）', probeRepo(extRepo).tier.normal
 const otherExtRepo = path.join(root, 'other-ext-repo')
 mk(path.join(otherExtRepo, 'normal-character', '角色丙'), ['d.gif', 'e.txt'])
 check('gif/txt 不计入图片 → unsupported', probeRepo(otherExtRepo).level === 'unsupported', `实际 ${probeRepo(otherExtRepo).level}`)
+
+// ---- 一层分组（如按游戏分层：gs-character / sr-character，不依赖命名）----
+const groupRepo = path.join(root, 'group-repo')
+mk(path.join(groupRepo, 'gs-character', '琴'), ['a.webp'])
+mk(path.join(groupRepo, 'sr-character', '三月七'), ['b.png'])
+mk(path.join(groupRepo, '原神二队', '钟离'), ['c.jpg'])          // 任意命名同样算
+mk(path.join(groupRepo, 'gs-tier', 'normal-character', '胡桃'), ['d.webp']) // 分组内也可以是分层
+mk(path.join(groupRepo, 'docs'), ['cover.webp'])                 // 工具目录跳过
+mk(path.join(groupRepo, '.git'), ['HEAD'])
+fs.writeFileSync(path.join(groupRepo, 'README.md'), 'x')
+
+const pg = probeRepo(groupRepo)
+check('根读不通但子目录可直读 → group', pg.level === 'group', `实际 ${pg.level}（${pg.reason}）`)
+check('分组不依赖命名（含任意中文名）', pg.group.dirs.some(d => d.name === '原神二队'))
+check('工具 / 隐藏目录不算分组',
+  !pg.group.dirs.some(d => d.name === 'docs' || d.name === '.git'),
+  JSON.stringify(pg.group.dirs.map(d => d.name)))
+check('分组内分层结构识别为 tier',
+  pg.group.dirs.find(d => d.name === 'gs-tier')?.level === 'tier',
+  JSON.stringify(pg.group.dirs.map(d => `${d.name}:${d.level}`)))
+check('分组条数 = 4', pg.group.dirs.length === 4, JSON.stringify(pg.group.dirs.map(d => d.name)))
+
+const expanded = resolveSourceDirs(pg, { allowGroup: true })
+check('resolveSourceDirs 展开为每个分组一项',
+  expanded.length === 4 && expanded.every(d => path.isAbsolute(d.dir) && d.groupName),
+  JSON.stringify(expanded.map(d => d.groupName)))
+check('resolveSourceDirs 不展开时返回空（主仓库 / 默认图库不支持分组）',
+  resolveSourceDirs(pg).length === 0)
+check('tier / 平铺源展开为自身一项',
+  resolveSourceDirs(probeRepo(tierRepo), { allowGroup: true }).length === 1 &&
+  resolveSourceDirs(probeRepo(flatRepo), { allowGroup: true })[0].level === 'flat')
+
+// 分组只按结构判定，标签用原始目录名（不做任何游戏名美化）
+check('分组名保留原始目录名',
+  pg.group.dirs.map(d => d.name).sort().join(',') === 'gs-character,gs-tier,sr-character,原神二队',
+  JSON.stringify(pg.group.dirs.map(d => d.name)))
+check('展开项不再附带美化标签',
+  expanded.every(d => d.label === undefined && typeof d.groupName === 'string'),
+  JSON.stringify(expanded[0]))
+
+// 只有工具目录时不算分组
+const toolOnlyRepo = path.join(root, 'tool-only-repo')
+mk(path.join(toolOnlyRepo, 'docs', '角色'), ['a.webp'])
+check('仅工具目录 → unsupported（不误判为分组）',
+  probeRepo(toolOnlyRepo).level === 'unsupported', `实际 ${probeRepo(toolOnlyRepo).level}`)
+
+// 「角色目录里直接放图」的仓库不应被误判为分组（注册后 miao 也读不到角色）
+const roleFileRepo = path.join(root, 'role-file-repo')
+mk(path.join(roleFileRepo, '琴'), ['琴_1.webp'])
+mk(path.join(roleFileRepo, 'docs'), ['cover.webp'])
+check('角色目录仅含图片文件 → 仍判 unsupported（不当分组）',
+  probeRepo(roleFileRepo).level === 'unsupported', `实际 ${probeRepo(roleFileRepo).level}（${probeRepo(roleFileRepo).reason}）`)
 
 finish()

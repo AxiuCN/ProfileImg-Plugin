@@ -26,16 +26,16 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 
 | 套件 | 覆盖 | 前置 |
 |------|------|------|
-| `src-probe.test.mjs` | 图库源结构探测：tier / 平铺 / 危险平铺（含图非角色目录）/ 空仓库 / 后缀大小写 | 无 |
-| `profile-src.test.mjs` | miao `profile.js` 读写：能力探测、模板复制生成、声明段替换保留注释与其他 export、往返一致、追加模式、幂等、边界拒绝 | miao-plugin 配置模板 |
+| `src-probe.test.mjs` | 图库源结构探测：tier / 平铺 / 危险平铺（含图非角色目录）/ 空仓库 / 后缀大小写 / **一层分组**（不依赖命名、工具与隐藏目录跳过、分组内分层、角色目录里放图不误判、标签用原始目录名）/ `resolveSourceDirs` 展开（第三方可展开、主仓库不可） | 无 |
+| `profile-src.test.mjs` | miao `profile.js` 读写：能力探测、模板复制生成、声明段替换保留注释与其他 export、往返一致、追加模式、幂等、边界拒绝；源列表构建：一层分组展开为多个子图库、主仓库不支持分组（记 skipped） | miao-plugin 配置模板 |
 | `migrate-precheck.test.mjs` | 迁移预检：三态判定、报告结构、**预检只读**（miao 配置字节与目录不变） | miao-plugin 配置模板 |
 | `default-segment-name.test.mjs` | default 段位命名：有版权 / 有备注 / 无版权 / 非标准命名的重命名规则、原名「」备注、扩展名与段位号 | 无 |
-| `gallery-index.test.mjs` | 多源索引：源列表、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库，可逆清理） | miao-plugin 配置模板 |
+| `gallery-index.test.mjs` | 多源索引：源列表（含第三方一层分组展开为 `图库名·gs-character` 等，标签用原始目录名）、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库与临时分组目录，可逆清理） | miao-plugin 配置模板 |
 | `layout-guard.test.mjs` | 布局守卫：legacy 一律拦截、fresh 默认拦截但 `allowFresh` 放行、ready 放行（按当前环境状态分支断言） | miao-plugin 配置模板 |
 | `layout-notice.test.mjs` | 启动布局提示：三个状态（legacy / fresh / srcPending）文案、24h 同状态节流与状态间独立、发送失败不记录（下次重试）、主人不可用不发送（只经 `notifyLayout` 公开入口） | 无 |
 | `status-output.test.mjs` | 状态输出不回显绝对路径、`statSource` 规模口径（平铺跳过 `.git`、分层只算 normal/super、角色/图片计数、目录缺失归零） | 无 |
 | `repo-branch.test.mjs` | 仓库默认分支探测：main / master / 自定义 / 空仓库 / 非仓库回退 | git 可执行文件 |
 | `third-party-path.test.mjs` | 第三方图库目录解析：旧相对名 / 正反斜杠绝对路径 / UNC / 空值；安装目标目录为非 Git 且非空时拒绝覆盖（含场景提示与目录未改动） | 无 |
-| `unregistered-repo.test.mjs` | 未登记目录发现与补登记：Git 仓库 / 非 git 但结构可直读 / 主仓库保留名 / 旧布局 `default` 目录 / 已登记 / 非图库 / 隐藏目录排除，`addThirdPartyRepo` 按绝对路径幂等且回写绝对路径、`autoRegisterUnregisteredRepos` 扫描后写配置并保留模板注释（夹具在临时目录与临时配置内） | 无 |
+| `unregistered-repo.test.mjs` | 未登记目录发现与补登记：Git 仓库 / 非 git 但结构可直读（含一层分组）/ 主仓库保留名 / 旧布局 `default` 目录 / 已登记 / 非图库 / 隐藏目录排除，`addThirdPartyRepo` 按绝对路径幂等且回写绝对路径、`autoRegisterUnregisteredRepos` 扫描后写配置并保留模板注释（夹具在临时目录与临时配置内） | 无 |
 | `guoba-schema.test.mjs` | 锅巴 schema 可加载、thirdParty 不含退役字段、defSet 模板变量与 defaultValues 一致、配置写入保留模板注释且可往返解析、注释刷新幂等与自定义键跳过 | 无 |
 | `smoke-imports.test.mjs` | 全部 apps / model / modules / components 可加载、导出非空、`getDefaultDir()`/`LEGACY_DEFAULT_DIR` 路径语义、仓库级 `cron`/`autoRestart` 退役字段已清除、`buildSyncReport`/`restartHint` 文案统一且不含具体方式、四个命令模块复用统一文案来源 | 无 |

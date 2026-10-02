@@ -82,6 +82,27 @@ check('源列表首项为默认图库 profile', built.list[0] === 'profile', `�
 check('entries / skipped 均为数组', Array.isArray(built.entries) && Array.isArray(built.skipped))
 check('skipped 项带原因', built.skipped.every(s => typeof s.reason === 'string' && s.reason.length > 0))
 
+// 8.1 一层分组（如按游戏分层）的注册展开：第三方支持，主仓库不支持
+const groupRoot = path.join(tmp, 'group-src')
+fs.rmSync(groupRoot, { recursive: true, force: true })
+for (const [group, role] of [['gs-character', '琴'], ['sr-character', '三月七']]) {
+  fs.mkdirSync(path.join(groupRoot, group, role), { recursive: true })
+  fs.writeFileSync(path.join(groupRoot, group, role, 'a.webp'), 'x')
+}
+const posix = (p) => p.split(path.sep).join('/')
+const tpBuilt = buildSrcList({ items: [{ dir: groupRoot, label: 'MBT', kind: 'thirdParty' }] })
+check('第三方分组源展开为每个子图库',
+  tpBuilt.list.includes(posix(path.join(groupRoot, 'gs-character'))) &&
+  tpBuilt.list.includes(posix(path.join(groupRoot, 'sr-character'))),
+  JSON.stringify(tpBuilt.list))
+check('分组源标签用原始目录名',
+  tpBuilt.entries.some(e => e.label === 'MBT·gs-character') && tpBuilt.entries.some(e => e.label === 'MBT·sr-character'),
+  JSON.stringify(tpBuilt.entries.map(e => e.label)))
+const mainBuilt = buildSrcList({ items: [{ dir: groupRoot, label: '主图库', kind: 'main' }] })
+check('主仓库不支持分组（记入 skipped 并给出原因）',
+  mainBuilt.skipped.length === 1 && mainBuilt.skipped[0].reason.includes('一层分组'),
+  JSON.stringify(mainBuilt.skipped))
+
 // 9. 不同步真实配置：syncProfileImgSrc 只做前置校验（真实 miao 支持时会写真实配置，故此处断言「能力探测」分支）
 const before = fs.readFileSync(target, 'utf8')
 check('套件未改动真实 miao 配置', before === after)

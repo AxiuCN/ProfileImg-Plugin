@@ -55,6 +55,13 @@ mkdir('fan-local-flat', { flat: true })                   // 未登记：非 git
 mkdir('docs', {})                                         // 非图库目录
 mkdir('.cache', { git: true })                            // 隐藏目录
 
+// 一层分组（如按游戏分层）：无 .git 但结构可直读，也应算候选
+const groupDir = path.join(baseDir, 'fan-grouped')
+for (const [group, role] of [['gs-character', '琴'], ['sr-character', '三月七']]) {
+  fs.mkdirSync(path.join(groupDir, group, role), { recursive: true })
+  fs.writeFileSync(path.join(groupDir, group, role, 'a.webp'), 'x')
+}
+
 const { check, finish } = checker()
 const registered = [{ dir: path.join(baseDir, 'fan-registered') }]
 
@@ -62,8 +69,9 @@ const registered = [{ dir: path.join(baseDir, 'fan-registered') }]
 const found = listUnregisteredRepos({ baseDir, registered, withRemote: false })
 const names = found.map(f => f.name).sort()
 check('Git 仓库 + 结构可直读目录都算候选',
-  JSON.stringify(names) === JSON.stringify(['fan-git', 'fan-local-flat', 'fan-local-tier', 'fan-worktree']),
+  JSON.stringify(names) === JSON.stringify(['fan-git', 'fan-grouped', 'fan-local-flat', 'fan-local-tier', 'fan-worktree']),
   JSON.stringify(names))
+check('一层分组（按游戏分层）也算候选', names.includes('fan-grouped'))
 check('返回绝对路径', found.every(f => path.isAbsolute(f.dir)))
 check('主仓库保留名被排除', !names.includes('miao-plugin-ProfileImg') && !names.includes('miao-plugin-ProfileImg-1'))
 check('旧布局 default 图库源目录被排除（由 #迁移图库 处理）', !names.includes('default'))
@@ -88,11 +96,11 @@ check('按解析后的绝对路径判重（相对名写法命中）',
 // ---- 3. 自动补登记：扫描 → 登记进配置 ----
 fs.writeFileSync(cfgFile, 'thirdParty: []\n', 'utf8')
 const auto = autoRegisterUnregisteredRepos({ baseDir, registered, withRemote: false, file: cfgFile })
-check('自动登记全部候选', auto.added.length === 4 && auto.failed.length === 0,
+check('自动登记全部候选', auto.added.length === 5 && auto.failed.length === 0,
   JSON.stringify(auto.added.map(a => a.name)))
 const afterText = fs.readFileSync(cfgFile, 'utf8')
 check('配置里含全部已登记目录',
-  ['fan-git', 'fan-worktree', 'fan-local-tier', 'fan-local-flat'].every(n => afterText.includes(n)))
+  ['fan-git', 'fan-grouped', 'fan-worktree', 'fan-local-tier', 'fan-local-flat'].every(n => afterText.includes(n)))
 check('补登记写入保留模板注释', afterText.includes('登记要求'))
 check('再次自动登记为空（幂等）',
   autoRegisterUnregisteredRepos({ baseDir, registered, withRemote: false, file: cfgFile }).added.length === 0)

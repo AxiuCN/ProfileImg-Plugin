@@ -239,7 +239,8 @@ export class Download extends plugin {
         `\n⚠️ 目录结构无法直读：${probe.reason}`,
         '\n请整理为以下任一结构后重新执行 #下载第三方图库 或 #更新第三方图库：',
         '\n  · normal-character/{角色}/ 与 super-character/{角色}/（分层）',
-        '\n  · {角色}/（平铺，仓库根下不要放 docs 等含图的非角色目录）'
+        '\n  · {角色}/（平铺，仓库根下不要放 docs 等含图的非角色目录）',
+        '\n  · {游戏或分组}/{角色}/（一层分组，如按游戏分层的 gs-character、sr-character，各自注册为源）'
       ].join('')
     }
     return `\n目录结构：${probe.reason}`

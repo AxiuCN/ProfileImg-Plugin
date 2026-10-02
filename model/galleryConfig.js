@@ -127,7 +127,8 @@ export function listUnregisteredRepos (opts = {}) {
 
     const hasGit = fs.existsSync(path.join(dir, '.git'))
     const level = probeRepo(dir).level
-    if (!hasGit && level !== 'tier' && level !== 'flat') continue
+    // 可直读（tier / 平铺）或一层分组（第三方源支持，如按游戏分层）都算候选
+    if (!hasGit && level !== 'tier' && level !== 'flat' && level !== 'group') continue
     out.push({
       name: entry.name,
       dir,

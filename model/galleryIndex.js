@@ -3,7 +3,7 @@ import path from 'node:path'
 import { MIAO_PROFILE_LINK, getRepoDir } from '../components/constants.js'
 import { getActiveRepoIds } from './mapJson.js'
 import { getThirdPartyRepos } from './galleryConfig.js'
-import { probeRepo } from './srcProbe.js'
+import { probeRepo, resolveSourceDirs } from './srcProbe.js'
 import { parseFilename } from '../components/panelUtils.js'
 import { normalizeRoleName } from '../modules/proMap.js'
 
@@ -20,20 +20,30 @@ const IMG_RE = /\.(webp|png|jpg|jpeg)$/i
 
 /**
  * 图库源列表
+ * 第三方源支持「一层分组」（如按游戏分层的 gs-character / sr-character），
+ * 每个可直读子目录各自成为一个平铺源；主仓库 / 默认图库保持单源
+ * @param {object} [opts]
+ * @param {Array<{name: string, dir: string, enabled?: boolean}>} [opts.thirdParty] - 指定第三方列表（套件用）
  * @returns {Array<{kind: 'default'|'main'|'thirdParty', label: string, dir: string, level: string, repoId?: number}>}
  */
-export function getSources () {
+export function getSources (opts = {}) {
   const sources = [{ kind: 'default', label: '默认图库', dir: MIAO_PROFILE_LINK, level: 'tier' }]
   for (const repoId of getActiveRepoIds()) {
     const dir = getRepoDir(repoId)
     if (!fs.existsSync(dir)) continue
     sources.push({ kind: 'main', label: repoId === 0 ? '主图库' : `主图库-${repoId}`, dir, repoId, level: 'tier' })
   }
-  for (const tp of getThirdPartyRepos()) {
+  for (const tp of opts.thirdParty || getThirdPartyRepos()) {
     if (tp.enabled === false) continue
     const probe = probeRepo(tp.dir)
-    if (probe.level === 'unsupported') continue
-    sources.push({ kind: 'thirdParty', label: tp.name, dir: tp.dir, level: probe.level })
+    for (const d of resolveSourceDirs(probe, { allowGroup: true })) {
+      sources.push({
+        kind: 'thirdParty',
+        label: d.groupName ? `${tp.name}·${d.groupName}` : tp.name,
+        dir: d.dir,
+        level: d.level
+      })
+    }
   }
   return sources
 }
