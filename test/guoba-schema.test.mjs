@@ -11,7 +11,7 @@ import { mod, pluginRoot, checker, installFrameworkStubs, ensureTmpDir } from '.
 
 installFrameworkStubs()
 
-const { writeGalleryConfig, getGalleryConfig } = await import(mod('components/config.js'))
+const { writeGalleryConfig, getGalleryConfig, refreshGalleryConfigFile } = await import(mod('components/config.js'))
 const guobaDir = path.join(pluginRoot, 'guoba')
 const { check, finish } = checker()
 
@@ -77,5 +77,19 @@ check('写入后可解析回原列表',
   JSON.stringify(getGalleryConfig(tmpCfg).thirdParty) === JSON.stringify([entry]))
 writeGalleryConfig({ thirdParty: [] }, tmpCfg)
 check('空列表写入仍为合法 YAML', JSON.stringify(getGalleryConfig(tmpCfg).thirdParty) === '[]')
+
+// ---- 6. 刷新存量运行时配置的注释（模板升级同步）----
+const staleCfg = path.join(tmp, 'cfg-write', 'stale.yaml')
+fs.writeFileSync(staleCfg, '# 旧版说明\nthirdParty:\n  - name: 旧图库\n    dir: E:/old\n    remoteUrl: ""\n    enabled: true\n', 'utf8')
+check('存量旧注释被刷新', refreshGalleryConfigFile({ file: staleCfg }).refreshed === true)
+const refreshedText = fs.readFileSync(staleCfg, 'utf8')
+check('刷新后含新模板注释', refreshedText.includes('登记要求'))
+check('刷新不丢条目', JSON.stringify(getGalleryConfig(staleCfg).thirdParty.map(t => t.name)) === JSON.stringify(['旧图库']))
+check('再次刷新为空操作（幂等）', refreshGalleryConfigFile({ file: staleCfg }).refreshed === false)
+fs.writeFileSync(staleCfg, 'thirdParty: []\ncustomKey: 1\n', 'utf8')
+const skip = refreshGalleryConfigFile({ file: staleCfg })
+check('含自定义键时跳过刷新', skip.refreshed === false && String(skip.reason).includes('自定义键'))
+check('跳过时不改动文件', fs.readFileSync(staleCfg, 'utf8').includes('customKey'))
+check('文件不存在时跳过', refreshGalleryConfigFile({ file: path.join(tmp, 'cfg-write', 'nope.yaml') }).refreshed === false)
 
 finish()

@@ -7,7 +7,7 @@ import { buildAliasMap, watchCustomAliasFiles } from './modules/alias.js'
 import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
-import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
+import { ensureGalleryConfigFile, ensureManagerConfigFile, refreshGalleryConfigFile } from './components/config.js'
 import { autoRegisterUnregisteredRepos, listUnregisteredRepos } from './model/galleryConfig.js'
 import { getLayoutState } from './model/migrateMultiSrc.js'
 import { syncProfileImgSrc, buildSrcList } from './model/profileSrc.js'
@@ -92,6 +92,14 @@ const layoutState = getLayoutState()
 
 // ② 补登记：扫描结果只用于写入 gallery_config.yaml，绝不直接作为 miao 源
 if (layoutState !== 'legacy') {
+  // 存量用户的运行时配置注释可能停留在旧版本，按当前模板刷新（内容不变则不写）
+  const refreshed = refreshGalleryConfigFile()
+  if (refreshed.refreshed) {
+    logger.info('[ProfileImg-Plugin] 已刷新 gallery_config.yaml 的注释说明（配置项未变）')
+  } else if (!refreshed.ok) {
+    logger.warn('[ProfileImg-Plugin] 刷新图库配置注释失败:', refreshed.error)
+  }
+
   const autoReg = autoRegisterUnregisteredRepos()
   if (autoReg.added.length) {
     logger.info('[ProfileImg-Plugin] 已自动登记图库到 gallery_config.yaml：' +

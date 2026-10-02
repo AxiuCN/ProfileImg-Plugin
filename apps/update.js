@@ -173,7 +173,10 @@ export class Update extends plugin {
       if (!synced.ok) {
         lines.push(`图库源同步：失败 - ${synced.error || '未知错误'}`)
       } else {
-        if (synced.changed) lines.push('图库源同步：已更新，需重启 Yunzai 后生效')
+        if (synced.changed) {
+          lines.push('图库源同步：已更新')
+          lines.push(restartHint().trim())
+        }
         if (synced.skipped.length) {
           lines.push(`图库源同步：${synced.skipped.length} 个仓库无法直读（` +
             synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；') + '）')

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { initMap } from '../model/mapJson.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from '../components/config.js'
+import { restartHint } from '../components/notify.js'
 import {
   GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR, MIAO_PROFILE_LINK,
 } from '../components/constants.js'
@@ -98,7 +99,7 @@ export class InitGallery extends plugin {
         lines.push(`\n⚠️ ${synced.skipped.length} 个图库仓库无法直读，未注册：` +
           synced.skipped.map(s => `${s.label}（${s.reason}）`).join('；'))
       }
-      if (synced.changed) lines.push('\n⚠️ 请重启 Yunzai 使图库源配置生效。')
+      if (synced.changed) lines.push(restartHint())
       return e.reply(lines.join(''))
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 图库初始化失败:', err)

@@ -5,6 +5,7 @@
  * - `toConfigDirValue`：绝对路径 → 配置值（一律正斜杠绝对路径）
  */
 import path from 'node:path'
+import fs from 'node:fs'
 import { mod, checker, installFrameworkStubs } from './_helper.mjs'
 
 installFrameworkStubs()
@@ -45,5 +46,20 @@ check('往返一致（库内）',
   path.resolve(resolveThirdPartyDir(toConfigDirValue(absInside))) === path.resolve(absInside))
 check('往返一致（跨盘）',
   path.resolve(resolveThirdPartyDir(toConfigDirValue(outsideDir))) === path.resolve(outsideDir))
+
+// ---- 4. 安装目标目录安全：非 Git 且非空 → 拒绝覆盖，且提示按场景给 ----
+const { installRepoAsync } = await import(mod('model/git.js'))
+const tmpRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin/test/.test-tmp/third-party-path')
+const dirtyDir = path.join(tmpRoot, 'dirty')
+fs.rmSync(tmpRoot, { recursive: true, force: true })
+fs.mkdirSync(dirtyDir, { recursive: true })
+fs.writeFileSync(path.join(dirtyDir, 'local.webp'), Buffer.alloc(16))
+const refused = await installRepoAsync('https://example.invalid/x.git', dirtyDir, 'main', { refuseHint: '场景提示：本地图库请直接登记' })
+check('非 Git 非空目录被拒绝覆盖', refused.ok === false && refused.existed === false, refused.msg)
+check('拒绝提示含场景说明', refused.msg.includes('场景提示'))
+const refusedDefault = await installRepoAsync('https://example.invalid/x.git', dirtyDir, 'main')
+check('未传场景提示时给出通用提示', refusedDefault.ok === false && refusedDefault.msg.includes('请更换目录'))
+check('拒绝时未改动目录内容', fs.readdirSync(dirtyDir).join(',') === 'local.webp')
+fs.rmSync(tmpRoot, { recursive: true, force: true })
 
 finish()

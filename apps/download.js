@@ -86,7 +86,9 @@ export class Download extends plugin {
       }
 
       try {
-        const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        const result = await installRepoAsync(repo.remoteUrl, repoDir, 'main', {
+          refuseHint: `如确认要重建主仓库 ${repoDir}，请先手动清空该目录，或发送 #强制下载主图库`
+        })
         if (result.ok) {
           const sha = getLocalSha(repoDir)
           if (sha) setRepoVersion(repoId, sha)
@@ -122,7 +124,9 @@ export class Download extends plugin {
     try {
       e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
       const branch = await this._detectRemoteBranch(blockedUrl)
-      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch)
+      const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch, {
+        refuseHint: '如确认要重建屏蔽图库，请先手动清空该目录，或发送 #强制下载屏蔽图库'
+      })
       return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg + this._syncSources())
     } finally {
       lock.release()
@@ -216,7 +220,9 @@ export class Download extends plugin {
     try {
       e.reply(`[面板图图库管理器] 开始下载第三方图库「${repoName}」...`)
       const branch = await this._detectRemoteBranch(remoteUrl)
-      const result = await installRepoAsync(remoteUrl, targetDir, branch)
+      const result = await installRepoAsync(remoteUrl, targetDir, branch, {
+        refuseHint: `如这就是你的本地图库，请在锅巴「第三方图库」或 config/gallery_config.yaml 中新增条目（dir 填 ${targetDir}），无需下载`
+      })
       if (!result.ok) {
         return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载失败\n${result.msg}`)
       }

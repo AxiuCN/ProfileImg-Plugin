@@ -1,4 +1,5 @@
 import { precheckMultiSrc, migrateToMultiSrc } from '../model/migrateMultiSrc.js'
+import { restartHint } from '../components/notify.js'
 
 /**
  * #迁移图库 — 升级到 miao 多图库源布局（自定义图库路径）
@@ -122,7 +123,7 @@ export class MigrateGallery extends plugin {
       lines.push('', '⚠️ 提示：')
       r.warnings.forEach(w => lines.push(`  - ${w}`))
     }
-    lines.push('', '⚠️ 请立即重启 Yunzai 使源列表生效（重启前自定义图库的图暂不可见）。')
+    lines.push('', restartHint().trim() + '；重启前自定义图库的图暂不可见')
     return lines.join('\n')
   }
 }

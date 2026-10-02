@@ -197,9 +197,11 @@ export function installRepo(repoUrl, targetDir, branch = 'main') {
  * @param {string} repoUrl - 远程仓库 URL
  * @param {string} targetDir - 目标目录
  * @param {string} branch - 分支名，默认 'main'
+ * @param {object} [opts]
+ * @param {string} [opts.refuseHint] - 拒绝覆盖时追加的场景特定提示（主图库 / 屏蔽图库 / 第三方各不相同）
  * @returns {Promise<{ ok: boolean, msg: string, existed: boolean }>}
  */
-export async function installRepoAsync(repoUrl, targetDir, branch = 'main') {
+export async function installRepoAsync(repoUrl, targetDir, branch = 'main', opts = {}) {
   const hasGit = fs.existsSync(path.join(targetDir, '.git'))
 
   if (hasGit) {
@@ -223,8 +225,8 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main') {
       return {
         ok: false,
         existed: false,
-        msg: '目标目录已存在且不是 Git 仓库（可能已有本地图库），已拒绝下载以免覆盖；' +
-          '如这就是你的图库，请在锅巴「第三方图库」或 config/gallery_config.yaml 中新增条目（dir 填该绝对路径），无需下载'
+        msg: '目标目录已存在且不是 Git 仓库，已拒绝下载以免覆盖；' +
+          (opts.refuseHint || '请更换目录，或手动处理该目录后重试')
       }
     }
   }

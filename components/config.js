@@ -95,6 +95,39 @@ export function writeGalleryConfig(config, file) {
   }
 }
 
+/**
+ * 刷新图库配置文件的注释结构（模板升级后同步给存量用户）
+ *
+ * 运行时 config/gallery_config.yaml 只在文件不存在时从模板复制，老用户的注释会一直停留在旧版本；
+ * 此处按当前 defSet 模板重新渲染并比对，仅在内容确实不同时写回。
+ * 安全约束：配置里出现 `thirdParty` 以外的键（用户自行扩展）时跳过，避免覆盖用户内容。
+ * @param {object} [opts]
+ * @param {string} [opts.file] - 指定配置文件（套件用）
+ * @returns {{ ok: boolean, refreshed: boolean, reason?: string, error?: string }}
+ */
+export function refreshGalleryConfigFile(opts = {}) {
+  const target = opts.file || GALLERY_CONFIG_PATH
+  try {
+    if (!fs.existsSync(target)) return { ok: true, refreshed: false, reason: '配置文件不存在' }
+    if (!fs.existsSync(GALLERY_CONFIG_TEMPLATE_PATH)) return { ok: true, refreshed: false, reason: '模板缺失' }
+
+    const raw = fs.readFileSync(target, 'utf8')
+    const cfg = YAML.parse(raw) || {}
+    const extraKeys = Object.keys(cfg).filter(k => k !== 'thirdParty')
+    if (extraKeys.length) {
+      return { ok: true, refreshed: false, reason: `含自定义键 ${extraKeys.join('、')}，跳过` }
+    }
+
+    const expected = renderListConfig(GALLERY_CONFIG_TEMPLATE_PATH, 'gallery_thirdParty', cfg.thirdParty || [])
+    if (expected === raw) return { ok: true, refreshed: false }
+    fs.writeFileSync(target, expected, 'utf8')
+    return { ok: true, refreshed: true }
+  } catch (e) {
+    logger.error('[ProfileImg-Plugin] 刷新图库配置注释失败:', e)
+    return { ok: false, refreshed: false, error: e.message }
+  }
+}
+
 /* ==========================================================================
    成员管理权限（manager_config.yaml）
    ========================================================================== */
