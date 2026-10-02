@@ -26,6 +26,6 @@
 #
 # 生效方式：新增或修改图库后需重启 Yunzai（miao 只在启动时读取图库源列表）；
 #           目录不存在或结构不符的条目不会被注册
-# normalPath / superPath 为旧版字段，新布局已不使用（保留兼容读取，可删除）
+# normalPath / superPath 为旧版字段，新布局已不再使用（可删除；仓库结构由插件自动探测）
 thirdParty:
 ${gallery_thirdParty}

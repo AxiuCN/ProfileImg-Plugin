@@ -60,8 +60,7 @@ export function getGalleryConfig(file) {
  * @param {Array} list - 列表数据，空列表渲染为 []
  * @returns {string} 渲染后的配置文本
  */
-export function renderListConfig (templatePath, varName, list) {
-  const template = fs.readFileSync(templatePath, 'utf8')
+function renderListConfig (templatePath, varName, list) {  const template = fs.readFileSync(templatePath, 'utf8')
   // 片段缩进 2 空格（与模板中 "key:" 的下一级对齐），空列表用 [] 流式写法
   const fragment = (Array.isArray(list) && list.length > 0)
     ? YAML.stringify(list, { indent: 2 }).trim().split('\n').map(line => '  ' + line).join('\n')
@@ -166,33 +165,15 @@ export function getManagerConfig() {
   return {}
 }
 
-/**
- * 写入成员管理权限配置到 config/manager_config.yaml
- * 覆盖整个对象（含 managers 列表），由锅巴保存时调用
- * @param {object} config - 完整的 manager_config 对象
- * @returns {{ ok: boolean, error?: string }}
- */
-export function writeManagerConfig(config) {
-  try {
-    const dir = path.dirname(MANAGER_CONFIG_PATH)
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(MANAGER_CONFIG_PATH, YAML.stringify(config, { indent: 2 }), 'utf8')
-    return { ok: true }
-  } catch (e) {
-    logger.error('[ProfileImg-Plugin] 写入成员配置失败:', e)
-    return { ok: false, error: e.message }
-  }
-}
-
 /** 成员未配置 repos 时的默认允许图库（default 图库） */
-export const DEFAULT_MANAGER_REPOS = ['default']
+const DEFAULT_MANAGER_REPOS = ['default']
 
 /**
  * 查询用户的成员配置记录
  * @param {number|string} userId - 用户 QQ 号
  * @returns {{ qq: number, repos?: Array|string }|null} 非授权成员返回 null
  */
-export function getManagerForUser(userId) {
+function getManagerForUser(userId) {
   const cfg = getManagerConfig()
   const list = Array.isArray(cfg?.managers) ? cfg.managers : []
   return list.find(m => String(m.qq) === String(userId)) || null
@@ -214,7 +195,7 @@ export function isManager(e) {
  * @param {number|string} userId - 用户 QQ 号
  * @returns {string[]|null} 成员返回允许图库列表（未配置默认 ['default']）；非成员返回 null
  */
-export function getManagerRepos(userId) {
+function getManagerRepos(userId) {
   const m = getManagerForUser(userId)
   if (!m) return null
   const raw = m.repos

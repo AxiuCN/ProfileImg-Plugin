@@ -5,9 +5,8 @@ import path from 'node:path'
  * Pro 角色映射 — 星铁「某某某Pro」加强版角色复用基础角色图库
  *
  * miao-plugin 中 Pro 角色是独立实体，按角色名查询 profile/{type}-character/某某某Pro。
- * 本映射让聚合层（角色级 junction + 复制聚合）在逻辑层统一归一到基础角色：
- *   - junction link 保持 Pro 名（miao-plugin 查得到），target 指向基础角色主仓库目录
- *   - 复制 / 命令路由统一用基础角色名（序号段位统一、删除/反查一致）
+ * 本映射在逻辑层把 Pro 归一到基础角色（序号段位统一、删除/反查一致），
+ * 各图库源的分层/平铺目录由 miao 直接读取。
  */
 
 /** Pro 角色 → 基础角色映射表（如 流萤Pro → 流萤），启动时从 miao-plugin alias.js 构建 */
@@ -54,7 +53,7 @@ export function buildProMap() {
  * @param {string} roleName
  * @returns {string|null}
  */
-export function getProBase(roleName) {
+function getProBase(roleName) {
   if (PRO_MAP.has(roleName)) return PRO_MAP.get(roleName)
   const lower = roleName.toLowerCase()
   for (const [pro, base] of PRO_MAP) {
@@ -70,25 +69,4 @@ export function getProBase(roleName) {
  */
 export function normalizeRoleName(roleName) {
   return getProBase(roleName) || roleName
-}
-
-/**
- * 基础角色的所有 Pro 变体名（用于源目录候选 / junction 遍历）
- * @param {string} baseRole
- * @returns {string[]}
- */
-export function getProNames(baseRole) {
-  const out = []
-  for (const [pro, base] of PRO_MAP) {
-    if (base === baseRole) out.push(pro)
-  }
-  return out
-}
-
-/**
- * 全部 Pro 映射条目（供 ensureAllCharJunctions 建 Pro junction）
- * @returns {Array<{pro: string, base: string}>}
- */
-export function listProEntries() {
-  return [...PRO_MAP].map(([pro, base]) => ({ pro, base }))
 }

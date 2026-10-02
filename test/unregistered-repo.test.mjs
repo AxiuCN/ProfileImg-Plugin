@@ -15,6 +15,7 @@ installFrameworkStubs()
 
 const { listUnregisteredRepos, addThirdPartyRepo, autoRegisterUnregisteredRepos, resolveThirdPartyDir } =
   await import(mod('model/galleryConfig.js'))
+const { getGalleryConfig } = await import(mod('components/config.js'))
 
 const tmp = ensureTmpDir()
 const root = path.join(tmp, 'unregistered-repo')
@@ -77,7 +78,9 @@ const target = path.join(baseDir, 'fan-local-tier')
 const added = addThirdPartyRepo({ name: 'fan-local-tier', dir: target }, { file: cfgFile })
 check('登记成功', added.ok === true && added.added === true)
 const cfgText = fs.readFileSync(cfgFile, 'utf8')
-check('配置里写的是绝对路径', cfgText.includes(resolveThirdPartyDir(target).split(path.sep).join('/')) || cfgText.includes(resolveThirdPartyDir(target)))
+check('配置里写的是正斜杠绝对路径', cfgText.includes(target.split(path.sep).join('/')), target.split(path.sep).join('/'))
+check('回写值解析回同一绝对路径',
+  path.resolve(resolveThirdPartyDir(getGalleryConfig(cfgFile).thirdParty[0].dir)) === path.resolve(target))
 check('同路径重复登记不重复写入', addThirdPartyRepo({ name: 'x', dir: target }, { file: cfgFile }).added === false)
 check('按解析后的绝对路径判重（相对名写法命中）',
   addThirdPartyRepo({ name: 'y', dir: path.relative(process.cwd(), target) }, { file: cfgFile }).ok === true)

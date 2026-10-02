@@ -82,46 +82,12 @@ export function setRepoForChar(charName, repoId) {
 }
 
 /**
- * 批量设置角色仓库映射（用于迁移时一次性写入多个角色）
- * @param {Record<string, number>} charMap - { 角色名: 仓库编号 }
- * @param {boolean} overwrite - 是否覆盖已有记录（默认 false，不覆盖）
- */
-export function setRepoForChars(charMap, overwrite = false) {
-  const map = loadMap()
-  for (const [name, repoId] of Object.entries(charMap)) {
-    if (overwrite || !(name in map.mapping)) {
-      map.mapping[name] = repoId
-    }
-  }
-  saveMap(map)
-}
-
-/**
- * 从映射表中移除角色
- * @param {string} charName - 角色名
- */
-export function removeChar(charName) {
-  const map = loadMap()
-  delete map.mapping[charName]
-  saveMap(map)
-}
-
-/**
  * 初始化空的 map.json（若不存在则创建）
  */
 export function initMap() {
   if (!fs.existsSync(MAP_JSON_PATH)) {
     saveMap({ version: 1, mapping: {} })
   }
-}
-
-/**
- * 获取映射表中的所有角色名
- * @returns {string[]}
- */
-export function getAllChars() {
-  const map = loadMap()
-  return Object.keys(map.mapping)
 }
 
 /**

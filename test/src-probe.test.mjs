@@ -8,7 +8,7 @@ import { mod, ensureTmpDir, checker, installFrameworkStubs } from './_helper.mjs
 
 installFrameworkStubs()
 
-const { probeRepo, listRoleEntries, findRiskDirs } = await import(mod('model/srcProbe.js'))
+const { probeRepo } = await import(mod('model/srcProbe.js'))
 
 const tmp = ensureTmpDir()
 const root = path.join(tmp, 'probe')
@@ -64,13 +64,13 @@ check('.git 不进危险目录', !p5.flat.riskDirs.includes('.git'), `实际 [${
 check('目录不存在 → unsupported', probeRepo(path.join(root, 'nope')).level === 'unsupported')
 check('传入空值 → unsupported', probeRepo('').level === 'unsupported')
 
-// 后缀大小写不敏感（miao 口径：webp/png/jpg/jpeg）
+// 后缀口径（miao 只认 webp/png/jpg/jpeg，大小写不敏感）
 const extRepo = path.join(root, 'ext-repo')
-mk(path.join(extRepo, 'normal-character', '角色乙'), ['a.WEBP', 'b.PNG', 'c.JpEg', 'd.gif', 'e.txt'])
-const exts = listRoleEntries(path.join(extRepo, 'normal-character'))
-check('4 种后缀大小写不敏感（gif/txt 不计）', exts.length === 1 && exts[0].images === 3, `实际 ${JSON.stringify(exts)}`)
+mk(path.join(extRepo, 'normal-character', '角色乙'), ['a.WEBP', 'b.PNG', 'c.JpEg'])
+check('大小写后缀计入（webp/PNG/JpEg）', probeRepo(extRepo).tier.normal === 1, JSON.stringify(probeRepo(extRepo).tier))
 
-const riskList = findRiskDirs(riskyRepo)
-check('findRiskDirs 返回 docs', riskList.length === 1 && riskList[0] === 'docs', `实际 [${riskList.join(',')}]`)
+const otherExtRepo = path.join(root, 'other-ext-repo')
+mk(path.join(otherExtRepo, 'normal-character', '角色丙'), ['d.gif', 'e.txt'])
+check('gif/txt 不计入图片 → unsupported', probeRepo(otherExtRepo).level === 'unsupported', `实际 ${probeRepo(otherExtRepo).level}`)
 
 finish()

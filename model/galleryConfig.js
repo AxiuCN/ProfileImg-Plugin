@@ -41,7 +41,7 @@ export function resolveThirdPartyDir(dir) {
  * @param {string} absDir - 绝对路径
  * @returns {string} 配置值（正斜杠绝对路径）
  */
-export function toConfigDirValue(absDir) {
+function toConfigDirValue(absDir) {
   if (!absDir) return ''
   return path.resolve(absDir).split(path.sep).join('/')
 }
@@ -69,7 +69,8 @@ export function getUploadDir() {
 
 /**
  * 获取规范化后的第三方图库列表
- * @returns {Array<{ name: string, dir: string, remoteUrl: string, normalPath: string, superPath: string, enabled: boolean, idx: number }>}
+ * 仓库结构由 srcProbe 探测，配置里只需 name / dir / remoteUrl / enabled
+ * @returns {Array<{ name: string, dir: string, remoteUrl: string, enabled: boolean, idx: number }>}
  */
 export function getThirdPartyRepos() {
   const config = getGalleryConfig()
@@ -80,8 +81,6 @@ export function getThirdPartyRepos() {
       name: tp.name || `tp-${idx}`,
       dir: resolveDir(tp.dir),
       remoteUrl: tp.remoteUrl || '',
-      normalPath: tp.normalPath || '',
-      superPath: tp.superPath || '',
       enabled: tp.enabled !== false,
       idx
     }))
@@ -183,48 +182,4 @@ export function autoRegisterUnregisteredRepos (opts = {}) {
     else if (!r.ok) failed.push({ name: item.name, error: r.error || '写入配置失败' })
   }
   return { added, failed }
-}
-
-/**
- * 获取第三方仓库中指定类型的角色目录
- * @param {object} tp - getThirdPartyRepos 产物
- * @param {'normal'|'super'} type
- * @param {string} roleName - 角色名
- * @returns {string} 目录绝对路径（normalPath/superPath 为空则返回空串）
- */
-export function getThirdPartyRoleDir(tp, type, roleName) {
-  const rel = type === 'normal' ? tp.normalPath : tp.superPath
-  if (!rel) return ''
-  return path.join(tp.dir, rel, roleName)
-}
-
-/**
- * 获取第三方仓库中指定类型的角色目录根（不含角色名）
- * @param {object} tp - getThirdPartyRepos 产物
- * @param {'normal'|'super'} type
- * @returns {string}
- */
-export function getThirdPartyTypeDir(tp, type) {
-  const rel = type === 'normal' ? tp.normalPath : tp.superPath
-  if (!rel) return ''
-  return path.join(tp.dir, rel)
-}
-
-/**
- * 列出第三方仓库所有存在图片的角色（normal+super，去重）
- * @param {object} tp - getThirdPartyRepos 产物
- * @returns {Array<{ type: 'normal'|'super', roleName: string }>}
- */
-export function listThirdPartyRoles(tp) {
-  const result = []
-  for (const type of ['normal', 'super']) {
-    const typeDir = getThirdPartyTypeDir(tp, type)
-    if (!typeDir || !fs.existsSync(typeDir)) continue
-    const dirs = fs.readdirSync(typeDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-    for (const d of dirs) {
-      result.push({ type, roleName: d.name })
-    }
-  }
-  return result
 }

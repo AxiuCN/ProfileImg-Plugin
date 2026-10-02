@@ -40,44 +40,26 @@ await importAll('model', 'model')
 await importAll('modules', 'modules')
 await importAll('components', 'components')
 
-// 关键导出面（阶段 1 多图库源布局）
+// 关键契约（导出面细节由各主题套件覆盖，这里只留跨模块的硬约定）
 const profileSrc = await import(mod('model/profileSrc.js'))
-check('profileSrc.syncProfileImgSrc', typeof profileSrc.syncProfileImgSrc === 'function')
-check('profileSrc.buildSrcList', typeof profileSrc.buildSrcList === 'function')
-check('profileSrc.supportsMultiSrc', typeof profileSrc.supportsMultiSrc === 'function')
-
-const migrate = await import(mod('model/migrateMultiSrc.js'))
-check('migrateMultiSrc.migrateToMultiSrc', typeof migrate.migrateToMultiSrc === 'function')
-check('migrateMultiSrc.precheckMultiSrc', typeof migrate.precheckMultiSrc === 'function')
-check('migrateMultiSrc.getLayoutState', typeof migrate.getLayoutState === 'function')
-check('migrateMultiSrc.buildDefaultName', typeof migrate.buildDefaultName === 'function')
-
-const guard = await import(mod('model/layoutGuard.js'))
-check('layoutGuard.guardLayout', typeof guard.guardLayout === 'function')
-
-const probe = await import(mod('model/srcProbe.js'))
-check('srcProbe.probeRepo', typeof probe.probeRepo === 'function')
+check('profileSrc 暴露源列表同步入口', typeof profileSrc.syncProfileImgSrc === 'function' && typeof profileSrc.buildSrcList === 'function')
 
 const gcfg = await import(mod('model/galleryConfig.js'))
 const gconst = await import(mod('components/constants.js'))
 check('getDefaultDir 指向默认图库（miao resources/profile）', gcfg.getDefaultDir() === gconst.MIAO_PROFILE_LINK, `实际 ${gcfg.getDefaultDir()}`)
-check('LEGACY_DEFAULT_DIR 存在（迁移用旧路径）', typeof gconst.LEGACY_DEFAULT_DIR === 'string' && gconst.LEGACY_DEFAULT_DIR.endsWith(path.join('ProfileImg', 'default')))
+check('LEGACY_DEFAULT_DIR 指向旧 default 图库源', gconst.LEGACY_DEFAULT_DIR.endsWith(path.join('ProfileImg', 'default')))
 
 // ---- 仓库配置不得再出现退役字段（仓库级 cron / autoRestart 已废除）----
 const repo0 = gconst.getRepoConfig(0)
-check('仓库配置不含退役字段 cron', !('cron' in repo0), JSON.stringify(repo0))
-check('仓库配置不含退役字段 autoRestart', !('autoRestart' in repo0))
-check('仓库配置保留 autoUpdate', repo0.autoUpdate === true)
+check('仓库配置不含退役字段 cron / autoRestart', !('cron' in repo0) && !('autoRestart' in repo0), JSON.stringify(repo0))
 
 // ---- 重启提示统一走 components/notify.js（且不含具体重启方式）----
 const notify = await import(mod('components/notify.js'))
-check('restartHint 存在', typeof notify.restartHint === 'function')
 const hint = notify.restartHint()
 check('restartHint 提示重启 Yunzai', hint.includes('重启 Yunzai'))
 check('restartHint 不含具体重启方式', !/pm2|node \.|systemctl|service |bat|脚本/.test(hint), hint.trim())
-for (const f of ['download.js', 'update.js', 'initGallery.js', 'migrateGallery.js']) {
-  const src = fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8')
-  check(`apps/${f} 复用 restartHint()`, src.includes('restartHint'))
-}
+check('四个命令模块统一复用 restartHint()',
+  ['download.js', 'update.js', 'initGallery.js', 'migrateGallery.js']
+    .every(f => fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8').includes('restartHint')))
 
 finish()

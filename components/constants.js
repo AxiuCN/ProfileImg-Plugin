@@ -83,30 +83,11 @@ export function getRepoDir(repoId) {
 }
 
 /**
- * 获取仓库中指定类型的角色目录
- * @param {number} repoId - 仓库编号
- * @param {'normal'|'super'} type - 角色类型
- * @returns {string}
- */
-export function getRepoCharDir(repoId, type) {
-  return path.join(getRepoDir(repoId), `${type}-character`)
-}
-
-/**
- * 获取 profile 聚合目录中指定类型的角色目录
- * @param {'normal'|'super'|'blocked'} type
- * @returns {string}
- */
-export function getProfileTypeDir(type) {
-  return path.join(PROFILE_DIR, `${type}-character`)
-}
-
-/**
  * 获取仓库名称（按约定）
  * @param {number} repoId - 仓库编号
  * @returns {string}
  */
-export function getRepoName(repoId) {
+function getRepoName(repoId) {
   return repoId === 0 ? 'miao-plugin-ProfileImg' : `miao-plugin-ProfileImg-${repoId}`
 }
 

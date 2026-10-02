@@ -3,10 +3,10 @@ import path from 'node:path'
 import { BLOCKED_REPO_DIR } from '../components/constants.js'
 import { getDirSize } from '../components/format.js'
 import { sortPanelFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
-import { listRoleImages, listRoleBlocked } from './galleryIndex.js'
+import { listRoleBlocked } from './galleryIndex.js'
 
 /** 非标准文件在屏蔽列表中的 display n 兜底池（不与任何段位冲突） */
-export const BAK_DISPLAY_BASE = 9999999
+const BAK_DISPLAY_BASE = 9999999
 
 /**
  * 屏蔽图库统计 + 角色面板图查询
@@ -32,17 +32,6 @@ export function getBlockedInfo() {
     imageCount += files.filter(f => f.isFile() && /\.(webp|png|jpg|jpeg|gif)$/i.test(f.name)).length
   }
   return { charCount, totalSize, imageCount }
-}
-
-/**
- * 获取角色的面板图列表（直接读主仓库角色目录）
- * @param {string} roleName - 角色名
- * @param {'normal'|'super'} type - 图库类型，默认 'normal'
- * @returns {Array} listRoleFiles 结果（含 name/displayN/source/filePath）
- */
-export function getRoleFiles(roleName, type = 'normal') {
-  // 多图库源：默认图库 + 主仓库按段位寻址，第三方标源名（displayN 为 null）
-  return listRoleImages(roleName, type)
 }
 
 /**

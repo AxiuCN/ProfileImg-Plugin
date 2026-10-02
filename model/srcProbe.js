@@ -58,7 +58,7 @@ function countImages (dir) {
  * @param {string} dir - 目录绝对路径
  * @returns {Array<{name: string, kind: 'dir'|'file', images: number}>}
  */
-export function listRoleEntries (dir) {
+function listRoleEntries (dir) {
   const roles = []
   let entries = []
   try {
@@ -86,7 +86,7 @@ export function listRoleEntries (dir) {
  * @param {string} root - 仓库根目录
  * @returns {string[]} 危险目录名（仓库根下第一层）
  */
-export function findRiskDirs (root) {
+function findRiskDirs (root) {
   const risky = []
   let entries = []
   try {

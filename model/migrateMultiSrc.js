@@ -565,12 +565,3 @@ export function migrateToMultiSrc () {
   }
   return report
 }
-
-/**
- * 把源列表拼成可读文本（报告/状态展示用）
- * @param {string[]} list
- * @returns {string}
- */
-export function formatSrcList (list = []) {
-  return list.map((v, i) => `${i + 1}. ${v}`).join('\n')
-}

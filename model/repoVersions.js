@@ -15,7 +15,7 @@ const DATA_DIR = path.resolve(
 const VERSIONS_FILE = path.join(DATA_DIR, 'repo-versions.json')
 
 /** 读取全部仓库版本记录 */
-export function loadRepoVersions() {
+function loadRepoVersions() {
   try {
     if (!fs.existsSync(VERSIONS_FILE)) return {}
     return JSON.parse(fs.readFileSync(VERSIONS_FILE, 'utf8'))
@@ -34,9 +34,4 @@ export function setRepoVersion(repoId, sha) {
   } catch (e) {
     logger?.error('[ProfileImg-Plugin] 写入 repo-versions.json 失败:', e)
   }
-}
-
-/** 读取单个仓库记录版本 */
-export function getRepoVersion(repoId) {
-  return loadRepoVersions()[repoId] || null
 }

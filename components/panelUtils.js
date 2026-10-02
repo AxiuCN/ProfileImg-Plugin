@@ -85,22 +85,6 @@ export function sortPanelFiles(files, roleName) {
   return parsed
 }
 
-/**
- * 解析文件名中的版权归属信息
- * @param {string} filename - 文件名
- * @param {string} roleName - 角色名
- * @returns {string|null} 中文版权描述，非标准命名返回 null
- */
-export function parseAttribution(filename, roleName) {
-  const esc = escapeRegExp(roleName)
-  const match = filename.match(new RegExp(`^${esc}_(\\d+)_(.+?)_(.+?)(?:_(.+?))?\\.`, 'i'))
-  if (!match) return null
-  const author = match[2]
-  const source = match[3]
-  const mods = match[4]
-  return `作者：${author} / 来源：${source}${mods ? ` / 备注：${mods}` : ''}`
-}
-
 /* ==========================================================================
    段位工具 — 按 n 判断来源、段位内取下一个可用 n
    ========================================================================== */
@@ -170,41 +154,4 @@ export function getNextSeqInRange(dir, roleName, start, end) {
   let n = start
   while (used.has(n) && n <= end) n++
   return n <= end ? n : -1
-}
-
-/**
- * 读取角色目录并返回排序后的文件列表
- * 直接读取主仓库角色目录（junction 目标），n 即 display n
- * @param {string} dir - 角色目录绝对路径
- * @param {string} roleName - 角色名
- * @returns {Array<{ name: string, parsed: object, displayN: number, source: string, filePath: string }>}
- */
-export function listRoleFiles(dir, roleName) {
-  if (!fs.existsSync(dir)) return []
-  let imgNames = []
-  try {
-    imgNames = fs.readdirSync(dir).filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f))
-  } catch { return [] }
-
-  const sorted = sortPanelFiles(imgNames, roleName)
-  let nonStdIdx = 0
-  return sorted.map(item => {
-    let displayN
-    let source = 'unknown'
-    if (item.parsed.isStandard) {
-      displayN = item.parsed.seq
-      source = resolveNRange(displayN).source
-    } else {
-      // 非标准文件：兜底 display n（命令不可按此 n 操作）
-      displayN = NON_STANDARD_POOL + nonStdIdx
-      nonStdIdx++
-    }
-    return {
-      name: item.name,
-      parsed: item.parsed,
-      displayN,
-      source,
-      filePath: path.join(dir, item.name)
-    }
-  })
 }

@@ -110,7 +110,7 @@ pnpm install -P --filter ProfileImg-Plugin
 - 路径建议用正斜杠 `/`；网络盘（UNC）需先执行一次 `git config --global --add safe.directory <该路径>`，否则 git 会以 `dubious ownership` 拒绝下载 / 更新
 - 旧配置里的相对子目录名仍兼容读取（相对 `gallery/ProfileImg`），新写入一律为绝对路径
 - `#下载第三方图库 <URL> [目标目录]` 按 `remoteUrl` 匹配已有配置：命中则沿用该配置的目录，未命中则新增条目；目标目录已存在且**不是 Git 仓库**时会拒绝下载（避免覆盖本地图库），此时请直接在配置中登记
-- `normalPath` / `superPath` 为旧字段，仍可读取但不再参与注册（结构由插件自动探测）
+- `normalPath` / `superPath` 为旧字段，已不再使用（可删除；结构由插件自动探测）
 - 路径或条目变动后需重启 Yunzai 才会被 miao 读取
 
 ### 面板图上传（版权可选，主人/授权成员）
@@ -253,7 +253,7 @@ miao-plugin 侧：`plugins/miao-plugin/resources/profile/` 为**默认图库**�
 第三方图库配置（`config/gallery_config.yaml`，参考 `gallery_config.yaml.example`）。
 默认图库固定为 `miao-plugin/resources/profile`；`config.yaml` 的 `gallery.defaultDir` 仅用于指定主人手动上传面板图的存放目录。
 
-第三方仓库的目录结构由插件自动探测（支持 `normal-character/{角色}/`、`super-character/{角色}/` 与平铺 `{角色}/`），可直读的仓库才会注册为图库源；`normalPath` / `superPath` 为旧字段，仅作兼容保留，注册图库源时不使用。
+第三方仓库的目录结构由插件自动探测（支持 `normal-character/{角色}/`、`super-character/{角色}/` 与平铺 `{角色}/`），可直读的仓库才会注册为图库源；`normalPath` / `superPath` 为旧字段，已不再使用。
 
 `dir` 取值与跨盘 / 网络盘注意事项见上文「第三方图库路径」。
 

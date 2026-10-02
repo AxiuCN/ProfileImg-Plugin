@@ -7,7 +7,7 @@ import { mod, checker, installFrameworkStubs } from './_helper.mjs'
 installFrameworkStubs()
 
 const { buildDefaultName } = await import(mod('model/migrateMultiSrc.js'))
-const { SEGMENTS, parseFilename, resolveNRange, parseAttribution } = await import(mod('components/panelUtils.js'))
+const { SEGMENTS, parseFilename, resolveNRange } = await import(mod('components/panelUtils.js'))
 
 const { check, finish } = checker()
 const N = SEGMENTS.default.start // 10001
@@ -17,7 +17,6 @@ const n1 = buildDefaultName('琴_1_张三_米游社.webp', '琴', N)
 check('有版权：段位改为 default 段', n1 === `琴_${N}_张三_米游社_「琴_1_张三_米游社」.webp`, `实际 ${n1}`)
 check('有版权：仍可解析为标准命名', parseFilename(n1, '琴').isStandard === true)
 check('有版权：段位判定为 default', resolveNRange(parseFilename(n1, '琴').seq).source === 'default')
-check('有版权：版权解析保留作者/来源', parseAttribution(n1, '琴') === `作者：张三 / 来源：米游社 / 备注：「琴_1_张三_米游社」`, `实际 ${parseAttribution(n1, '琴')}`)
 
 // 2. 有版权 + 原备注（备注段拼在原名之前）
 const n2 = buildDefaultName('琴_1_张三_米游社_二改.webp', '琴', N)
@@ -27,7 +26,6 @@ check('带原备注：段位为 default', resolveNRange(parseFilename(n2, '琴')
 // 3. 无版权
 const n3 = buildDefaultName('琴_1.webp', '琴', N)
 check('无版权：用「本地默认图库_默认」占位', n3 === `琴_${N}_本地默认图库_默认_「琴_1」.webp`, `实际 ${n3}`)
-check('无版权：版权解析可用', parseAttribution(n3, '琴') === `作者：本地默认图库 / 来源：默认 / 备注：「琴_1」`, `实际 ${parseAttribution(n3, '琴')}`)
 
 // 4. 非标准命名
 const n4 = buildDefaultName('随便一张图.png', '琴', N)

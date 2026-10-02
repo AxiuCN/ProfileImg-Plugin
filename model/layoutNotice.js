@@ -16,9 +16,9 @@ import { fileURLToPath } from 'node:url'
  */
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'data')
 /** 提示记录文件（git-ignored 的 data/ 目录） */
-export const NOTICE_FILE = path.join(DATA_DIR, 'layout-notice.json')
+const NOTICE_FILE = path.join(DATA_DIR, 'layout-notice.json')
 /** 同一状态的提示节流窗口 */
-export const THROTTLE_MS = 24 * 60 * 60 * 1000
+const THROTTLE_MS = 24 * 60 * 60 * 1000
 
 /**
  * 是否应发送提示（同状态节流）
@@ -26,7 +26,7 @@ export const THROTTLE_MS = 24 * 60 * 60 * 1000
  * @param {{ file?: string, now?: number }} [opts]
  * @returns {boolean}
  */
-export function shouldNotify (state, opts = {}) {
+function shouldNotify (state, opts = {}) {
   const file = opts.file || NOTICE_FILE
   const now = opts.now ?? Date.now()
   try {
@@ -45,7 +45,7 @@ export function shouldNotify (state, opts = {}) {
  * @param {{ file?: string, now?: number }} [opts]
  * @returns {boolean}
  */
-export function markNotified (state, opts = {}) {
+function markNotified (state, opts = {}) {
   const file = opts.file || NOTICE_FILE
   const now = opts.now ?? Date.now()
   try {
@@ -72,7 +72,7 @@ export function markNotified (state, opts = {}) {
  * @param {'legacy'|'fresh'|'srcPending'} state
  * @returns {string} 非提示状态返回空串
  */
-export function buildNotice (state) {
+function buildNotice (state) {
   if (state === 'legacy') {
     return [
       '[面板图图库管理器] 需要升级图库布局',

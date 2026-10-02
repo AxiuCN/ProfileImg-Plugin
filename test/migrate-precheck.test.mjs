@@ -7,7 +7,7 @@ import { mod, checker, installFrameworkStubs, requireMiaoPlugin } from './_helpe
 installFrameworkStubs()
 requireMiaoPlugin()
 
-const { getLayoutState, precheckMultiSrc, formatSrcList } = await import(mod('model/migrateMultiSrc.js'))
+const { getLayoutState, precheckMultiSrc } = await import(mod('model/migrateMultiSrc.js'))
 const { PROFILE_CONFIG_PATH, MIAO_CONFIG_DIR } = await import(mod('model/profileSrc.js'))
 
 /** 文件签名（大小 + mtime），用于验证「未被改动」 */
@@ -55,8 +55,5 @@ check('预检未改动 miao config 目录', (() => {
     return 'absent'
   }
 })() === beforeDir)
-
-check('formatSrcList 输出编号列表', formatSrcList(['profile', 'D:/x']) === '1. profile\n2. D:/x', `实际 ${JSON.stringify(formatSrcList(['profile', 'D:/x']))}`)
-check('formatSrcList 空列表返回空串', formatSrcList([]) === '')
 
 finish()

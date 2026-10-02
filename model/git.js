@@ -2,7 +2,6 @@ import { execSync, exec } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_REPO_DIR, BLOCKED_REPO_DIR } from '../components/constants.js'
 
 /* ==========================================================================
    操作锁 — 防止下载/更新并发操作同一仓库
@@ -67,15 +66,6 @@ export function acquireLock(id, operation, type = 'default') {
       try { fs.unlinkSync(lockFile) } catch {}
     }
   }
-}
-
-/**
- * 强制释放锁（用于异常恢复）
- * @param {string} id - 仓库标识
- */
-export function releaseLock(id) {
-  const lockFile = path.join(LOCK_DIR, `${id}.lock`)
-  try { fs.unlinkSync(lockFile) } catch {}
 }
 
 /* ==========================================================================
@@ -162,34 +152,6 @@ export function gitExecAsync(gitDir, command, timeout = 120000) {
    ========================================================================== */
 
 /**
- * 安装（克隆/初始化）一个 Git 仓库到指定目录（同步，仅用于简单检查场景）
- * 长时间下载请用 installRepoAsync
- */
-export function installRepo(repoUrl, targetDir, branch = 'main') {
-  if (fs.existsSync(path.join(targetDir, '.git'))) {
-    try {
-      gitExec(targetDir, 'rev-parse HEAD', 5000)
-      return { ok: true, msg: '仓库已安装', existed: true }
-    } catch {
-      // HEAD 无效，续传
-    }
-  }
-  try {
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true })
-    }
-    fs.mkdirSync(targetDir, { recursive: true })
-    gitExec(targetDir, `init --initial-branch=${branch}`)
-    gitExec(targetDir, `remote add origin ${repoUrl}`)
-    gitExec(targetDir, `fetch origin ${branch} --depth 1`, 60000)
-    gitExec(targetDir, `reset --hard origin/${branch}`)
-    return { ok: true, msg: '安装成功', existed: false }
-  } catch (e) {
-    return { ok: false, msg: `安装失败: ${e.message}`, existed: false }
-  }
-}
-
-/**
  * 异步安装仓库 — 不阻塞 Bot，不限时等待（适配大仓库/慢网络）
  * 支持断点续装：.git 存在但 HEAD 无效时自动续传 fetch+reset
  *
@@ -269,13 +231,6 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main', opts
    SHA / 版本查询
    ========================================================================== */
 
-export function getRemoteSha(gitDir, branch = 'main') {
-  try {
-    gitExec(gitDir, `fetch origin ${branch}`, 30000)
-    return gitExec(gitDir, `rev-parse --short origin/${branch}`)
-  } catch (e) { return null }
-}
-
 export function getLocalSha(gitDir) {
   try {
     return gitExec(gitDir, 'rev-parse --short HEAD')
@@ -302,22 +257,6 @@ export async function getRemoteShaAsync(gitDir, branch = 'main') {
    更新操作
    ========================================================================== */
 
-export function fastForwardPull(gitDir, branch = 'main') {
-  try {
-    const before = getLocalSha(gitDir)
-    gitExec(gitDir, `pull origin ${branch} --ff-only`, 30000)
-    const after = getLocalSha(gitDir)
-    return { ok: true, updated: before !== after, msg: before !== after ? '已更新' : '已是最新' }
-  } catch (e) {
-    return { ok: false, updated: false, msg: e.message }
-  }
-}
-
-export function forceReset(gitDir, branch = 'main') {
-  gitExec(gitDir, `fetch origin ${branch}`, 30000)
-  gitExec(gitDir, `reset --hard origin/${branch}`, 30000)
-}
-
 /** 异步 fast-forward 拉取 */
 export async function fastForwardPullAsync(gitDir, branch = 'main') {
   try {
@@ -337,33 +276,4 @@ export async function forceResetAsync(gitDir, branch = 'main') {
   if (!r.ok) throw new Error(r.error)
   r = await gitExecAsync(gitDir, `reset --hard origin/${branch}`)
   if (!r.ok) throw new Error(r.error)
-}
-
-/* ==========================================================================
-   兼容性包装
-   ========================================================================== */
-
-/** @deprecated 使用 gitExec(dir, command) 替代 */
-export function gitExecBlocked(command, timeout = 10000) {
-  return gitExec(BLOCKED_REPO_DIR, command, timeout)
-}
-
-/** @deprecated 使用 gitExec(dir, command) 替代 */
-export function gitExecAt(dir, command, timeout = 10000) {
-  return gitExec(dir, command, timeout)
-}
-
-/** @deprecated 使用 getRemoteSha(gitDir) 替代 */
-export function getRemoteShaBlocked(branch = 'main') {
-  return getRemoteSha(BLOCKED_REPO_DIR, branch)
-}
-
-/** @deprecated 使用 forceReset(gitDir) 替代 */
-export function forceResetToRemote(branch = 'main') {
-  return forceReset(DEFAULT_REPO_DIR, branch)
-}
-
-/** @deprecated 使用 forceReset(gitDir) 替代 */
-export function forceResetBlocked(branch = 'main') {
-  return forceReset(BLOCKED_REPO_DIR, branch)
 }
