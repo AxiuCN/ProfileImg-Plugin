@@ -8,7 +8,7 @@ import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
-import { listUnregisteredRepos } from './model/galleryConfig.js'
+import { autoRegisterUnregisteredRepos, listUnregisteredRepos } from './model/galleryConfig.js'
 import { getLayoutState } from './model/migrateMultiSrc.js'
 import { syncProfileImgSrc, buildSrcList } from './model/profileSrc.js'
 import { notifyLayout } from './model/layoutNotice.js'
@@ -52,10 +52,10 @@ ensureGalleryConfigFile()
 ensureManagerConfigFile()
 
 // ============================================================
-// 5. 布局检测（多图库源布局）
-//    ready  — 已注册图库源，启动时同步源列表（幂等；有变更则私聊主人要求重启）
-//    legacy — 旧 junction 聚合布局，提示 #迁移图库
-//    fresh  — miao 配置里无自有源：本地有可用图库则直接注册并提示重启，否则提示 #图库初始化
+// 5. 图库源注册（gallery_config.yaml 是唯一凭证）
+//    ① 补登记：gallery/ProfileImg 下发现但未登记的仓库/图库目录 → 先写进 gallery_config.yaml
+//    ② 布局检测：ready / fresh（本地已有可用图库）/ legacy（旧 junction 聚合，需迁移）
+//    ③ 从 gallery_config.yaml 注册 miao 图库源；有变更则私聊主人要求重启
 // ============================================================
 
 /**
@@ -70,8 +70,8 @@ function scheduleLayoutNotice (state) {
 }
 
 /**
- * 输出图库源诊断日志：已配置但未注册的图库 / 未注册的仓库目录
- * 第三方仓库必须在 gallery_config.yaml 中注册才会被读取（跨盘仓库无法通过扫描发现）
+ * 输出图库源诊断日志：已配置但未就绪的图库 / 仍未登记的目录
+ * 第三方图库必须登记在 gallery_config.yaml 才会被读取（跨盘仓库只能由用户直接写配置）
  * @param {Array<{label: string, reason: string}>} skipped - syncProfileImgSrc 的 skipped
  */
 function logSourceDiagnostics (skipped = []) {
@@ -81,12 +81,23 @@ function logSourceDiagnostics (skipped = []) {
   }
   const unregistered = listUnregisteredRepos()
   if (unregistered.length) {
-    logger.warn('[ProfileImg-Plugin] gallery/ProfileImg 下存在未注册的仓库目录（不会被读取）：' +
-      unregistered.map(u => u.name).join('、') +
-      '；如需使用请在锅巴「第三方图库」注册，或发送 #下载第三方图库 <Git地址> <目录名>')
+    logger.warn('[ProfileImg-Plugin] 仍未登记的图库目录（下次启动自动登记）：' +
+      unregistered.map(u => u.name).join('、'))
   }
 }
 
+// ① 补登记：扫描结果只用于写入 gallery_config.yaml，绝不直接作为 miao 源
+const autoReg = autoRegisterUnregisteredRepos()
+if (autoReg.added.length) {
+  logger.info('[ProfileImg-Plugin] 已自动登记图库到 gallery_config.yaml：' +
+    autoReg.added.map(a => a.name).join('、'))
+}
+if (autoReg.failed.length) {
+  logger.warn('[ProfileImg-Plugin] 自动登记失败：' +
+    autoReg.failed.map(f => `${f.name}（${f.error}）`).join('；'))
+}
+
+// ② 布局检测 + ③ 注册 miao 图库源
 const layoutState = getLayoutState()
 if (layoutState === 'ready') {
   const synced = syncProfileImgSrc()

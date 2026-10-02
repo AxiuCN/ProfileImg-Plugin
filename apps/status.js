@@ -158,15 +158,14 @@ export class Status extends plugin {
       msg += '\n屏蔽图库：未安装\n'
     }
 
-    // 未注册的第三方仓库：目录存在但不在 gallery_config.yaml 中 → 不会被 miao 读取
+    // 未登记的图库目录：目录存在但不在 gallery_config.yaml 中（下次启动自动登记并注册）
     const unregistered = listUnregisteredRepos()
     if (unregistered.length) {
-      msg += '\n未注册的仓库目录（不会被读取）：\n'
+      msg += '\n未登记的图库目录（下次启动自动登记并注册）：\n'
       for (const item of unregistered) {
         msg += `  · ${item.name}\n`
       }
-      msg += '  注册：锅巴「第三方图库」新增条目（dir 填上面的目录名），\n' +
-        '  或 #下载第三方图库 <Git地址> <目录名>；注册后需重启 Yunzai\n'
+      msg += '  也可在锅巴「第三方图库」新增条目（dir 填该目录的绝对路径）；跨盘图库请直接填绝对路径\n'
     }
     return e.reply(msg)
   }

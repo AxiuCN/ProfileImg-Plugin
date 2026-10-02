@@ -138,10 +138,14 @@ export class Update extends plugin {
       }
     }
 
-    // ③ 第三方图库（逐个，仅 git pull）
+    // ③ 第三方图库（逐个，仅 git pull；未配置远程地址的本地只读源跳过）
     if (cfg.thirdPartyUpdate?.enabled !== false) {
       const tps = getThirdPartyRepos().filter(tp => tp.enabled)
       for (const tp of tps) {
+        if (!tp.remoteUrl) {
+          lines.push(`第三方「${tp.name}」：本地只读源（未配置远程地址），跳过更新`)
+          continue
+        }
         const check = checkRepo(tp.dir)
         if (!check.ok) { lines.push(`第三方「${tp.name}」：${check.msg}`); continue }
 
@@ -206,6 +210,10 @@ export class Update extends plugin {
     const results = []
 
     for (const tp of tps) {
+      if (!tp.remoteUrl) {
+        results.push(`图库「${tp.name}」：本地只读源（未配置远程地址），跳过更新`)
+        continue
+      }
       const check = checkRepo(tp.dir)
       if (!check.ok) {
         results.push(`图库「${tp.name}」：${check.msg}`)

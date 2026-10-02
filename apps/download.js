@@ -5,7 +5,7 @@ import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
 import { notifyMaster, restartHint } from '../components/notify.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { getThirdPartyRepos, resolveThirdPartyDir, toConfigDirValue } from '../model/galleryConfig.js'
+import { getThirdPartyRepos, resolveThirdPartyDir, addThirdPartyRepo } from '../model/galleryConfig.js'
 import { syncProfileImgSrc } from '../model/profileSrc.js'
 import { probeRepo } from '../model/srcProbe.js'
 import { guardLayout } from '../model/layoutGuard.js'
@@ -221,19 +221,10 @@ export class Download extends plugin {
         return e.reply(`[面板图图库管理器] 第三方图库「${repoName}」下载失败\n${result.msg}`)
       }
 
-      // URL 模式且未注册：追加到 gallery_config.yaml
-      // dir 位于 gallery/ProfileImg 下时写相对子目录名，跨盘写入正斜杠绝对路径（结构由 srcProbe 自动探测）
+      // URL 模式且未登记：写入 gallery_config.yaml（dir 一律绝对路径）
+      // 配置是唯一凭证：先登记配置，再由 _syncSources() 从配置注册 miao
       if (isUrl && !existingTp) {
-        const cfg = getGalleryConfig()
-        const list = Array.isArray(cfg.thirdParty) ? cfg.thirdParty : []
-        list.push({
-          name: repoName,
-          dir: toConfigDirValue(targetDir),
-          remoteUrl,
-          enabled: true
-        })
-        cfg.thirdParty = list
-        const w = writeGalleryConfig(cfg)
+        const w = addThirdPartyRepo({ name: repoName, dir: targetDir, remoteUrl })
         if (!w.ok) {
           return e.reply(`[面板图图库管理器] 下载成功但写入配置失败：${w.error}`)
         }

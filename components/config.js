@@ -33,12 +33,13 @@ export function ensureGalleryConfigFile() {
 }
 
 /**
- * 读取图库配置（config/gallery_config.yaml）
+ * 读取图库配置（默认 config/gallery_config.yaml）
  * 文件不存在时回退读取 .example；两者均不可用返回空对象
+ * @param {string} [file] - 指定配置文件（套件用）
  * @returns {object}
  */
-export function getGalleryConfig() {
-  const candidates = [GALLERY_CONFIG_PATH, GALLERY_CONFIG_EXAMPLE_PATH]
+export function getGalleryConfig(file) {
+  const candidates = file ? [file] : [GALLERY_CONFIG_PATH, GALLERY_CONFIG_EXAMPLE_PATH]
   for (const p of candidates) {
     try {
       if (fs.existsSync(p)) {
@@ -53,16 +54,18 @@ export function getGalleryConfig() {
 }
 
 /**
- * 写入图库配置到 config/gallery_config.yaml
- * 覆盖整个对象（含 thirdParty 列表），由锅巴保存 / 下载第三方时调用
+ * 写入图库配置（默认覆盖 config/gallery_config.yaml）
+ * 覆盖整个对象（含 thirdParty 列表），由锅巴保存 / 下载第三方 / 自动补登记时调用
  * @param {object} config - 完整的 gallery_config 对象
+ * @param {string} [file] - 指定配置文件（套件用）
  * @returns {{ ok: boolean, error?: string }}
  */
-export function writeGalleryConfig(config) {
+export function writeGalleryConfig(config, file) {
+  const target = file || GALLERY_CONFIG_PATH
   try {
-    const dir = path.dirname(GALLERY_CONFIG_PATH)
+    const dir = path.dirname(target)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(GALLERY_CONFIG_PATH, YAML.stringify(config, { indent: 2 }), 'utf8')
+    fs.writeFileSync(target, YAML.stringify(config, { indent: 2 }), 'utf8')
     return { ok: true }
   } catch (e) {
     logger.error('[ProfileImg-Plugin] 写入图库配置失败:', e)

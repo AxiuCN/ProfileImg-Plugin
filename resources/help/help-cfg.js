@@ -20,13 +20,13 @@ export const helpList = [
       { icon: 88, title: '#强制下载主图库', desc: '删除现有仓库后重新克隆主图库' },
       { icon: 87, title: '#下载屏蔽图库', desc: '克隆屏蔽图库' },
       { icon: 88, title: '#强制下载屏蔽图库', desc: '删除现有仓库后重新克隆屏蔽图库' },
-      { icon: 89, title: '#下载第三方图库 <URL> [目标目录]', desc: '克隆第三方图库（目录可省，支持跨盘 / 网络盘路径），探测结构后写入 gallery_config.yaml 并注册为图库源' }
+      { icon: 89, title: '#下载第三方图库 <URL> [目标目录]', desc: '克隆第三方图库（目录可省，支持跨盘 / 网络盘绝对路径），登记到 gallery_config.yaml 并注册为图库源' }
     ]
   },
   {
     group: '图库状态',
     list: [
-      { icon: 80, title: '#图库状态', desc: '查看全部图库源与屏蔽图库总览（含未注册仓库提示）' },
+      { icon: 80, title: '#图库状态', desc: '查看全部图库源与屏蔽图库总览（含未登记图库目录提示）' },
       { icon: 80, title: '#主图库状态', desc: '查看各主仓库的规模与路径' },
       { icon: 80, title: '#屏蔽图库状态', desc: '查看屏蔽图库详细信息' }
     ]

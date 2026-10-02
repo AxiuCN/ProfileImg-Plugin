@@ -115,6 +115,19 @@ export function getRepoBranch(gitDir) {
 }
 
 /**
+ * 读取本地仓库的 origin 地址（补登记已有仓库时用于回填 remoteUrl）
+ * @param {string} gitDir - Git 仓库目录
+ * @returns {string} 远程地址，非 Git 仓库/未配置时返回空串
+ */
+export function getRepoRemoteUrl(gitDir) {
+  try {
+    return gitExec(gitDir, 'remote get-url origin', 10000)
+  } catch {
+    return ''
+  }
+}
+
+/**
  * 在指定目录执行 Git 命令（异步），不阻塞 Bot 主线程
  * timeout=0 时不设超时（用于长时间下载）
  * @param {string} gitDir - Git 仓库目录
@@ -179,6 +192,8 @@ export function installRepo(repoUrl, targetDir, branch = 'main') {
 /**
  * 异步安装仓库 — 不阻塞 Bot，不限时等待（适配大仓库/慢网络）
  * 支持断点续装：.git 存在但 HEAD 无效时自动续传 fetch+reset
+ *
+ * 安全：目标目录已存在、非空且不是 Git 仓库时**拒绝**，避免覆盖用户的本地图库
  * @param {string} repoUrl - 远程仓库 URL
  * @param {string} targetDir - 目标目录
  * @param {string} branch - 分支名，默认 'main'
@@ -197,6 +212,22 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main') {
   }
 
   const existed = hasGit
+
+  // 目录已存在且非 Git 仓库：可能是用户自己的本地图库，拒绝覆盖
+  if (!existed && fs.existsSync(targetDir)) {
+    let entries = []
+    try {
+      entries = fs.readdirSync(targetDir)
+    } catch { /* 读不了目录时按不可用处理 */ }
+    if (entries.length > 0) {
+      return {
+        ok: false,
+        existed: false,
+        msg: '目标目录已存在且不是 Git 仓库（可能已有本地图库），已拒绝下载以免覆盖；' +
+          '如这就是你的图库，请在锅巴「第三方图库」或 config/gallery_config.yaml 中新增条目（dir 填该绝对路径），无需下载'
+      }
+    }
+  }
 
   try {
     if (!existed) {
