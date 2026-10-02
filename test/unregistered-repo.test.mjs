@@ -45,6 +45,7 @@ function mkdir (rel, { git = false, gitAsFile = false, tier = false, flat = fals
 
 mkdir('miao-plugin-ProfileImg', { git: true })            // 主仓库保留名
 mkdir('miao-plugin-ProfileImg-1', { git: true })          // 扩展主仓库保留名
+mkdir('default', { tier: true })                          // 旧布局 default 图库源目录（不参与第三方补登记）
 mkdir('fan-registered', { git: true })                    // 已登记
 mkdir('fan-git', { git: true })                           // 未登记：Git 仓库（.git 目录）
 mkdir('fan-worktree', { git: true, gitAsFile: true })     // 未登记：worktree（.git 文件）
@@ -64,6 +65,7 @@ check('Git 仓库 + 结构可直读目录都算候选',
   JSON.stringify(names))
 check('返回绝对路径', found.every(f => path.isAbsolute(f.dir)))
 check('主仓库保留名被排除', !names.includes('miao-plugin-ProfileImg') && !names.includes('miao-plugin-ProfileImg-1'))
+check('旧布局 default 图库源目录被排除（由 #迁移图库 处理）', !names.includes('default'))
 check('已登记目录被排除', !names.includes('fan-registered'))
 check('非图库目录被排除', !names.includes('docs'))
 check('隐藏目录被排除', !names.includes('.cache'))
@@ -88,6 +90,7 @@ check('自动登记全部候选', auto.added.length === 4 && auto.failed.length 
 const afterText = fs.readFileSync(cfgFile, 'utf8')
 check('配置里含全部已登记目录',
   ['fan-git', 'fan-worktree', 'fan-local-tier', 'fan-local-flat'].every(n => afterText.includes(n)))
+check('补登记写入保留模板注释', afterText.includes('登记要求'))
 check('再次自动登记为空（幂等）',
   autoRegisterUnregisteredRepos({ baseDir, registered, withRemote: false, file: cfgFile }).added.length === 0)
 

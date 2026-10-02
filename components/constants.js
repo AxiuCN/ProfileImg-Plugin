@@ -31,6 +31,15 @@ export const MAP_JSON_PATH = path.join(GALLERY_ROOT, 'map.json')
 /** 插件配置目录 */
 export const CONFIG_DIR = path.join(_cwd, 'plugins/ProfileImg-Plugin/config')
 
+/** 锅巴配置模板目录：defSet/ */
+export const DEFSET_DIR = path.join(_cwd, 'plugins/ProfileImg-Plugin/defSet')
+
+/** gallery_config.yaml 模板（写入运行时配置时按模板渲染，保留注释与说明） */
+export const GALLERY_CONFIG_TEMPLATE_PATH = path.join(DEFSET_DIR, 'gallery_config.yaml')
+
+/** manager_config.yaml 模板（同上） */
+export const MANAGER_CONFIG_TEMPLATE_PATH = path.join(DEFSET_DIR, 'manager_config.yaml')
+
 /** gallery_config.yaml（第三方图库配置，运行时）路径 */
 export const GALLERY_CONFIG_PATH = path.join(CONFIG_DIR, 'gallery_config.yaml')
 

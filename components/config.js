@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { GALLERY_CONFIG_PATH, GALLERY_CONFIG_EXAMPLE_PATH, MANAGER_CONFIG_PATH, MANAGER_CONFIG_EXAMPLE_PATH } from './constants.js'
+import { GALLERY_CONFIG_PATH, GALLERY_CONFIG_EXAMPLE_PATH, GALLERY_CONFIG_TEMPLATE_PATH, MANAGER_CONFIG_PATH, MANAGER_CONFIG_EXAMPLE_PATH } from './constants.js'
 
 /** 读取插件配置文件（plugins/ProfileImg-Plugin/config/config.yaml） */
 export function getPluginConfig() {
@@ -54,18 +54,40 @@ export function getGalleryConfig(file) {
 }
 
 /**
+ * 用模板渲染列表配置（保留模板中的注释与使用说明）
+ * @param {string} templatePath - defSet 下的模板路径
+ * @param {string} varName - 模板变量名（不含 ${}）
+ * @param {Array} list - 列表数据，空列表渲染为 []
+ * @returns {string} 渲染后的配置文本
+ */
+export function renderListConfig (templatePath, varName, list) {
+  const template = fs.readFileSync(templatePath, 'utf8')
+  // 片段缩进 2 空格（与模板中 "key:" 的下一级对齐），空列表用 [] 流式写法
+  const fragment = (Array.isArray(list) && list.length > 0)
+    ? YAML.stringify(list, { indent: 2 }).trim().split('\n').map(line => '  ' + line).join('\n')
+    : '  []'
+  return template.replace('${' + varName + '}', fragment)
+}
+
+/**
  * 写入图库配置（默认覆盖 config/gallery_config.yaml）
- * 覆盖整个对象（含 thirdParty 列表），由锅巴保存 / 下载第三方 / 自动补登记时调用
- * @param {object} config - 完整的 gallery_config 对象
+ *
+ * 按 defSet/gallery_config.yaml 模板渲染，**保留注释与使用说明**（该文件是用户维护第三方图库的主要手段）；
+ * 模板缺失时退化为纯 YAML 写入。目前 gallery_config 只承载 thirdParty 列表
+ * @param {{ thirdParty?: Array }} config - 图库配置对象
  * @param {string} [file] - 指定配置文件（套件用）
  * @returns {{ ok: boolean, error?: string }}
  */
 export function writeGalleryConfig(config, file) {
   const target = file || GALLERY_CONFIG_PATH
   try {
+    const list = Array.isArray(config?.thirdParty) ? config.thirdParty : []
+    const content = fs.existsSync(GALLERY_CONFIG_TEMPLATE_PATH)
+      ? renderListConfig(GALLERY_CONFIG_TEMPLATE_PATH, 'gallery_thirdParty', list)
+      : YAML.stringify({ thirdParty: list }, { indent: 2 })
     const dir = path.dirname(target)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(target, YAML.stringify(config, { indent: 2 }), 'utf8')
+    fs.writeFileSync(target, content, 'utf8')
     return { ok: true }
   } catch (e) {
     logger.error('[ProfileImg-Plugin] 写入图库配置失败:', e)

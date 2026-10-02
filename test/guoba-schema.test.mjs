@@ -7,10 +7,11 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { mod, pluginRoot, checker, installFrameworkStubs } from './_helper.mjs'
+import { mod, pluginRoot, checker, installFrameworkStubs, ensureTmpDir } from './_helper.mjs'
 
 installFrameworkStubs()
 
+const { writeGalleryConfig, getGalleryConfig } = await import(mod('components/config.js'))
 const guobaDir = path.join(pluginRoot, 'guoba')
 const { check, finish } = checker()
 
@@ -51,13 +52,30 @@ const vars = [...fs.readFileSync(cfgTpl, 'utf8').matchAll(/\$\{(\w+)\}/g)].map(m
 const missing = vars.filter(v => !indexSrc.includes(v))
 check('defSet/config.yaml 模板变量均有对应项', missing.length === 0, missing.join(', '))
 
-// ---- 4. 列表类模板变量由 renderListTemplate 处理 ----
-for (const [file, variable] of [['gallery_config.yaml', 'gallery_thirdParty'], ['manager_config.yaml', 'managers_list']]) {
+// ---- 4. 列表类模板变量由渲染器处理 ----
+const cfgSrc = fs.readFileSync(path.join(pluginRoot, 'components', 'config.js'), 'utf8')
+for (const [file, variable, owner, ownerName] of [
+  ['gallery_config.yaml', 'gallery_thirdParty', cfgSrc, 'components/config.js'],
+  ['manager_config.yaml', 'managers_list', indexSrc, 'guoba/index.js']
+]) {
   const p = path.join(pluginRoot, 'defSet', file)
   if (!fs.existsSync(p)) continue
   const content = fs.readFileSync(p, 'utf8')
   check(`defSet/${file} 含 \${${variable}}`, content.includes(`\${${variable}}`))
-  check(`guoba/index.js 处理 ${variable}`, indexSrc.includes(variable))
+  check(`${ownerName} 处理 ${variable}`, owner.includes(variable))
 }
+
+// ---- 5. 写入配置：保留模板注释 + 可往返解析 ----
+const tmp = ensureTmpDir()
+const tmpCfg = path.join(tmp, 'cfg-write', 'gallery_config.yaml')
+fs.rmSync(path.dirname(tmpCfg), { recursive: true, force: true })
+const entry = { name: '测试图库', dir: 'E:/fan-repo', remoteUrl: '', enabled: true }
+check('写入图库配置成功', writeGalleryConfig({ thirdParty: [entry] }, tmpCfg).ok === true)
+const written = fs.readFileSync(tmpCfg, 'utf8')
+check('写入保留模板注释（说明未被抹掉）', written.includes('登记要求'))
+check('写入后可解析回原列表',
+  JSON.stringify(getGalleryConfig(tmpCfg).thirdParty) === JSON.stringify([entry]))
+writeGalleryConfig({ thirdParty: [] }, tmpCfg)
+check('空列表写入仍为合法 YAML', JSON.stringify(getGalleryConfig(tmpCfg).thirdParty) === '[]')
 
 finish()

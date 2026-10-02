@@ -6,14 +6,12 @@ import * as managersMod from './managers.js'
 import * as galleryUpdateMod from './galleryUpdate.js'
 import * as defaultGalleryMod from './defaultGallery.js'
 import * as thirdPartyMod from './thirdParty.js'
-import { getGalleryConfig, getManagerConfig } from '../components/config.js'
+import { getGalleryConfig, getManagerConfig, writeGalleryConfig } from '../components/config.js'
+import { MANAGER_CONFIG_TEMPLATE_PATH } from '../components/constants.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 const configPath = path.join(pluginRoot, 'config', 'config.yaml')
 const defaultConfigPath = path.join(pluginRoot, 'defSet', 'config.yaml')
-const galleryTemplatePath = path.join(pluginRoot, 'defSet', 'gallery_config.yaml')
-const managerTemplatePath = path.join(pluginRoot, 'defSet', 'manager_config.yaml')
-const galleryConfigPath = path.join(pluginRoot, 'config', 'gallery_config.yaml')
 const managerConfigPath = path.join(pluginRoot, 'config', 'manager_config.yaml')
 
 /** 默认值映射（模板变量名 → 默认值） */
@@ -69,7 +67,7 @@ function parseCurrentConfig() {
 }
 
 /**
- * 渲染列表配置模板（gallery_config / manager_config）
+ * 渲染列表配置模板
  * 读 defSet 模板 → 将列表变量替换为 YAML 数组片段（保留注释结构）
  * @param {string} templatePath - defSet 模板路径
  * @param {string} varName - 模板变量名（不含 ${}）
@@ -86,10 +84,10 @@ function renderListTemplate(templatePath, varName, list) {
   return template.replace('${' + varName + '}', fragment)
 }
 
-/** 写列表配置（gallery_config / manager_config），模板渲染保留注释 */
-function writeListConfig(templatePath, varName, configPath, list) {
-  const content = renderListTemplate(templatePath, varName, list)
-  fs.writeFileSync(configPath, content, 'utf8')
+/** 写成员权限配置（manager_config.yaml），模板渲染保留注释 */
+function writeManagerListConfig(list) {
+  fs.writeFileSync(managerConfigPath,
+    renderListTemplate(MANAGER_CONFIG_TEMPLATE_PATH, 'managers_list', list), 'utf8')
   return { ok: true }
 }
 
@@ -151,21 +149,18 @@ export function supportGuoba() {
           const managersData = data['managers']
           if (managersData !== undefined) {
             try {
-              writeListConfig(managerTemplatePath, 'managers_list', managerConfigPath,
-                Array.isArray(managersData) ? managersData : [])
+              writeManagerListConfig(Array.isArray(managersData) ? managersData : [])
             } catch (e) {
               return Result.error('保存失败：' + e.message)
             }
           }
 
-          // ② 再写 gallery_config.yaml（第三方图库列表，模板渲染保留注释）— 失败则终止，不污染 config.yaml
+          // ② 再写 gallery_config.yaml（第三方图库列表；与插件内写入共用模板渲染，保留注释）— 失败则终止
           const thirdPartyData = data['gallery.thirdParty']
           if (thirdPartyData !== undefined) {
-            try {
-              writeListConfig(galleryTemplatePath, 'gallery_thirdParty', galleryConfigPath,
-                Array.isArray(thirdPartyData) ? thirdPartyData : [])
-            } catch (e) {
-              return Result.error('保存失败：' + e.message)
+            const w = writeGalleryConfig({ thirdParty: Array.isArray(thirdPartyData) ? thirdPartyData : [] })
+            if (!w.ok) {
+              return Result.error('保存失败：' + w.error)
             }
           }
 

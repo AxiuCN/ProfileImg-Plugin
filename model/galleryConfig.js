@@ -96,6 +96,7 @@ export function getThirdPartyRepos() {
  * 跨盘 / 网络盘图库不在本目录内，只能由用户直接写进配置。
  *
  * 候选条件：含 .git（目录或文件的 worktree），或结构可直读（tier / 平铺）
+ * 跳过：主仓库目录、旧布局的 default 图库源目录、已登记目录、非图库目录、隐藏目录
  * @param {object} [opts]
  * @param {string} [opts.baseDir] - 扫描目录（默认 PROFILE_IMG_DIR，套件可注入临时目录）
  * @param {Array<{ dir: string }>} [opts.registered] - 已登记的第三方（默认取配置）
@@ -121,6 +122,8 @@ export function listUnregisteredRepos (opts = {}) {
     // 主仓库目录由 map.json / config.yaml 管理，不属于第三方
     if (/^miao-plugin-ProfileImg(-\d+)?$/.test(entry.name)) continue
     const dir = path.join(baseDir, entry.name)
+    // 旧布局的 default 图库源目录（legacy）：它由 #迁移图库 处理，不能当第三方图库登记
+    if (path.resolve(dir) === path.resolve(path.join(baseDir, 'default'))) continue
     if (registered.has(path.resolve(dir))) continue
 
     const hasGit = fs.existsSync(path.join(dir, '.git'))

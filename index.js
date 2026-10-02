@@ -53,8 +53,9 @@ ensureManagerConfigFile()
 
 // ============================================================
 // 5. 图库源注册（gallery_config.yaml 是唯一凭证）
-//    ① 补登记：gallery/ProfileImg 下发现但未登记的仓库/图库目录 → 先写进 gallery_config.yaml
-//    ② 布局检测：ready / fresh（本地已有可用图库）/ legacy（旧 junction 聚合，需迁移）
+//    ① 布局检测：ready / fresh（本地已有可用图库）/ legacy（旧 junction 聚合，需迁移）
+//    ② 补登记：gallery/ProfileImg 下发现但未登记的仓库/图库目录 → 先写进 gallery_config.yaml
+//       （legacy 下跳过：此时 ProfileImg/default 是旧 default 图库，须由 #迁移图库 处理）
 //    ③ 从 gallery_config.yaml 注册 miao 图库源；有变更则私聊主人要求重启
 // ============================================================
 
@@ -86,19 +87,23 @@ function logSourceDiagnostics (skipped = []) {
   }
 }
 
-// ① 补登记：扫描结果只用于写入 gallery_config.yaml，绝不直接作为 miao 源
-const autoReg = autoRegisterUnregisteredRepos()
-if (autoReg.added.length) {
-  logger.info('[ProfileImg-Plugin] 已自动登记图库到 gallery_config.yaml：' +
-    autoReg.added.map(a => a.name).join('、'))
-}
-if (autoReg.failed.length) {
-  logger.warn('[ProfileImg-Plugin] 自动登记失败：' +
-    autoReg.failed.map(f => `${f.name}（${f.error}）`).join('；'))
+// ① 布局检测（legacy 下不补登记：此时 ProfileImg/default 是旧 default 图库，须由 #迁移图库 处理）
+const layoutState = getLayoutState()
+
+// ② 补登记：扫描结果只用于写入 gallery_config.yaml，绝不直接作为 miao 源
+if (layoutState !== 'legacy') {
+  const autoReg = autoRegisterUnregisteredRepos()
+  if (autoReg.added.length) {
+    logger.info('[ProfileImg-Plugin] 已自动登记图库到 gallery_config.yaml：' +
+      autoReg.added.map(a => a.name).join('、'))
+  }
+  if (autoReg.failed.length) {
+    logger.warn('[ProfileImg-Plugin] 自动登记失败：' +
+      autoReg.failed.map(f => `${f.name}（${f.error}）`).join('；'))
+  }
 }
 
-// ② 布局检测 + ③ 注册 miao 图库源
-const layoutState = getLayoutState()
+// ③ 从 gallery_config.yaml 注册 miao 图库源；有变更则私聊主人要求重启
 if (layoutState === 'ready') {
   const synced = syncProfileImgSrc()
   if (!synced.ok) {

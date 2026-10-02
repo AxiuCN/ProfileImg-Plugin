@@ -105,7 +105,8 @@ pnpm install -P --filter ProfileImg-Plugin
 | 跨盘 / 网络盘 | 同上，目标目录填其他盘 / 网络盘路径 | 绝对路径 |
 
 - **`gallery_config.yaml` 是唯一凭证**：只有列表中的条目会被读取，插件不做「以目录扫描为准」的发现；跨盘图库扫描不到，只能靠配置登记（这正是必须登记的原因）
-- **自动补登记**：插件启动时扫描 `gallery/ProfileImg` 下已有、但尚未登记的图库目录（含 `.git` 的仓库，或结构可直读的分层/平铺目录），**先写进 `gallery_config.yaml`**（绝对路径，Git 仓库会回填其 origin 地址），再从配置注册 miao，最后私聊提示重启 —— 扫描结果永远不直接成为图库源
+- **自动补登记**：插件启动时扫描 `gallery/ProfileImg` 下已有、但尚未登记的图库目录（含 `.git` 的仓库，或结构可直读的分层/平铺目录），**先写进 `gallery_config.yaml`**（绝对路径，Git 仓库会回填其 origin 地址），再从配置注册 miao，最后私聊提示重启 —— 扫描结果永远不直接成为图库源；旧布局（`legacy`）下不做补登记（此时 `ProfileImg/default` 是旧 default 图库，由 `#迁移图库` 处理）
+- **写入保留注释**：`gallery_config.yaml` 由插件写入时按 `defSet` 模板渲染，文件顶部的说明与示例不会被抹掉（锅巴保存走同一条路径）
 - 路径建议用正斜杠 `/`；网络盘（UNC）需先执行一次 `git config --global --add safe.directory <该路径>`，否则 git 会以 `dubious ownership` 拒绝下载 / 更新
 - 旧配置里的相对子目录名仍兼容读取（相对 `gallery/ProfileImg`），新写入一律为绝对路径
 - `#下载第三方图库 <URL> [目标目录]` 按 `remoteUrl` 匹配已有配置：命中则沿用该配置的目录，未命中则新增条目；目标目录已存在且**不是 Git 仓库**时会拒绝下载（避免覆盖本地图库），此时请直接在配置中登记
