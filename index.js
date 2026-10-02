@@ -10,6 +10,7 @@ import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constan
 import { ensureGalleryConfigFile, ensureManagerConfigFile } from './components/config.js'
 import { getLayoutState } from './model/migrateMultiSrc.js'
 import { syncProfileImgSrc } from './model/profileSrc.js'
+import { notifyLayout } from './model/layoutNotice.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -55,6 +56,18 @@ ensureManagerConfigFile()
 //    legacy — 旧 junction 聚合布局，提示 #迁移图库
 //    fresh  — 未初始化，提示 #图库初始化
 // ============================================================
+
+/**
+ * 延迟私聊主人：等插件加载完成与协议适配器连接后再发送（启动早期发送易失败）
+ * notifyLayout 内部带 24h 同状态节流，发送成功才记录；失败则下次启动重试
+ * @param {'legacy'|'fresh'} state
+ */
+function scheduleLayoutNotice (state) {
+  setTimeout(() => {
+    notifyLayout(state).catch(e => logger?.warn('[ProfileImg-Plugin] 布局提示异常:', e.message))
+  }, 45 * 1000)
+}
+
 const layoutState = getLayoutState()
 if (layoutState === 'ready') {
   const synced = syncProfileImgSrc()
@@ -67,8 +80,10 @@ if (layoutState === 'ready') {
   }
 } else if (layoutState === 'legacy') {
   logger.warn('[ProfileImg-Plugin] 检测到旧版图库布局（junction 聚合），发送 #迁移图库 升级到多图库源布局')
+  scheduleLayoutNotice('legacy')
 } else {
   logger.info('[ProfileImg-Plugin] 图库未初始化，发送 #图库初始化 进行初始化')
+  scheduleLayoutNotice('fresh')
 }
 
 // ============================================================
