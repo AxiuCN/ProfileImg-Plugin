@@ -73,4 +73,28 @@ check('四个命令模块复用统一文案来源',
   ['download.js', 'update.js', 'initGallery.js', 'migrateGallery.js']
     .every(f => /restartHint|buildSyncReport/.test(fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8'))))
 
+// ---- Git 调用一律 argv（execFile），不得再拼 shell 命令字符串 ----
+const gitSrc = fs.readFileSync(path.join(pluginRoot, 'model/git.js'), 'utf8')
+check('git.js 不再用 exec/execSync 拼命令', !/\bexec(Sync)?\s*\(/.test(gitSrc.replace(/execFile(Sync)?/g, '')))
+check('git.js 使用 execFile/execFileSync', gitSrc.includes('execFileSync(') && gitSrc.includes('execFile('))
+check('git.js 每个调用点都传数组参数',
+  (gitSrc.match(/gitExec(Async)?\(\s*[^,]+,\s*\[/g) || []).length === (gitSrc.match(/gitExec(Async)?\(/g) || []).length - 2,
+  `数组 ${(gitSrc.match(/gitExec(Async)?\(\s*[^,]+,\s*\[/g) || []).length} / 调用 ${(gitSrc.match(/gitExec(Async)?\(/g) || []).length - 2}`)
+
+// ---- 第三方图库三类操作共用同一把锁（此前分别是 tp-dl-* / tp-del-* / tp-<idx>）----
+const dlSrc = fs.readFileSync(path.join(pluginRoot, 'apps/download.js'), 'utf8')
+const upSrc = fs.readFileSync(path.join(pluginRoot, 'apps/update.js'), 'utf8')
+check('第三方锁 id 统一走 thirdPartyLockId', (dlSrc.match(/thirdPartyLockId\(/g) || []).length === 2 &&
+  (upSrc.match(/thirdPartyLockId\(/g) || []).length === 2)
+check('不存在旧的三方各自为政的锁 id', !/tp-dl-|tp-del-/.test(dlSrc) && !/acquireLock\(`tp-\$\{/.test(upSrc))
+
+// ---- 更新失败必须如实上报（fastForwardPullAsync 不抛错，只返回 ok:false）----
+check('自动更新链逐处判断 result.ok', (upSrc.match(/if \(!result\.ok\)/g) || []).length >= 2)
+check('失败时不记录仓库版本', /if \(result\.ok\) this\._recordRepoVersion/.test(upSrc))
+check('屏蔽图库 pull 的返回值被检查', /const r = await gitExecAsync\(BLOCKED_REPO_DIR/.test(upSrc) && /if \(r\.ok\)/.test(upSrc))
+
+// ---- 主图库下载也要探测默认分支（不再硬编码 main）----
+check('主图库安装使用探测到的分支',
+  (dlSrc.match(/detectRemoteBranchAsync\(/g) || []).length >= 4, String((dlSrc.match(/detectRemoteBranchAsync\(/g) || []).length))
+
 finish()

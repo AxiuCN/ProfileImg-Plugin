@@ -125,4 +125,38 @@ mk(path.join(roleFileRepo, 'docs'), ['cover.webp'])
 check('角色目录仅含图片文件 → 仍判 unsupported（不当分组）',
   probeRepo(roleFileRepo).level === 'unsupported', `实际 ${probeRepo(roleFileRepo).level}（${probeRepo(roleFileRepo).reason}）`)
 
+// ---- resolveRoleFilePath：源内定位角色图片（迁移恢复屏蔽状态用）----
+const { resolveRoleFilePath } = await import(mod('model/srcProbe.js'))
+
+const hitTier = resolveRoleFilePath(probeRepo(tierRepo), { role: '琴', type: 'normal', name: '琴_1_甲_米游社.webp' })
+check('tier 源定位到 normal-character/角色/文件',
+  hitTier?.path === path.join(tierRepo, 'normal-character', '琴', '琴_1_甲_米游社.webp'),
+  String(hitTier?.path))
+const hitSuper = resolveRoleFilePath(probeRepo(tierRepo), { role: '胡桃', type: 'super', name: '胡桃_1_乙_pixiv.png' })
+check('tier 源按 type 定位 super-character',
+  hitSuper?.path === path.join(tierRepo, 'super-character', '胡桃', '胡桃_1_乙_pixiv.png'),
+  String(hitSuper?.path))
+
+const hitFlat = resolveRoleFilePath(probeRepo(flatRepo), { role: '三月七', name: '01.jpg' })
+check('平铺源定位到 角色/文件', hitFlat?.path === path.join(flatRepo, '三月七', '01.jpg'), String(hitFlat?.path))
+
+// 一层分组：真正的位置在分组子源里（group 不展开时定位不到）
+const groupProbe = probeRepo(groupRepo)
+check('分组源未展开时定位不到（主仓库 / 默认图库不展开）',
+  resolveRoleFilePath(groupProbe, { role: '琴', name: 'a.webp' }) === null)
+const hitGroupFlat = resolveRoleFilePath(groupProbe, { role: '琴', name: 'a.webp' }, { allowGroup: true })
+check('分组源展开后定位到 分组/角色/文件',
+  hitGroupFlat?.path === path.join(groupRepo, 'gs-character', '琴', 'a.webp') && hitGroupFlat.groupName === 'gs-character',
+  `${hitGroupFlat?.groupName} ${hitGroupFlat?.path}`)
+const hitGroupTier = resolveRoleFilePath(groupProbe, { role: '胡桃', name: 'd.webp' }, { allowGroup: true })
+check('分组内的分层子源也能定位',
+  hitGroupTier?.path === path.join(groupRepo, 'gs-tier', 'normal-character', '胡桃', 'd.webp'),
+  String(hitGroupTier?.path))
+
+check('文件不存在 → null',
+  resolveRoleFilePath(probeRepo(tierRepo), { role: '琴', name: '不存在.webp' }, { allowGroup: true }) === null)
+check('缺角色名或文件名 → null',
+  resolveRoleFilePath(probeRepo(tierRepo), { role: '', name: 'x.webp' }) === null &&
+  resolveRoleFilePath(probeRepo(tierRepo), { role: '琴' }) === null)
+
 finish()

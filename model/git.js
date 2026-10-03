@@ -1,7 +1,45 @@
-import { execSync, exec } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+/* ==========================================================================
+   Git 参数白名单
+   ========================================================================== */
+
+/** 引用名（分支）白名单：字母数字开头，允许 . _ - / */
+const REF_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+
+/**
+ * 分支名是否安全
+ * Git 引用名允许 `&` `;` `|` `$` 等 shell 元字符（`git check-ref-format` 通过），
+ * 也允许以 `-` 开头触发参数注入（如 fetch 的 `--upload-pack`），故一律白名单放行
+ * @param {string} v - 分支名
+ * @returns {boolean}
+ */
+function isSafeRefName (v) {
+  if (typeof v !== 'string' || !v || v.length > 200) return false
+  if (!REF_RE.test(v)) return false
+  // `..`（引用名非法但有历史遗留）、无意义的尾缀
+  if (v.includes('..') || v.endsWith('/') || v.endsWith('.')) return false
+  return true
+}
+
+/**
+ * 远程地址是否安全（Git 地址、scp 形式或本地绝对路径）
+ * @param {string} v - 仓库地址
+ * @returns {boolean}
+ */
+function isSafeRemote (v) {
+  if (typeof v !== 'string' || !v || v.length > 500) return false
+  // 以 `-` 开头会被 Git 当选项解析（参数注入）
+  if (v.startsWith('-')) return false
+  if (/[\u0000-\u001f]/.test(v)) return false
+  if (/^(https?|git|ssh|file):\/\//i.test(v)) return true
+  if (/^[\w.-]+@[\w.-]+:/.test(v)) return true
+  if (/^[A-Za-z]:[\\/]/.test(v) || v.startsWith('/') || v.startsWith('\\\\')) return true
+  return false
+}
 
 /* ==========================================================================
    操作锁 — 防止下载/更新并发操作同一仓库
@@ -34,7 +72,9 @@ function _ensureLockDir() {
  */
 export function acquireLock(id, operation, type = 'default') {
   _ensureLockDir()
-  const lockFile = path.join(LOCK_DIR, `${id}.lock`)
+  // id 会作为锁文件名，`:` `/` 等在 Windows 上非法（`tp:MBT` 会写到子目录），统一消毒
+  const safeId = String(id).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+  const lockFile = path.join(LOCK_DIR, `${safeId}.lock`)
 
   if (fs.existsSync(lockFile)) {
     const stat = fs.statSync(lockFile)
@@ -74,34 +114,62 @@ export function acquireLock(id, operation, type = 'default') {
 
 /**
  * 在指定目录执行 Git 命令（同步）
+ * 参数以 argv 数组传入（execFile，不经 shell），外部值不得拼进命令字符串
  * @param {string} gitDir - Git 仓库目录
- * @param {string} command - Git 命令（不含 'git' 前缀）
+ * @param {string[]} args - Git 参数（不含 'git' 本身）
  * @param {number} timeout - 超时毫秒
  * @returns {string} 命令输出（已 trim）
  */
-export function gitExec(gitDir, command, timeout = 10000) {
-  return execSync(`git ${command}`, { cwd: gitDir, encoding: 'utf8', timeout }).trim()
+export function gitExec(gitDir, args, timeout = 10000) {
+  // stderr 显式捕获：探测类命令（symbolic-ref 等）失败属预期，不应把噪声打到 Bot 日志
+  return execFileSync('git', args, {
+    cwd: gitDir,
+    encoding: 'utf8',
+    timeout,
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
 }
 
 /**
  * 探测本地仓库的默认分支（origin/HEAD → 符号引用 HEAD → 'main'）
  * 已 clone 的仓库由 origin/HEAD 给出远程默认分支；未 clone 完成 / 空仓库时
- * 用 symbolic-ref 读符号引用（不要求存在 commit）；异常时回退 'main'，
+ * 用 symbolic-ref 读符号引用（不要求存在 commit）；异常或分支名不合法时回退 'main'，
  * 供 pull / fetch / reset 使用，避免硬编码 main 导致 master 仓库更新失败
  * @param {string} gitDir - Git 仓库目录
  * @returns {string} 分支名
  */
 export function getRepoBranch(gitDir) {
   try {
-    const out = gitExec(gitDir, 'symbolic-ref --short refs/remotes/origin/HEAD', 10000)
+    const out = gitExec(gitDir, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], 10000)
     const m = out.match(/^origin\/(.+)$/)
-    if (m) return m[1]
+    if (m && isSafeRefName(m[1])) return m[1]
   } catch { /* 回退下一级 */ }
   try {
-    const out = gitExec(gitDir, 'symbolic-ref --short HEAD', 10000)
-    if (out && out !== 'HEAD') return out
+    const out = gitExec(gitDir, ['symbolic-ref', '--short', 'HEAD'], 10000)
+    if (out && out !== 'HEAD' && isSafeRefName(out)) return out
   } catch { /* 回退默认值 */ }
   return 'main'
+}
+
+/**
+ * 探测远程仓库的默认分支（ls-remote --symref HEAD）
+ * 地址不合法或探测失败时回退 'main'
+ * @param {string} url - 仓库地址
+ * @returns {Promise<string>} 分支名
+ */
+export async function detectRemoteBranchAsync(url) {
+  if (!isSafeRemote(url)) {
+    logger?.warn('[ProfileImg-Plugin] 仓库地址不合法，默认分支探测跳过：' + String(url).slice(0, 80))
+    return 'main'
+  }
+  try {
+    const r = await gitExecAsync(process.cwd(), ['ls-remote', '--symref', url, 'HEAD'], 30000)
+    if (!r.ok) return 'main'
+    const m = (r.stdout || '').match(/ref:\s*refs\/heads\/(\S+)\s+HEAD/)
+    return m && isSafeRefName(m[1]) ? m[1] : 'main'
+  } catch {
+    return 'main'
+  }
 }
 
 /**
@@ -111,7 +179,7 @@ export function getRepoBranch(gitDir) {
  */
 export function getRepoRemoteUrl(gitDir) {
   try {
-    return gitExec(gitDir, 'remote get-url origin', 10000)
+    return gitExec(gitDir, ['remote', 'get-url', 'origin'], 10000)
   } catch {
     return ''
   }
@@ -119,19 +187,20 @@ export function getRepoRemoteUrl(gitDir) {
 
 /**
  * 在指定目录执行 Git 命令（异步），不阻塞 Bot 主线程
+ * 参数以 argv 数组传入（execFile，不经 shell）
  * timeout=0 时不设超时（用于长时间下载）
  * @param {string} gitDir - Git 仓库目录
- * @param {string} command - Git 命令（不含 'git' 前缀）
+ * @param {string[]} args - Git 参数（不含 'git' 本身）
  * @param {number} timeout - 超时毫秒，0 = 不限时
  * @returns {Promise<{ ok: boolean, stdout?: string, stderr?: string, error?: string }>}
  */
-export function gitExecAsync(gitDir, command, timeout = 120000) {
+export function gitExecAsync(gitDir, args, timeout = 120000) {
   return new Promise((resolve) => {
     const opts = { cwd: gitDir, encoding: 'utf8' }
     if (timeout > 0) opts.timeout = timeout
-    // timeout=0 → exec 不设 timeout，不限时等待
+    // timeout=0 → execFile 不设 timeout，不限时等待
 
-    const child = exec(`git ${command}`, opts,
+    const child = execFile('git', args, opts,
       (error, stdout, stderr) => {
         if (error) {
           resolve({ ok: false, stdout: stdout?.trim(), stderr: stderr?.trim(), error: error.message })
@@ -155,7 +224,8 @@ export function gitExecAsync(gitDir, command, timeout = 120000) {
  * 异步安装仓库 — 不阻塞 Bot，不限时等待（适配大仓库/慢网络）
  * 支持断点续装：.git 存在但 HEAD 无效时自动续传 fetch+reset
  *
- * 安全：目标目录已存在、非空且不是 Git 仓库时**拒绝**，避免覆盖用户的本地图库
+ * 安全：目标目录已存在、非空且不是 Git 仓库时**拒绝**，避免覆盖用户的本地图库；
+ * 仓库地址 / 分支名不合法时直接拒绝，不启动任何 Git 进程
  * @param {string} repoUrl - 远程仓库 URL
  * @param {string} targetDir - 目标目录
  * @param {string} branch - 分支名，默认 'main'
@@ -164,11 +234,18 @@ export function gitExecAsync(gitDir, command, timeout = 120000) {
  * @returns {Promise<{ ok: boolean, msg: string, existed: boolean }>}
  */
 export async function installRepoAsync(repoUrl, targetDir, branch = 'main', opts = {}) {
+  if (!isSafeRemote(repoUrl)) {
+    return { ok: false, existed: false, msg: '仓库地址不合法（需为 git 地址或绝对路径），已拒绝下载' }
+  }
+  if (!isSafeRefName(branch)) {
+    return { ok: false, existed: false, msg: '分支名不合法，已拒绝下载' }
+  }
+
   const hasGit = fs.existsSync(path.join(targetDir, '.git'))
 
   if (hasGit) {
     try {
-      gitExec(targetDir, 'rev-parse HEAD', 5000)
+      gitExec(targetDir, ['rev-parse', 'HEAD'], 5000)
       return { ok: true, msg: '仓库已安装', existed: true }
     } catch {
       // .git 存在但 HEAD 无效 → 上次安装被中断，续传
@@ -200,16 +277,16 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main', opts
       }
       fs.mkdirSync(targetDir, { recursive: true })
 
-      let r = await gitExecAsync(targetDir, `init --initial-branch=${branch}`)
+      let r = await gitExecAsync(targetDir, ['init', `--initial-branch=${branch}`])
       if (!r.ok) throw new Error(r.error)
-      r = await gitExecAsync(targetDir, `remote add origin ${repoUrl}`)
+      r = await gitExecAsync(targetDir, ['remote', 'add', 'origin', repoUrl])
       if (!r.ok) throw new Error(r.error)
     }
 
     // fetch 不设超时 — 大仓库可能下载数小时
-    let r = await gitExecAsync(targetDir, `fetch origin ${branch} --depth 1`, 0)
+    let r = await gitExecAsync(targetDir, ['fetch', 'origin', branch, '--depth', '1'], 0)
     if (!r.ok) throw new Error(r.error)
-    r = await gitExecAsync(targetDir, `reset --hard origin/${branch}`)
+    r = await gitExecAsync(targetDir, ['reset', '--hard', `origin/${branch}`])
     if (!r.ok) throw new Error(r.error)
 
     return { ok: true, msg: existed ? '安装续传成功' : '安装成功', existed }
@@ -233,22 +310,23 @@ export async function installRepoAsync(repoUrl, targetDir, branch = 'main', opts
 
 export function getLocalSha(gitDir) {
   try {
-    return gitExec(gitDir, 'rev-parse --short HEAD')
+    return gitExec(gitDir, ['rev-parse', '--short', 'HEAD'])
   } catch (e) { return null }
 }
 
 export function getLastCommitDate(gitDir) {
   try {
-    return gitExec(gitDir, 'log -1 --format=%ci')
+    return gitExec(gitDir, ['log', '-1', '--format=%ci'])
   } catch (e) { return null }
 }
 
 /** 异步获取远程 SHA */
 export async function getRemoteShaAsync(gitDir, branch = 'main') {
+  if (!isSafeRefName(branch)) return null
   try {
-    let r = await gitExecAsync(gitDir, `fetch origin ${branch}`, 60000)
+    let r = await gitExecAsync(gitDir, ['fetch', 'origin', branch], 60000)
     if (!r.ok) return null
-    r = await gitExecAsync(gitDir, `rev-parse --short origin/${branch}`)
+    r = await gitExecAsync(gitDir, ['rev-parse', '--short', `origin/${branch}`])
     return r.ok ? r.stdout : null
   } catch (e) { return null }
 }
@@ -259,9 +337,12 @@ export async function getRemoteShaAsync(gitDir, branch = 'main') {
 
 /** 异步 fast-forward 拉取 */
 export async function fastForwardPullAsync(gitDir, branch = 'main') {
+  if (!isSafeRefName(branch)) {
+    return { ok: false, updated: false, msg: '分支名不合法，已拒绝执行' }
+  }
   try {
     const before = getLocalSha(gitDir)
-    const r = await gitExecAsync(gitDir, `pull origin ${branch} --ff-only`, 60000)
+    const r = await gitExecAsync(gitDir, ['pull', 'origin', branch, '--ff-only'], 60000)
     if (!r.ok) throw new Error(r.error)
     const after = getLocalSha(gitDir)
     return { ok: true, updated: before !== after, msg: before !== after ? '已更新' : '已是最新' }
@@ -272,8 +353,9 @@ export async function fastForwardPullAsync(gitDir, branch = 'main') {
 
 /** 异步强制重置到远程 */
 export async function forceResetAsync(gitDir, branch = 'main') {
-  let r = await gitExecAsync(gitDir, `fetch origin ${branch}`, 60000)
+  if (!isSafeRefName(branch)) throw new Error('分支名不合法，已拒绝执行')
+  let r = await gitExecAsync(gitDir, ['fetch', 'origin', branch], 60000)
   if (!r.ok) throw new Error(r.error)
-  r = await gitExecAsync(gitDir, `reset --hard origin/${branch}`)
+  r = await gitExecAsync(gitDir, ['reset', '--hard', `origin/${branch}`])
   if (!r.ok) throw new Error(r.error)
 }

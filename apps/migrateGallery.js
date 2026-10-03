@@ -115,6 +115,7 @@ export class MigrateGallery extends plugin {
     lines.push(`段位规范化：重命名 ${r.renamedDefaults || 0} 张 / 保持屏蔽 ${r.blockedKept || 0} 张`)
     lines.push(`清理副本：default ${r.removedDefaultCopies} 张 / 第三方 ${r.removedThirdCopies} 张`)
     if (r.thirdBlockedKept) lines.push(`第三方源保持屏蔽：${r.thirdBlockedKept} 张`)
+    if (r.thirdBlockedMissed) lines.push(`第三方源屏蔽未恢复：${r.thirdBlockedMissed} 张（原先屏蔽的图可能重新可见）`)
     if (r.keptThirdCopies) lines.push(`保留副本：${r.keptThirdCopies} 张（来源仓库不可直读，避免丢图）`)
     lines.push(`移除 junction：${r.removedJunctions} 个`)
     lines.push('', `图库源列表（${r.srcList?.length || 0} 个）：`)

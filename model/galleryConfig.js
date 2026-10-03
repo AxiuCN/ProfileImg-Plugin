@@ -47,6 +47,17 @@ function toConfigDirValue(absDir) {
 }
 
 /**
+ * 第三方图库的操作锁 id —— 下载 / 更新 / 删除必须共用同一把锁
+ * （此前三种操作各用自己的 id，同一仓库可被并发操作）
+ * @param {{name?: string}|string} tp - 第三方图库条目或图库名
+ * @returns {string} 锁 id
+ */
+export function thirdPartyLockId(tp) {
+  const name = typeof tp === 'string' ? tp : tp?.name
+  return `tp:${name || 'unknown'}`
+}
+
+/**
  * 获取默认图库目录（固定，不随配置变化）
  * 多图库源布局下，默认图库即 miao-plugin/resources/profile（miao 的唯一可写位置，
  * 源列表中的 'profile'），文件名使用 default 段位（10001~99999）

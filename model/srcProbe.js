@@ -261,6 +261,28 @@ export function resolveSourceDirs (probe, opts = {}) {
 }
 
 /**
+ * 在源内定位某个角色图片的实际文件路径
+ * tier → `{源}/{type}-character/{角色}/{文件名}`；flat（含分组子源）→ `{源}/{角色}/{文件名}`
+ * 与 resolveSourceDirs 同属「源结构 → 实际位置」契约，注册 / 读取 / 迁移共用
+ * @param {object} probe - probeRepo 结果
+ * @param {{role: string, type?: 'normal'|'super', name: string}} query - 角色、立绘层、文件名
+ * @param {object} [opts]
+ * @param {boolean} [opts.allowGroup] - 是否展开一层分组
+ * @returns {{dir: string, level: string, groupName: string, path: string}|null} 命中的源与实际路径
+ */
+export function resolveRoleFilePath (probe, query = {}, opts = {}) {
+  const { role, type = 'normal', name } = query
+  if (!role || !name) return null
+  for (const d of resolveSourceDirs(probe, { allowGroup: opts.allowGroup })) {
+    const p = d.level === 'flat'
+      ? path.join(d.dir, role, name)
+      : path.join(d.dir, `${type}-character`, role, name)
+    if (fs.existsSync(p)) return { ...d, path: p }
+  }
+  return null
+}
+
+/**
  * 批量探测仓库目录（去重、过滤空路径）
  * @param {Array<{dir: string, label?: string, kind?: string}>} items
  * @returns {Array<object>} probeRepo 结果 + label/kind

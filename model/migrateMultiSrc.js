@@ -7,7 +7,7 @@ import {
 import { getActiveRepoIds } from './mapJson.js'
 import { getThirdPartyRepos } from './galleryConfig.js'
 import { isJunction, removeJunction } from './junction.js'
-import { probeRepo } from './srcProbe.js'
+import { probeRepo, resolveRoleFilePath } from './srcProbe.js'
 import { SEGMENTS, getNextSeqInRange, parseFilename, resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import {
   supportsMultiSrc, buildSrcList, syncProfileImgSrc, readProfileImgSrc,
@@ -314,10 +314,15 @@ function cleanRepoCopies (report) {
           }
           // 第三方副本：来源仓库可直读才清理，.bak 屏蔽状态迁到源内
           if (plain.includes(THIRD_COPY_TAG)) {
-            const name = plain.match(/_第三方图库_([^_]+)_/)?.[1]
+            // 图库名可能含 `_`（旧写入侧不做限制），按已注册名称做最长匹配，避免截断后认错来源
+            const rest = plain.slice(plain.indexOf(THIRD_COPY_TAG) + THIRD_COPY_TAG.length)
+            let name = ''
+            for (const key of registeredThird.keys()) {
+              if (rest.startsWith(key + '_') && key.length > name.length) name = key
+            }
             const tp = name ? registeredThird.get(name) : null
             if (tp) {
-              const srcName = plain.split(`_第三方图库_${name}_`)[1]
+              const srcName = rest.slice(name.length + 1)
               if (isBak && srcName) {
                 blocked.thirds.push({ tp, role: role.name, type: type.replace('-character', ''), srcName })
               }
@@ -458,6 +463,9 @@ function logWarn (msg) {
 
 /**
  * 步骤 3.6：第三方副本的 .bak 屏蔽状态迁到第三方源内（改源文件为 .bak，保持屏蔽）
+ * 源可能是分层 / 平铺，也可能是一层分组（此时真正的位置在分组子源里），
+ * 一律由 resolveRoleFilePath 定位；定位不到必须告警，不能静默跳过（否则用户屏蔽过的图会重新可见）
+ * 注意：第三方源内的 .bak 会被 `#强制更新第三方图库`（reset --hard）抹掉，屏蔽不具备持久性
  * @param {object} report
  * @param {Array<{tp: object, role: string, type: string, srcName: string}>} thirds
  */
@@ -465,20 +473,25 @@ function applyThirdBlocked (report, thirds) {
   let applied = 0
   for (const item of thirds) {
     const { tp, role, type, srcName } = item
-    const level = probeRepo(tp.dir).level
-    let target = ''
-    if (level === 'tier') target = path.join(tp.dir, `${type}-character`, role, srcName)
-    else if (level === 'flat') target = path.join(tp.dir, role, srcName)
-    if (!target || !fs.existsSync(target)) continue
+    const hit = resolveRoleFilePath(probeRepo(tp.dir), { role, type, name: srcName }, { allowGroup: true })
+    if (!hit) {
+      report.thirdBlockedMissed++
+      report.warnings.push(`第三方屏蔽状态未恢复：${tp.name} / ${role} / ${srcName}（源内未找到该文件，该图可能重新可见）`)
+      continue
+    }
     try {
-      fs.renameSync(target, target + '.bak')
+      fs.renameSync(hit.path, hit.path + '.bak')
       applied++
     } catch (e) {
+      report.thirdBlockedMissed++
       report.warnings.push(`第三方屏蔽状态恢复失败：${srcName}（${e.message}）`)
     }
   }
   report.thirdBlockedKept = applied
   if (applied) report.steps.push(`第三方源保持屏蔽 .bak：${applied} 张`)
+  if (report.thirdBlockedMissed) {
+    report.steps.push(`第三方源屏蔽状态未恢复：${report.thirdBlockedMissed} 张（见告警）`)
+  }
 }
 
 /** 步骤 4：清理聚合目录下的角色级 junction（保留 blocked-character 与目录本身） */
@@ -504,6 +517,7 @@ function cleanAggJunctions (report) {
  *   backupDir?: string, backupFiles?: string[],
  *   movedRoles?: number, movedImages?: number,
  *   removedDefaultCopies?: number, removedThirdCopies?: number, keptThirdCopies?: number,
+ *   thirdBlockedKept?: number, thirdBlockedMissed?: number,
  *   removedJunctions?: number, srcList?: string[], srcSkipped?: Array<object>, needRestart?: boolean
  * }}
  */
@@ -517,6 +531,8 @@ export function migrateToMultiSrc () {
     removedDefaultCopies: 0,
     removedThirdCopies: 0,
     keptThirdCopies: 0,
+    thirdBlockedKept: 0,
+    thirdBlockedMissed: 0,
     removedJunctions: 0
   }
 

@@ -5,7 +5,7 @@ import { getPluginConfig } from '../components/config.js'
 import { BLOCKED_REPO_DIR, getRepoDir, getRepoConfig } from '../components/constants.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { getThirdPartyRepos } from '../model/galleryConfig.js'
+import { getThirdPartyRepos, thirdPartyLockId } from '../model/galleryConfig.js'
 import { syncProfileImgSrc } from '../model/profileSrc.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
@@ -42,6 +42,12 @@ export class Update extends plugin {
   _recordRepoVersion(repoId) {
     const sha = getLocalSha(getRepoDir(repoId))
     if (sha) setRepoVersion(repoId, sha)
+  }
+
+  /** 压缩错误文本用于回复（exec 的错误信息含完整命令与多行输出） */
+  _shortMsg(msg) {
+    const s = String(msg || '未知错误').replace(/\s+/g, ' ').trim()
+    return s.length > 120 ? s.slice(0, 120) + '…' : s
   }
 
   _registerCronTasks() {
@@ -83,6 +89,10 @@ export class Update extends plugin {
         const localSha = getLocalSha(repoDir)
         if (remoteSha === localSha) continue
         const result = await fastForwardPullAsync(repoDir, branch)
+        if (!result.ok) {
+          lines.push(`主图库仓库${repo.id}：更新失败 - ${this._shortMsg(result.msg)}`)
+          continue
+        }
         this._recordRepoVersion(repo.id)
         lines.push(`主图库仓库${repo.id}：更新${result.updated ? '成功' : '完成'}（${localSha} -> ${remoteSha}）`)
       } catch (err) {
@@ -104,8 +114,12 @@ export class Update extends plugin {
             if (remoteSha) {
               const localSha = getLocalSha(BLOCKED_REPO_DIR)
               if (remoteSha !== localSha) {
-                await gitExecAsync(BLOCKED_REPO_DIR, `pull origin ${blockedBranch} --allow-unrelated-histories`, 60000)
-                lines.push(`屏蔽图库：更新成功（${localSha} -> ${remoteSha}）`)
+                const r = await gitExecAsync(BLOCKED_REPO_DIR, ['pull', 'origin', blockedBranch, '--allow-unrelated-histories'], 60000)
+                if (r.ok) {
+                  lines.push(`屏蔽图库：更新成功（${localSha} -> ${remoteSha}）`)
+                } else {
+                  lines.push(`屏蔽图库：更新失败 - ${this._shortMsg(r.stderr || r.error)}`)
+                }
               }
             }
           } catch (err) {
@@ -130,7 +144,7 @@ export class Update extends plugin {
         const check = checkRepo(tp.dir)
         if (!check.ok) { lines.push(`第三方「${tp.name}」：${check.msg}`); continue }
 
-        const lock = acquireLock(`tp-${tp.idx}`, '第三方图库自动更新', 'update')
+        const lock = acquireLock(thirdPartyLockId(tp), '第三方图库自动更新', 'update')
         if (!lock.ok) continue
         try {
           const branch = getRepoBranch(tp.dir)
@@ -139,9 +153,13 @@ export class Update extends plugin {
           const localSha = getLocalSha(tp.dir)
           if (remoteSha === localSha) continue
           const result = await fastForwardPullAsync(tp.dir, branch)
+          if (!result.ok) {
+            lines.push(`第三方「${tp.name}」：更新失败 - ${this._shortMsg(result.msg)}`)
+            continue
+          }
           lines.push(`第三方「${tp.name}」：更新${result.updated ? '成功' : '完成'}（${localSha} -> ${remoteSha}）`)
         } catch (err) {
-          lines.push(`第三方「${tp.name}」：更新失败 - ${err.message}`)
+          lines.push(`第三方「${tp.name}」：更新失败 - ${this._shortMsg(err.message)}`)
         } finally {
           lock.release()
         }
@@ -204,7 +222,7 @@ export class Update extends plugin {
         continue
       }
 
-      const lock = acquireLock(`tp-${tp.idx}`, '更新第三方图库', 'update')
+      const lock = acquireLock(thirdPartyLockId(tp), '更新第三方图库', 'update')
       if (!lock.ok) {
         results.push(`图库「${tp.name}」：${lock.msg}`)
         continue
@@ -248,11 +266,12 @@ export class Update extends plugin {
 
       try {
         const result = await fastForwardPullAsync(repoDir, getRepoBranch(repoDir))
-        this._recordRepoVersion(repo.id)
+        if (result.ok) this._recordRepoVersion(repo.id)
         completed++
-        results.push(`仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+        const line = result.ok ? result.msg : `更新失败 - ${this._shortMsg(result.msg)}`
+        results.push(`仓库${repo.id}(${repo.name || '默认'})：${line}`)
         if (total > 1) {
-          e.reply(`[面板图图库管理器] 更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${result.msg}`)
+          e.reply(`[面板图图库管理器] 更新进度：${completed}/${total}\n仓库${repo.id}(${repo.name || '默认'})：${line}`)
         }
       } finally {
         lock.release()

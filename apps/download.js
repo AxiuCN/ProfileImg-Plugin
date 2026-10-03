@@ -1,11 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { installRepoAsync, getLocalSha, acquireLock, gitExecAsync } from '../model/git.js'
+import { installRepoAsync, getLocalSha, acquireLock, detectRemoteBranchAsync } from '../model/git.js'
 import { getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, getGalleryConfig, writeGalleryConfig } from '../components/config.js'
 import { notifyMaster, buildSyncReport } from '../components/notify.js'
 import { setRepoVersion } from '../model/repoVersions.js'
-import { getThirdPartyRepos, resolveThirdPartyDir, addThirdPartyRepo } from '../model/galleryConfig.js'
+import { getThirdPartyRepos, resolveThirdPartyDir, addThirdPartyRepo, thirdPartyLockId } from '../model/galleryConfig.js'
 import { syncProfileImgSrc } from '../model/profileSrc.js'
 import { probeRepo } from '../model/srcProbe.js'
 import { guardLayout } from '../model/layoutGuard.js'
@@ -66,7 +66,8 @@ export class Download extends plugin {
       }
 
       try {
-        const result = await installRepoAsync(repo.remoteUrl, repoDir, 'main', {
+        const branch = await detectRemoteBranchAsync(repo.remoteUrl)
+        const result = await installRepoAsync(repo.remoteUrl, repoDir, branch, {
           refuseHint: `如确认要重建主仓库 ${repoDir}，请先手动清空该目录，或发送 #强制下载主图库`
         })
         if (result.ok) {
@@ -103,29 +104,13 @@ export class Download extends plugin {
 
     try {
       e.reply('[面板图图库管理器] 开始下载屏蔽图库（后台执行）...')
-      const branch = await this._detectRemoteBranch(blockedUrl)
+      const branch = await detectRemoteBranchAsync(blockedUrl)
       const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch, {
         refuseHint: '如确认要重建屏蔽图库，请先手动清空该目录，或发送 #强制下载屏蔽图库'
       })
       return e.reply('[面板图图库管理器] 屏蔽图库下载\n' + result.msg + buildSyncReport(syncProfileImgSrc()))
     } finally {
       lock.release()
-    }
-  }
-
-  /**
-   * 检测远程仓库默认分支名（main / master / 其他）
-   * @param {string} url - 远程仓库 URL
-   * @returns {Promise<string>} 分支名，检测失败返回 'main'
-   */
-  async _detectRemoteBranch(url) {
-    try {
-      const r = await gitExecAsync(process.cwd(), `ls-remote --symref ${url} HEAD`, 30000)
-      if (!r.ok) return 'main'
-      const m = (r.stdout || '').match(/ref:\s*refs\/heads\/(\S+)\s+HEAD/)
-      return m ? m[1] : 'main'
-    } catch {
-      return 'main'
     }
   }
 
@@ -192,14 +177,14 @@ export class Download extends plugin {
       return e.reply('[面板图图库管理器] 目标目录与主图库 / 默认图库目录冲突，请更换')
     }
 
-    const lock = acquireLock(`tp-dl-${repoName}`, '下载第三方图库', 'download')
+    const lock = acquireLock(thirdPartyLockId(repoName), '下载第三方图库', 'download')
     if (!lock.ok) {
       return e.reply(`[面板图图库管理器] ${lock.msg}`)
     }
 
     try {
       e.reply(`[面板图图库管理器] 开始下载第三方图库「${repoName}」...`)
-      const branch = await this._detectRemoteBranch(remoteUrl)
+      const branch = await detectRemoteBranchAsync(remoteUrl)
       const result = await installRepoAsync(remoteUrl, targetDir, branch, {
         refuseHint: `如这就是你的本地图库，请在锅巴「第三方图库」或 config/gallery_config.yaml 中新增条目（dir 填 ${targetDir}），无需下载`
       })
@@ -286,7 +271,7 @@ export class Download extends plugin {
       }
     }
 
-    const lock = acquireLock(`tp-del-${arg}`, '删除第三方图库', 'update')
+    const lock = acquireLock(thirdPartyLockId(arg), '删除第三方图库', 'update')
     if (!lock.ok) {
       return e.reply(`[面板图图库管理器] ${lock.msg}`)
     }
@@ -348,7 +333,8 @@ export class Download extends plugin {
         if (fs.existsSync(repoDir)) {
           fs.rmSync(repoDir, { recursive: true, force: true })
         }
-        const result = await installRepoAsync(repo.remoteUrl, repoDir)
+        const branch = await detectRemoteBranchAsync(repo.remoteUrl)
+        const result = await installRepoAsync(repo.remoteUrl, repoDir, branch)
         if (result.ok) {
           const sha = getLocalSha(repoDir)
           if (sha) setRepoVersion(repoId, sha)
@@ -386,7 +372,7 @@ export class Download extends plugin {
       if (fs.existsSync(BLOCKED_REPO_DIR)) {
         fs.rmSync(BLOCKED_REPO_DIR, { recursive: true, force: true })
       }
-      const branch = await this._detectRemoteBranch(blockedUrl)
+      const branch = await detectRemoteBranchAsync(blockedUrl)
       const result = await installRepoAsync(blockedUrl, BLOCKED_REPO_DIR, branch)
       return e.reply('[面板图图库管理器] 屏蔽图库强制下载\n' + result.msg + buildSyncReport(syncProfileImgSrc()))
     } finally {
