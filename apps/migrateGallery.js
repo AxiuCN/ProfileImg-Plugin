@@ -103,7 +103,8 @@ export class MigrateGallery extends plugin {
         '[面板图图库管理器] 迁移失败',
         r.error || '未知错误',
         r.steps?.length ? '\n已执行步骤：\n' + r.steps.join('\n') : '',
-        r.backupDir ? `\n配置备份：${r.backupDir}` : ''
+        r.backupDir ? `\n配置备份：${r.backupDir}` : '',
+        '\n处理后可重跑 #迁移图库（迁移可重复执行，已完成的步骤会跳过）'
       ].join('\n')
     }
     if (r.already) {
@@ -116,6 +117,7 @@ export class MigrateGallery extends plugin {
     lines.push(`清理副本：default ${r.removedDefaultCopies} 张 / 第三方 ${r.removedThirdCopies} 张`)
     if (r.thirdBlockedKept) lines.push(`第三方源保持屏蔽：${r.thirdBlockedKept} 张`)
     if (r.thirdBlockedMissed) lines.push(`第三方源屏蔽未恢复：${r.thirdBlockedMissed} 张（原先屏蔽的图可能重新可见）`)
+    if (r.conflictDefaults) lines.push(`同名冲突：保留 ${r.conflictDefaults} 份为 .conflict（见提示）`)
     if (r.keptThirdCopies) lines.push(`保留副本：${r.keptThirdCopies} 张（来源仓库不可直读，避免丢图）`)
     lines.push(`移除 junction：${r.removedJunctions} 个`)
     lines.push('', `图库源列表（${r.srcList?.length || 0} 个）：`)

@@ -4,6 +4,8 @@ import { resolveRoleName } from '../modules/alias.js'
 import { findImageByN } from '../model/galleryIndex.js'
 import { resolveNRange, escapeRegExp } from '../components/panelUtils.js'
 import { guardLayout } from '../model/layoutGuard.js'
+import { mainRepoLockIdForPath } from '../model/galleryConfig.js'
+import { acquireLocks } from '../model/git.js'
 
 /**
  * #重命名角色名面板图N 作者 来源 [备注]
@@ -89,7 +91,15 @@ export class RenameProfileImg extends plugin {
       if (target.name === newFile) {
         return e.reply(`[面板图图库管理器]\n${roleName}序号${seqNum}版权信息未变化，无需重命名`)
       }
-      fs.renameSync(target.filePath, path.join(path.dirname(target.filePath), newFile))
+      // 主仓库内的文件与 Git 更新共用源级锁（默认图库无需加锁）
+      const lockId = mainRepoLockIdForPath(target.dir)
+      const galleryLock = acquireLocks(lockId ? [{ id: lockId, operation: '重命名面板图', type: 'update' }] : [])
+      if (!galleryLock.ok) return e.reply(`[面板图图库管理器] ${galleryLock.msg}`)
+      try {
+        fs.renameSync(target.filePath, path.join(path.dirname(target.filePath), newFile))
+      } finally {
+        galleryLock.release()
+      }
       const label = target.source === 'default' ? '默认图库' : target.label
       return e.reply([
         `[面板图图库管理器]\n已将${label}中${roleName}序号${seqNum}重命名`,

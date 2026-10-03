@@ -94,8 +94,9 @@ put(path.join(GALLERY, 'map.json'), JSON.stringify({ version: 1, mapping: { 琴:
 let canJunction = true
 try {
   fs.mkdirSync(miaoRes, { recursive: true })
-  fs.symlinkSync(aggDir, path.join(miaoRes, 'profile'), 'junction')
-  fs.symlinkSync(path.join(mainRepo, 'normal-character/琴'), path.join(aggDir, 'normal-character/琴'), 'junction')
+  // 先验一个「损坏 junction」（目标不存在）：必须仍被识别为 legacy，否则会误判 fresh 引导用户去下载图库
+  const brokenLink = path.join(miaoRes, 'profile')
+  fs.symlinkSync(path.join(sandbox, 'not-exist-target'), brokenLink, 'junction')
 } catch (e) {
   canJunction = false
 }
@@ -105,11 +106,19 @@ if (!canJunction) {
   skip('当前平台 / 权限无法创建 junction')
 }
 
-// ---- 3. 跑真实迁移 ----
 const { getLayoutState, migrateToMultiSrc } = await import(pathToFileURL(path.join(fakePlugin, 'model/migrateMultiSrc.js')).href)
 const { readProfileImgSrc } = await import(pathToFileURL(path.join(fakePlugin, 'model/profileSrc.js')).href)
 
 const { check, finish } = checker()
+const brokenLinkPath = path.join(miaoRes, 'profile')
+check('损坏 junction（目标不存在）仍判为 legacy',
+  !fs.existsSync(brokenLinkPath) && getLayoutState() === 'legacy', getLayoutState())
+fs.rmSync(brokenLinkPath, { recursive: false })
+
+fs.symlinkSync(aggDir, brokenLinkPath, 'junction')
+fs.symlinkSync(path.join(mainRepo, 'normal-character/琴'), path.join(aggDir, 'normal-character/琴'), 'junction')
+
+// ---- 3. 跑真实迁移 ----
 check('迁移前状态为 legacy', getLayoutState() === 'legacy', getLayoutState())
 
 const report = migrateToMultiSrc()
@@ -151,6 +160,31 @@ check('分组子源分别注册为源',
 check('源内唯一图片被屏蔽后该源不再注册，且计入 skipped',
   !src.list.some(v => v.includes('米游社_原图')) && report.srcSkipped.some(s => s.label === '米游社_原图'),
   JSON.stringify(report.srcSkipped.map(s => s.label)))
+
+// ---- 4. 重跑迁移：同名文件冲突不丢源版本 ----
+// 模拟「上次迁移半途失败」：抹掉 profileImgSrc 声明 → 状态回到 fresh → 迁移可重跑
+const profileConfigPath = path.join(miaoCfg, 'profile.js')
+const beforeStrip = fs.readFileSync(profileConfigPath, 'utf8')
+fs.writeFileSync(profileConfigPath, beforeStrip.replace(/export\s+const\s+profileImgSrc\s*=\s*\[[\s\S]*?\]/, ''))
+check('抹掉源声明后状态回到 fresh（迁移可重跑）', getLayoutState() === 'fresh', getLayoutState())
+
+const migratedFile = fs.readdirSync(defaultRoleDir).find(f => f.startsWith('琴_10001_'))
+const migratedSize = fs.statSync(path.join(defaultRoleDir, migratedFile)).size
+// 同名不同内容（大小不同）+ 一个新文件
+put(path.join(legacyDefault, 'normal-character/琴', migratedFile), 'yyyyyyyy')
+put(path.join(legacyDefault, 'normal-character/琴/琴_1.webp'), 'zz')
+
+const rerun = migrateToMultiSrc()
+check('重跑迁移成功', rerun.ok === true, JSON.stringify({ err: rerun.error, warnings: rerun.warnings }))
+check('同名冲突保留为 .conflict 且计数', rerun.conflictDefaults === 1, String(rerun.conflictDefaults))
+check('冲突告警指向 .conflict 文件',
+  rerun.warnings.some(w => w.includes('.conflict')), JSON.stringify(rerun.warnings))
+check('目标原文件未被覆盖', fs.statSync(path.join(defaultRoleDir, migratedFile)).size === migratedSize)
+check('源版本以 .conflict 保留下来',
+  fs.readFileSync(path.join(defaultRoleDir, migratedFile + '.conflict'), 'utf8') === 'yyyyyyyy')
+check('不同名的新文件正常搬迁（并规范为 default 段位）',
+  fs.readdirSync(defaultRoleDir).some(f => f.includes('「琴_1」')),
+  fs.readdirSync(defaultRoleDir).join(','))
 
 process.chdir(pluginRoot)
 fs.rmSync(sandbox, { recursive: true, force: true })

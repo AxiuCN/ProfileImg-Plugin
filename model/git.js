@@ -75,6 +75,12 @@ export function acquireLock(id, operation, type = 'default') {
   // id 会作为锁文件名，`:` `/` 等在 Windows 上非法（`tp:MBT` 会写到子目录），统一消毒
   const safeId = String(id).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
   const lockFile = path.join(LOCK_DIR, `${safeId}.lock`)
+  const payload = JSON.stringify({
+    id,
+    operation,
+    startTime: new Date().toISOString(),
+    pid: process.pid
+  })
 
   if (fs.existsSync(lockFile)) {
     const stat = fs.statSync(lockFile)
@@ -88,17 +94,20 @@ export function acquireLock(id, operation, type = 'default') {
         const info = JSON.parse(fs.readFileSync(lockFile, 'utf8'))
         return { ok: false, msg: `仓库${id}正在${info.operation}，请稍后再试` }
       } catch {
-        // 锁文件损坏，接管
+        // 锁文件损坏 → 接管（下面用 wx 原子抢占，抢不到说明别人刚建好）
       }
     }
+    // 过期 / 损坏的锁先删掉，再原子创建
+    try { fs.unlinkSync(lockFile) } catch {}
   }
 
-  fs.writeFileSync(lockFile, JSON.stringify({
-    id,
-    operation,
-    startTime: new Date().toISOString(),
-    pid: process.pid
-  }))
+  // wx = 已存在则失败：避免 existsSync 与写入之间的空档被两个操作同时穿过
+  try {
+    fs.writeFileSync(lockFile, payload, { flag: 'wx' })
+  } catch (e) {
+    if (e.code === 'EEXIST') return { ok: false, msg: `仓库${id}正在被其他操作占用，请稍后再试` }
+    return { ok: false, msg: `创建锁文件失败：${e.message}` }
+  }
 
   return {
     ok: true,
@@ -106,6 +115,26 @@ export function acquireLock(id, operation, type = 'default') {
       try { fs.unlinkSync(lockFile) } catch {}
     }
   }
+}
+
+/**
+ * 依次获取多把锁（用于一次操作同时改动多个仓库，如主图库 → 屏蔽图库）
+ * 任一失败即释放已获取的并返回失败；调用方拿到的 release 会释放全部
+ * @param {Array<{id: string, operation: string, type?: string}>} specs - 锁清单（id 为空的项跳过）
+ * @returns {{ ok: true, release: () => void } | { ok: false, msg: string }}
+ */
+export function acquireLocks(specs = []) {
+  const held = []
+  for (const spec of specs) {
+    if (!spec?.id) continue
+    const lock = acquireLock(spec.id, spec.operation, spec.type || 'default')
+    if (!lock.ok) {
+      held.forEach(l => l.release())
+      return lock
+    }
+    held.push(lock)
+  }
+  return { ok: true, release: () => held.forEach(l => l.release()) }
 }
 
 /* ==========================================================================

@@ -4,6 +4,8 @@ import { findImageByN } from '../model/galleryIndex.js'
 import { resolveGalleryKey } from '../components/panelUtils.js'
 import { isManager, canAccessGallery } from '../components/config.js'
 import { guardLayout } from '../model/layoutGuard.js'
+import { mainRepoLockIdForPath } from '../model/galleryConfig.js'
+import { acquireLocks } from '../model/git.js'
 
 /**
  * 删除面板图 — 接管 miao-plugin 的 #删除xxx面板图N
@@ -59,6 +61,11 @@ export class DelProfileImg extends plugin {
       }
     }
 
+    // 主仓库内的文件与 Git 更新共用源级锁（默认图库无需加锁）
+    const lockId = mainRepoLockIdForPath(target.dir)
+    const galleryLock = acquireLocks(lockId ? [{ id: lockId, operation: '删除面板图', type: 'update' }] : [])
+    if (!galleryLock.ok) return e.reply(`[面板图图库管理器] ${galleryLock.msg}`)
+
     try {
       fs.unlinkSync(target.filePath)
       const label = target.source === 'default' ? '默认图库' : target.label
@@ -66,6 +73,8 @@ export class DelProfileImg extends plugin {
     } catch (err) {
       logger.error('[ProfileImg-Plugin] 删除面板图失败:', err)
       return e.reply('[面板图图库管理器] 删除失败: ' + err.message)
+    } finally {
+      galleryLock.release()
     }
   }
 }

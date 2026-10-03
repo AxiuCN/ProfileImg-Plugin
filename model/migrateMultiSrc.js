@@ -33,13 +33,23 @@ const DEFAULT_COPY_TAG = '_本地默认图库_默认_'
 /** 第三方复制文件名标识 */
 const THIRD_COPY_TAG = '_第三方图库_'
 
-/** 安全判定 junction（异常视为否） */
+/**
+ * 安全判定 junction
+ * 只走 lstat（`isJunction` 内部已 try/catch），**不要**先 existsSync：
+ * 损坏的 junction（目标已不存在）existsSync 为 false，但仍是 junction，必须能识别并清理
+ */
 function isJunctionDir (p) {
-  try {
-    return fs.existsSync(p) && isJunction(p)
-  } catch {
+  return isJunction(p)
+}
+
+/** 移除 junction；失败只告警，返回是否真的删掉 */
+function tryRemoveJunction (report, p) {
+  const r = removeJunction(p)
+  if (!r.ok) {
+    report.warnings.push(`移除 junction 失败：${p}（${r.error}）`)
     return false
   }
+  return true
 }
 
 /**
@@ -188,8 +198,37 @@ function backupConfigs (report) {
   report.backupFiles = copied
 }
 
+/**
+ * 复制单个文件到目标位置；目标已存在时**不静默丢源文件**
+ * 目标同名：大小相同 → 视为重复跳过；大小不同 → 源版本另存为 `<名>.conflict` 并告警
+ * （`.conflict` 不是 miao 识别的图片后缀，不会污染图库）
+ * @param {string} src - 源文件
+ * @param {string} dest - 目标文件
+ * @param {object} report
+ * @returns {'copied'|'dup'|'conflict'}
+ */
+function copyFileSafely (src, dest, report) {
+  if (!fs.existsSync(dest)) {
+    fs.copyFileSync(src, dest)
+    return 'copied'
+  }
+  let sameSize = false
+  try {
+    sameSize = fs.statSync(src).size === fs.statSync(dest).size
+  } catch { /* 读不到大小按冲突处理 */ }
+  if (sameSize) return 'dup'
+
+  const conflictPath = dest + '.conflict'
+  fs.copyFileSync(src, conflictPath)
+  report.conflictDefaults++
+  report.warnings.push(
+    `同名文件内容不同，源版本已保留为 ${path.basename(conflictPath)}（目录 ${path.dirname(dest)}），请人工确认后处理`
+  )
+  return 'conflict'
+}
+
 /** 目录搬迁：优先 rename，跨设备时回退逐个文件复制 */
-function moveDir (from, to) {
+function moveDir (from, to, report) {
   fs.mkdirSync(path.dirname(to), { recursive: true })
   try {
     fs.renameSync(from, to)
@@ -202,28 +241,33 @@ function moveDir (from, to) {
     if (e.isDirectory()) {
       if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true })
       for (const f of fs.readdirSync(src)) {
-        const destFile = path.join(dest, f)
-        if (!fs.existsSync(destFile)) fs.copyFileSync(path.join(src, f), destFile)
+        copyFileSafely(path.join(src, f), path.join(dest, f), report)
       }
-    } else if (!fs.existsSync(dest)) {
-      fs.copyFileSync(src, dest)
+    } else {
+      copyFileSafely(src, dest, report)
     }
   }
 }
 
-/** 步骤 1：确保 resources/profile 为真实目录（移除 junction） */
+/**
+ * 步骤 1：确保 resources/profile 为真实目录（移除 junction）
+ * 根 junction 删不掉就**中止迁移**：否则后续写入会顺着 junction 落进聚合目录
+ */
 function ensureRealProfileDir (report) {
   const removed = []
   if (isJunctionDir(MIAO_PROFILE_LINK)) {
-    removeJunction(MIAO_PROFILE_LINK)
+    if (!tryRemoveJunction(report, MIAO_PROFILE_LINK)) {
+      throw new Error(
+        `移除 ${MIAO_PROFILE_LINK} 的 junction 失败，迁移已中止。` +
+        '请关闭占用该目录的程序（资源管理器 / 编辑器 / 图库进程）后重跑 #迁移图库'
+      )
+    }
     removed.push('profile 根 junction')
   } else {
     for (const type of ['normal-character', 'super-character']) {
       const p = path.join(MIAO_PROFILE_LINK, type)
-      if (isJunctionDir(p)) {
-        removeJunction(p)
-        removed.push(`${type} 子目录 junction`)
-      }
+      if (!isJunctionDir(p)) continue
+      if (tryRemoveJunction(report, p)) removed.push(`${type} 子目录 junction`)
     }
   }
   if (!fs.existsSync(MIAO_PROFILE_LINK)) fs.mkdirSync(MIAO_PROFILE_LINK, { recursive: true })
@@ -253,12 +297,11 @@ function moveDefaultIntoProfile (report) {
       const from = path.join(srcType, role.name)
       const to = path.join(destType, role.name)
       if (!fs.existsSync(to)) {
-        moveDir(from, to)
+        moveDir(from, to, report)
       } else {
-        // 目标已存在：逐文件合并，同名跳过
+        // 目标已存在：逐文件合并（同名不同内容保留 .conflict，不丢源版本）
         for (const f of fs.readdirSync(from)) {
-          const destFile = path.join(to, f)
-          if (!fs.existsSync(destFile)) fs.copyFileSync(path.join(from, f), destFile)
+          copyFileSafely(path.join(from, f), path.join(to, f), report)
         }
         fs.rmSync(from, { recursive: true, force: true })
       }
@@ -501,8 +544,7 @@ function cleanAggJunctions (report) {
     if (!fs.existsSync(typeDir)) continue
     for (const e of fs.readdirSync(typeDir, { withFileTypes: true })) {
       const p = path.join(typeDir, e.name)
-      if (isJunctionDir(p)) {
-        removeJunction(p)
+      if (isJunctionDir(p) && tryRemoveJunction(report, p)) {
         report.removedJunctions++
       }
     }
@@ -517,7 +559,7 @@ function cleanAggJunctions (report) {
  *   backupDir?: string, backupFiles?: string[],
  *   movedRoles?: number, movedImages?: number,
  *   removedDefaultCopies?: number, removedThirdCopies?: number, keptThirdCopies?: number,
- *   thirdBlockedKept?: number, thirdBlockedMissed?: number,
+ *   conflictDefaults?: number, thirdBlockedKept?: number, thirdBlockedMissed?: number,
  *   removedJunctions?: number, srcList?: string[], srcSkipped?: Array<object>, needRestart?: boolean
  * }}
  */
@@ -531,6 +573,7 @@ export function migrateToMultiSrc () {
     removedDefaultCopies: 0,
     removedThirdCopies: 0,
     keptThirdCopies: 0,
+    conflictDefaults: 0,
     thirdBlockedKept: 0,
     thirdBlockedMissed: 0,
     removedJunctions: 0

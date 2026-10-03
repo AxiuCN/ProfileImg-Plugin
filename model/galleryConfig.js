@@ -1,7 +1,8 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { getGalleryConfig, getPluginConfig, writeGalleryConfig } from '../components/config.js'
-import { PROFILE_IMG_DIR, MIAO_PROFILE_LINK } from '../components/constants.js'
+import { PROFILE_IMG_DIR, MIAO_PROFILE_LINK, getRepoDir } from '../components/constants.js'
+import { getActiveRepoIds } from './mapJson.js'
 import { probeRepo } from './srcProbe.js'
 import { getRepoRemoteUrl } from './git.js'
 
@@ -55,6 +56,23 @@ function toConfigDirValue(absDir) {
 export function thirdPartyLockId(tp) {
   const name = typeof tp === 'string' ? tp : tp?.name
   return `tp:${name || 'unknown'}`
+}
+
+/**
+ * 路径落在哪个主仓库内 → 该仓库的操作锁 id（不在任何主仓库内返回空串）
+ * 用于让上传 / 删除 / 屏蔽 / 重命名与 Git 拉取共用同一把源级锁；
+ * 默认图库（非 Git 仓库）与第三方图库（各自一把 `thirdPartyLockId`）不走这里
+ * @param {string} dir - 目标目录或文件所在目录
+ * @returns {string} 锁 id（`String(repoId)`）或空串
+ */
+export function mainRepoLockIdForPath(dir) {
+  if (!dir) return ''
+  const target = path.resolve(dir)
+  for (const repoId of getActiveRepoIds()) {
+    const base = path.resolve(getRepoDir(repoId))
+    if (target === base || target.startsWith(base + path.sep)) return String(repoId)
+  }
+  return ''
 }
 
 /**

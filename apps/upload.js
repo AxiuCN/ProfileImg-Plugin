@@ -6,7 +6,8 @@ import { resolveRoleName } from '../modules/alias.js'
 import { compressToTarget } from '../modules/compress.js'
 import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
 import { getRepoDir } from '../components/constants.js'
-import { getUploadDir, getDefaultDir } from '../model/galleryConfig.js'
+import { getUploadDir, getDefaultDir, mainRepoLockIdForPath } from '../model/galleryConfig.js'
+import { acquireLocks } from '../model/git.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
 /**
@@ -127,68 +128,81 @@ export class UploadWithCompress extends plugin {
     if (!fs.existsSync(writeDir)) fs.mkdirSync(writeDir, { recursive: true })
 
     const seg = directMain ? SEGMENTS.main : SEGMENTS.default
-    let nextNum = this._getNextSeq(writeDir, roleName, seg.start, seg.end)
+
+    // 直写主仓库时与 Git 更新共用源级锁（默认图库不是 git 仓库，无需加锁）
+    const lockId = directMain ? mainRepoLockIdForPath(uploadDir) : ''
+    const galleryLock = acquireLocks(lockId ? [{ id: lockId, operation: '写入面板图', type: 'update' }] : [])
+    if (!galleryLock.ok) return e.reply(`[面板图图库管理器] ${galleryLock.msg}`)
 
     let addedCount = 0
+    const assignedNums = []
 
-    for (const img of imgSegments) {
-      try {
-        const imgUrl = img.url || img.data?.url
-          || (img.data?.file_id ? img.data.file_id : null)
-        if (!imgUrl) continue
+    try {
+      for (const img of imgSegments) {
+        try {
+          const imgUrl = img.url || img.data?.url
+            || (img.data?.file_id ? img.data.file_id : null)
+          if (!imgUrl) continue
 
-        const res = await fetch(imgUrl)
-        if (!res.ok) continue
-        const buffer = Buffer.from(await res.arrayBuffer())
+          const res = await fetch(imgUrl)
+          if (!res.ok) continue
+          const buffer = Buffer.from(await res.arrayBuffer())
 
-        // 生成文件名
-        let baseName
-        if (hasCopyright) {
-          const modsPart = modifications ? `_${modifications}` : ''
-          baseName = `${roleName}_${nextNum}_${author}_${source}${modsPart}`
-        } else {
-          baseName = `${roleName}_${nextNum}`
-        }
-        let filePath = path.join(writeDir, baseName + ext)
-        let counter = 1
-        while (fs.existsSync(filePath)) {
-          filePath = path.join(writeDir, `${baseName}_${counter}${ext}`)
-          counter++
-        }
-
-        // 压缩（若启用）
-        let finalBuffer = buffer
-        if (compressEnabled) {
-          const maxKB = (uploadCfg.maxSize && !isNaN(uploadCfg.maxSize)) ? uploadCfg.maxSize : 500
-          const targetBytes = maxKB * 1024
-          if (buffer.length > targetBytes) {
-            const { compressed } = await compressToTarget(buffer, targetBytes, format)
-            if (compressed && compressed.length < buffer.length) {
-              finalBuffer = compressed
+          // 压缩（若启用）—— 放在取号之前：压缩含 await，取号与写盘之间必须无 await
+          let finalBuffer = buffer
+          if (compressEnabled) {
+            const maxKB = (uploadCfg.maxSize && !isNaN(uploadCfg.maxSize)) ? uploadCfg.maxSize : 500
+            const targetBytes = maxKB * 1024
+            if (buffer.length > targetBytes) {
+              const { compressed } = await compressToTarget(buffer, targetBytes, format)
+              if (compressed && compressed.length < buffer.length) {
+                finalBuffer = compressed
+              }
             }
           }
+
+          // 序号在下载/压缩完成后再取：取号与写盘之间没有 await，避免并发上传撞到同一个 n
+          const nextNum = this._getNextSeq(writeDir, roleName, seg.start, seg.end)
+
+          // 生成文件名
+          let baseName
+          if (hasCopyright) {
+            const modsPart = modifications ? `_${modifications}` : ''
+            baseName = `${roleName}_${nextNum}_${author}_${source}${modsPart}`
+          } else {
+            baseName = `${roleName}_${nextNum}`
+          }
+          let filePath = path.join(writeDir, baseName + ext)
+          let counter = 1
+          while (fs.existsSync(filePath)) {
+            filePath = path.join(writeDir, `${baseName}_${counter}${ext}`)
+            counter++
+          }
+
+          fs.writeFileSync(filePath, finalBuffer)
+
+          addedCount++
+          assignedNums.push(nextNum)
+        } catch (err) {
+          logger.error('[PanelImgUpload] 处理图片失败:', err)
         }
-
-        fs.writeFileSync(filePath, finalBuffer)
-
-        addedCount++
-        nextNum++
-      } catch (err) {
-        logger.error('[PanelImgUpload] 处理图片失败:', err)
       }
+    } finally {
+      galleryLock.release()
     }
 
     if (addedCount > 0) {
       const senderName = (e.sender.card || e.sender.nickname || '').slice(0, 8)
+      const range = `${assignedNums[0]}~${assignedNums[assignedNums.length - 1]}`
       if (hasCopyright) {
         e.reply([
           segment.at(e.user_id, senderName),
-          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，备注：${modifications}` : ''}）`
+          ` 成功添加${roleName}第${range}张面板图\n（原作者：${author}，来源：${source}${modifications ? `，备注：${modifications}` : ''}）`
         ])
       } else {
         e.reply([
           segment.at(e.user_id, senderName),
-          ` 成功添加${roleName}第${nextNum - addedCount}~${nextNum - 1}张面板图`
+          ` 成功添加${roleName}第${range}张面板图`
         ])
       }
     } else {

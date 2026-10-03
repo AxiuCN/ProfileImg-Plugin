@@ -97,4 +97,18 @@ check('屏蔽图库 pull 的返回值被检查', /const r = await gitExecAsync\(
 check('主图库安装使用探测到的分支',
   (dlSrc.match(/detectRemoteBranchAsync\(/g) || []).length >= 4, String((dlSrc.match(/detectRemoteBranchAsync\(/g) || []).length))
 
+// ---- 上传序号：取号与写盘之间不得有 await（否则并发上传会撞号）----
+const upUpload = fs.readFileSync(path.join(pluginRoot, 'apps/upload.js'), 'utf8')
+const numAt = upUpload.indexOf('this._getNextSeq(')
+const writeAt = upUpload.indexOf('fs.writeFileSync(filePath')
+check('上传取号在写盘之前', numAt > 0 && writeAt > numAt)
+check('取号与写盘之间没有 await（压缩已前置）',
+  !/await/.test(upUpload.slice(numAt, writeAt)), upUpload.slice(numAt, writeAt).match(/await[^\n]*/)?.[0] || '')
+
+// ---- 文件操作与 Git 更新共用源级锁 ----
+for (const f of ['upload.js', 'delProfileImg.js', 'moveBlockImg.js', 'renameProfileImg.js']) {
+  const src = fs.readFileSync(path.join(pluginRoot, 'apps', f), 'utf8')
+  check(`${f} 改动主仓库文件前取锁`, /mainRepoLockIdForPath\(/.test(src) && /acquireLocks\(/.test(src))
+}
+
 finish()

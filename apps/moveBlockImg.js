@@ -6,6 +6,8 @@ import { findImageByN, findBlockedByN } from '../model/galleryIndex.js'
 import { resolveNRange, escapeRegExp, resolveGalleryKey } from '../components/panelUtils.js'
 import { getRepoForChar } from '../model/mapJson.js'
 import { getRepoDir } from '../components/constants.js'
+import { mainRepoLockIdForPath } from '../model/galleryConfig.js'
+import { acquireLocks } from '../model/git.js'
 import { isManager, canAccessGallery } from '../components/config.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
@@ -65,10 +67,32 @@ export class MoveBlockImg extends plugin {
     }
     if (source === 'default') {
       // 默认图库：源文件改 .bak
-      fs.renameSync(target.filePath, target.filePath + '.bak')
+      const lock = acquireLocks(this._lockSpecs(target.dir, '屏蔽面板图'))
+      if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
+      try {
+        fs.renameSync(target.filePath, target.filePath + '.bak')
+      } finally {
+        lock.release()
+      }
       return e.reply(`[面板图图库管理器]\n已屏蔽默认图库中${roleName}第${n}张图(${target.name})`)
     }
     return e.reply('[面板图图库管理器]\n该文件不符合命名规范，无法屏蔽')
+  }
+
+  /**
+   * 目标目录相关仓库的锁清单
+   * 主仓库内的文件与 Git 更新互斥；涉及屏蔽图库（blocked-character）时一并加锁
+   * @param {string} dir - 目标目录
+   * @param {string} operation - 操作描述（写进锁信息）
+   * @param {boolean} [withBlocked] - 是否同时锁屏蔽图库
+   * @returns {Array<{id: string, operation: string, type: string}>}
+   */
+  _lockSpecs (dir, operation, withBlocked = false) {
+    const specs = []
+    const id = mainRepoLockIdForPath(dir)
+    if (id) specs.push({ id, operation, type: 'update' })
+    if (withBlocked) specs.push({ id: 'blocked', operation, type: 'update' })
+    return specs
   }
 
   async unblockImg (e) {
@@ -92,7 +116,13 @@ export class MoveBlockImg extends plugin {
           return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
         }
       }
-      fs.renameSync(bakFile.filePath, bakFile.filePath.slice(0, -4))
+      const lock = acquireLocks(this._lockSpecs(bakFile.dir, '启用面板图'))
+      if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
+      try {
+        fs.renameSync(bakFile.filePath, bakFile.filePath.slice(0, -4))
+      } finally {
+        lock.release()
+      }
       return e.reply(`[面板图图库管理器]\n已恢复${roleName}第${n}张图(${bakFile.baseName})`)
     }
 
@@ -121,7 +151,13 @@ export class MoveBlockImg extends plugin {
     const gapN = this._findFirstGap(blockedDir, roleName)
     const newName = `${roleName}_${gapN}${suffix}`
 
-    fs.renameSync(target.filePath, path.join(blockedDir, newName))
+    const lock = acquireLocks(this._lockSpecs(target.dir, '屏蔽面板图', true))
+    if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
+    try {
+      fs.renameSync(target.filePath, path.join(blockedDir, newName))
+    } finally {
+      lock.release()
+    }
     return e.reply(`[面板图图库管理器]\n已将${roleName}的第${target.displayN}张图移入屏蔽图库(${newName})`)
   }
 
@@ -140,7 +176,13 @@ export class MoveBlockImg extends plugin {
     const gapN = this._findFirstGap(mainDir, roleName)
     const newName = `${roleName}_${gapN}${suffix}`
 
-    fs.renameSync(path.join(blockedDir, target.name), path.join(mainDir, newName))
+    const lock = acquireLocks(this._lockSpecs(mainDir, '启用面板图', true))
+    if (!lock.ok) return e.reply(`[面板图图库管理器] ${lock.msg}`)
+    try {
+      fs.renameSync(path.join(blockedDir, target.name), path.join(mainDir, newName))
+    } finally {
+      lock.release()
+    }
     return e.reply(`[面板图图库管理器]\n已将${roleName}的屏蔽图移回主图库(${newName})`)
   }
 
