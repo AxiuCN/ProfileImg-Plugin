@@ -40,6 +40,25 @@ await importAll('model', 'model')
 await importAll('modules', 'modules')
 await importAll('components', 'components')
 
+// ---- apps 模块必须能被 index.js 的注册逻辑选出插件 class ----
+// 曾经踩过：index.js 用 `Object.keys(mod)[0]` 取导出，而 ESM 命名空间对象的 key 按名字排序，
+// 模块里多导出一个常量（大写字母在前）就会顶掉 class，注册被静默跳过 → 该命令整条规则不存在
+/** 与 index.js 相同的判定：class 的 prototype 属性不可写 */
+const isPluginClass = (v) => typeof v === 'function' &&
+  Object.getOwnPropertyDescriptor(v, 'prototype')?.writable === false
+
+for (const f of listJs('apps')) {
+  const m = await import(mod(path.posix.join('apps', f)))
+  const classes = Object.values(m).filter(isPluginClass)
+  const AppClass = classes[0]
+  check(`apps/${f} 能选出插件 class`, !!AppClass, Object.keys(m).join(','))
+  check(`apps/${f} 选出的 class 继承 plugin`, !!AppClass && Object.getPrototypeOf(AppClass) === globalThis.plugin)
+  check(`apps/${f} 只有一个 class 导出（避免注册歧义）`, classes.length === 1, `实际 ${classes.length} 个`)
+  const rules = AppClass ? new AppClass().rule : null
+  check(`apps/${f} 的 class 带非空 rule`, Array.isArray(rules) && rules.length > 0,
+    `${Array.isArray(rules) ? rules.length : typeof rules} 条`)
+}
+
 // 关键契约（导出面细节由各主题套件覆盖，这里只留跨模块的硬约定）
 const profileSrc = await import(mod('model/profileSrc.js'))
 check('profileSrc 暴露源列表同步入口', typeof profileSrc.syncProfileImgSrc === 'function' && typeof profileSrc.buildSrcList === 'function')
@@ -122,5 +141,15 @@ check('预览命令已注册', /fnc: 'preview'/.test(previewSrc))
 check('预览不 import miao 内部模块（自绘，不依赖 miao 面板数据）', !/miao-plugin/.test(previewSrc))
 check('预览走本插件渲染管线 render(\'preview\', \'index\')', /render\('preview', 'index'/.test(previewSrc))
 check('预览模板存在', fs.existsSync(path.join(pluginRoot, 'resources/preview/index.html')))
+
+// ---- index.js 的 app 注册写法（本次事故的核心：注册被静默跳过）----
+const indexSrc = fs.readFileSync(path.join(pluginRoot, 'index.js'), 'utf8')
+check('index.js 不再用 Object.keys(mod)[0] 取插件类',
+  !/Object\.keys\(ret\[i\]\.value\)\[0\]/.test(indexSrc))
+check('index.js 的 import 与命名遍历同源（appFiles 过滤一次）',
+  /appFiles\.map\(file => import/.test(indexSrc) && /for \(let i = 0; i < appFiles\.length/.test(indexSrc))
+check('index.js 逐条记录 app 注册结果（便于发现漏注册）', /载入: \$\{name\}/.test(indexSrc))
+check('index.js 图库源初始化不阻塞 apps 注册',
+  /initGallerySources\(\)\.catch/.test(indexSrc) && !/await initGallerySources\(\)/.test(indexSrc))
 
 finish()
