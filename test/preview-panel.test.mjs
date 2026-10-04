@@ -20,7 +20,7 @@ const { loadMiao, MIAO_RES_DIR } = await import(mod('modules/preview/miao.js'))
 const { buildVirtualProfile, FAKE_UID } = await import(mod('modules/preview/virtual.js'))
 const { buildPanelRenderData, buildPanelDmgCalc } = await import(mod('modules/preview/renderData.js'))
 const { findSplash, toTemplatePath } = await import(mod('modules/preview/splash.js'))
-const { renderPanelPreview } = await import(mod('modules/preview/index.js'))
+const { renderPanelPreview, parsePreviewCommand, resolvePreviewTarget } = await import(mod('modules/preview/index.js'))
 const { MIAO_PROFILE_LINK } = await import(mod('components/constants.js'))
 
 const miao = await loadMiao()
@@ -105,11 +105,42 @@ if (process.platform === 'win32') {
 }
 
 // ---- 4. 失败分支：明确提示，不渲染、不改写消息 ----
-const noRole = await renderPanelPreview({ e: null, roleName: '不存在的角色ZZZ', n: 1 })
-check('角色不存在 → 明确提示且不渲染',
-  noRole.ok === false && noRole.msg.includes('不存在的角色ZZZ'), String(noRole.msg))
+const noRole = await renderPanelPreview({ e: null, roleName: '测试未收录角色ZZZ', n: 1 })
+check('图库里没有这个角色/序号 → 明确提示（不会拿占位骨架硬渲染）',
+  noRole.ok === false && noRole.msg.includes('测试未收录角色ZZZ'), String(noRole.msg))
 const badN = await renderPanelPreview({ e: null, roleName: '琴', n: 99999 })
 check('序号不存在 → 明确提示（不交给 miao 随机取图）',
   badN.ok === false && badN.msg.includes('99999'), String(badN.msg))
+
+// ---- 5. 命令解析与占位骨架（图库先收录、miao 还没有的角色）----
+check('命令解析：# → 原神', parsePreviewCommand('#预览琴面板图3')?.game === 'gs')
+check('命令解析：* → 星铁', parsePreviewCommand('*预览遐蝶面板图2')?.game === 'sr')
+check('命令解析：#星铁 前缀生效', parsePreviewCommand('#星铁预览遐蝶面板图2')?.game === 'sr')
+check('命令解析：#原神 前缀生效', parsePreviewCommand('#原神预览琴面板图1')?.game === 'gs')
+check('命令解析：非预览命令 → null', parsePreviewCommand('#预览琴') === null)
+
+const knownGs = resolvePreviewTarget({ miao, roleName: '琴', game: 'sr' })
+check('已知角色以 miao 为准（前缀不改变游戏）',
+  knownGs?.placeholder === false && knownGs?.char?.isSr === false)
+const knownSr = resolvePreviewTarget({ miao, roleName: '遐蝶', game: 'gs' })
+check('已知星铁角色同样以 miao 为准', knownSr?.placeholder === false && knownSr?.char?.isSr === true)
+const futureGs = resolvePreviewTarget({ miao, roleName: '测试未收录角色ZZZ', game: 'gs' })
+check('未收录角色：# → 原神占位骨架（胡桃）、名字用目标角色',
+  futureGs?.placeholder === true && futureGs?.char?.name === '胡桃' && futureGs?.displayName === '测试未收录角色ZZZ',
+  `${futureGs?.char?.name}`)
+const futureSr = resolvePreviewTarget({ miao, roleName: '测试未收录角色ZZZ', game: 'sr' })
+check('未收录角色：* → 星铁占位骨架（三月七）',
+  futureSr?.placeholder === true && futureSr?.char?.isSr === true && futureSr?.char?.name === '三月七',
+  `${futureSr?.char?.name}`)
+
+const phProfile = buildVirtualProfile({ miao, char: futureGs.char })
+const phData = buildPanelRenderData({
+  miao, char: futureGs.char, profile: phProfile, splash, dmgCalc: {},
+  displayName: futureGs.displayName, changeProfile: '占位'
+})
+check('占位面板：名字与头像换成目标角色、模板字段仍齐备',
+  phData.data.name === '测试未收录角色ZZZ' && phData.data.abbr === '测试未收录角色ZZZ' &&
+  phData.data.imgs.face === splash && !!(phData.data.talent && phData.attr && phData.artisDetail),
+  String(phData.data.name))
 
 finish()

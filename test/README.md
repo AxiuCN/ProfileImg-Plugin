@@ -38,7 +38,7 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 | `git-args.test.mjs` | Git 参数安全：分支名含 shell 元字符（`&`）或以 `-` 开头（`--upload-pack` 参数注入）一律拒绝、地址白名单（`-` 开头 / 空值拒绝且不启动 Git）、合法地址与多级分支不误伤、探测不可达地址回退 main、本地 HEAD 非法分支名回退 main | git 可执行文件 |
 | `migrate-run.test.mjs` | **旧布局迁移实跑（沙箱）**：源码复制到 `test/.test-tmp/migrate-run/` 并 chdir，真实执行 `migrateToMultiSrc()`——损坏 junction 仍判 legacy、junction 移除与 default 搬迁/段位规范化、第三方副本清理、`.bak` 屏蔽状态迁移到第三方源（含一层分组与图库名含 `_`）、源内缺文件必须告警、各分组子源写入 `profileImgSrc`、重跑迁移时同名冲突保留 `.conflict` 且不覆盖目标 | 可创建 junction 的平台 |
 | `gallery-lock.test.mjs` | 操作锁：锁 id 归属（第三方统一、路径→主仓库）、二次获取被拒、release 后可再取、多锁整体获取与失败回滚、过期与损坏锁可接管、锁文件名消毒 | 无 |
-| `preview-panel.test.mjs` | 预览数据层：虚拟面板构造（原神 90 / 星铁 80 与 promote 不越界、伪造圣遗物生效、默认武器可用、不生成 PlayerData 文件）、渲染数据组装（模板必需字段齐备、属性 Base/Plus、评分、立绘换成该序号图、星铁行迹 9 格、伤害计算与无规则时安全跳过）、立绘定位与路径转换（命中序号 / 不存在返回 null、同盘相对路径编码、跨盘 `file://`）、失败分支（角色不存在 / 序号不存在明确提示）；夹具为默认图库临时角色目录，可逆清理 | miao-plugin 内部模块与面板模板 |
+| `preview-panel.test.mjs` | 预览数据层：虚拟面板构造（原神 90 / 星铁 80 与 promote 不越界、伪造圣遗物生效、默认武器可用、不生成 PlayerData 文件）、渲染数据组装（模板必需字段齐备、属性 Base/Plus、评分、立绘换成该序号图、星铁行迹 9 格、伤害计算与无规则时安全跳过）、立绘定位与路径转换（命中序号 / 不存在返回 null、同盘相对路径编码、跨盘 `file://`）、命令解析与占位骨架（`#`=原神 / `*`=星铁 / `#星铁`、`#原神` / 非法命令 null；已知角色不受前缀影响，未收录角色按前缀借胡桃 / 三月七骨架且名字头像换成目标角色）、失败分支（角色不存在 / 序号不存在明确提示）；夹具为默认图库临时角色目录，可逆清理 | miao-plugin 内部模块与面板模板 |
 | `replace-image.test.mjs` | 替换命令：同名覆盖后文件名/序号不变、PNG 源被转成目标扩展名格式（webp）、未带图片与序号无效的提示、同格式替换同样生效（图片走 data: URL，不联网） | 无 |
 | `third-party-path.test.mjs` | 第三方图库目录解析：旧相对名 / 正反斜杠绝对路径 / UNC / 空值；安装目标目录为非 Git 且非空时拒绝覆盖（含场景提示与目录未改动） | 无 |
 | `unregistered-repo.test.mjs` | 未登记目录发现与补登记：Git 仓库 / 非 git 但结构可直读（含一层分组）/ 主仓库保留名 / 旧布局 `default` 目录 / 已登记 / 非图库 / 隐藏目录排除，`addThirdPartyRepo` 按绝对路径幂等且回写绝对路径、`autoRegisterUnregisteredRepos` 扫描后写配置并保留模板注释（夹具在临时目录与临时配置内） | 无 |
