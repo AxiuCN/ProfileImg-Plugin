@@ -120,6 +120,8 @@ check('替换与上传共用格式规整（扩展名与字节一致）',
 const previewSrc = fs.readFileSync(path.join(pluginRoot, 'apps/previewProfileImg.js'), 'utf8')
 check('预览命令已注册', /fnc: 'preview'/.test(previewSrc))
 check('预览不 import miao 内部模块（只改写消息交给 miao）', !/miao-plugin/.test(previewSrc))
-check('预览命中后返回 false 交给后续插件', /e\.msg = buildPanelPreviewMsg/.test(previewSrc) && /return false/.test(previewSrc))
+check('预览命中后返回 false 交给后续插件', /return false/.test(previewSrc))
+check('预览同时改写 e.msg 与 e.original_msg（miao 优先读 original_msg）',
+  /e\.msg = cmd/.test(previewSrc) && /e\.original_msg = cmd/.test(previewSrc))
 
 finish()

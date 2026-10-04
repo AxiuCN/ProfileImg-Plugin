@@ -63,7 +63,11 @@ export class PreviewProfileImg extends plugin {
     }
 
     // 交给 miao 渲染：改写消息后返回 false，后续插件（miao）按新消息匹配
-    e.msg = buildPanelPreviewMsg(roleName, n, isSr)
+    // 注意：miao 的处理器优先读 e.original_msg（`let msg = e.original_msg || e.msg`，多处如此），
+    // 只改 e.msg 会让 miao 拿到原始命令而解析不出角色、静默返回 false（消息会落到其他插件）
+    const cmd = buildPanelPreviewMsg(roleName, n, isSr)
+    e.msg = cmd
+    e.original_msg = cmd
     return false
   }
 }
