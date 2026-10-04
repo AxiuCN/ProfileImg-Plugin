@@ -53,7 +53,9 @@ export class PreviewProfileImg extends plugin {
     try {
       const ret = await renderPanelPreview({ e, roleName, n })
       if (!ret.ok) return e.reply(`[面板图图库管理器]\n${ret.msg}`)
-      return e.reply(segment.image(`base64://${ret.image}`))
+      // 渲染结果已是框架包好的图片段（renderType base64 返回的是 segment.image(...)），原样回复即可，
+      // 不要再自己拼 `base64://`（会变成 base64://[object Object]，适配器报 unsupported file type）
+      return e.reply(ret.image)
     } catch (err) {
       logger?.error('[ProfileImg-Plugin] 面板图预览渲染异常:', err)
       return e.reply(`[面板图图库管理器]\n预览渲染失败：${err?.message || err}`)

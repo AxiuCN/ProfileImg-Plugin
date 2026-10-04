@@ -144,6 +144,9 @@ check('预览先自行校验序号（避免 miao 取不到图时随机回退）'
 check('预览渲染委托 modules/preview',
   /renderPanelPreview/.test(previewSrc) && /modules\/preview\/index\.js/.test(previewSrc))
 check('预览渲染异常有兜底提示', /预览渲染失败/.test(previewSrc))
+check('预览原样回复渲染结果（框架已包成图片段，不得自拼 base64://）',
+  /e\.reply\(ret\.image\)/.test(previewSrc) &&
+  !/base64:\/\/\$\{/.test(previewSrc) && !/['"]base64:\/\/['"]\s*\+/.test(previewSrc))
 
 const previewMiaoSrc = fs.readFileSync(path.join(pluginRoot, 'modules/preview/miao.js'), 'utf8')
 check('预览用相对路径 import miao（#miao 别名对别的插件不可用）',
