@@ -76,3 +76,17 @@ export async function detectFormat(inputBuffer) {
 export async function convertToFormat(inputBuffer, format, quality = 95) {
   return encodeWithQuality(inputBuffer, format, quality)
 }
+
+/**
+ * 读取图片尺寸（预览时展示原图与面板内显示尺寸用）
+ * @param {string} file - 图片路径
+ * @returns {Promise<{width: number, height: number}>} 读不出时返回 0×0
+ */
+export async function getImageSize(file) {
+  try {
+    const meta = await sharp(file).metadata()
+    return { width: meta?.width || 0, height: meta?.height || 0 }
+  } catch {
+    return { width: 0, height: 0 }
+  }
+}

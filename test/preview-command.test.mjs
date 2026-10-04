@@ -1,71 +1,92 @@
 /**
- * 预览命令：改写为 miao 面板命令的契约 + 转发语义
+ * 预览命令：面板立绘区尺寸与模板数据契约 + 序号定位
  *
- * 实现方式：把命令改写成 miao 的面板命令后 **return false**，交给 miao 的处理器渲染
- * （Yunzai 按优先级顺序匹配插件，返回 false 时后续插件会拿到改写后的 e.msg）。
- * 关键：miao 的处理器读取的是 `e.original_msg || e.msg`，两个字段都必须改写，
- * 否则 miao 拿到原始命令 → 解析不出角色 → 静默返回 false（消息会继续落到别的插件）。
- * 因此这里断言两件事：① 改写结果符合 miao 的语法（含原神 90 级 / 星铁 80 级的虚拟面板基准）；
- * ② 命中后返回 false，且 e.msg 与 e.original_msg 都被改写。
+ * 预览不依赖 miao 面板数据（自绘立绘区），因此这里断言的是本插件自己的契约：
+ * 立绘区尺寸必须与 miao 面板 `.main-pic` 对齐（原神 1400×500 / 星铁 1400×520）、
+ * 等比 contain 后的显示尺寸计算、文件名/来源/提示文案，以及序号不存在时的提示。
  *
- * 夹具建在默认图库（真实目录）下一个临时角色目录，套件结束时清理。
+ * 夹具建在默认图库（真实目录）下的临时角色目录，套件结束时清理。
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { mod, checker, installFrameworkStubs, skip } from './_helper.mjs'
+import { pathToFileURL } from 'node:url'
+import { mod, checker, installFrameworkStubs } from './_helper.mjs'
 
 installFrameworkStubs()
 
-const { buildPanelPreviewMsg } = await import(mod('apps/previewProfileImg.js'))
+const { buildPreviewData, PANEL_BOX, PreviewProfileImg } = await import(mod('apps/previewProfileImg.js'))
 const { MIAO_PROFILE_LINK } = await import(mod('components/constants.js'))
 
 const { check, finish } = checker()
 
-// ---- 1. 改写契约（与 miao 之间唯一的接口）----
-check('原神：注入 90 级虚拟面板基准',
-  buildPanelPreviewMsg('琴', 3) === '#琴面板 面板图3 补90级', buildPanelPreviewMsg('琴', 3))
-check('星铁：注入 80 级并保留 #星铁 前缀',
-  buildPanelPreviewMsg('三月七', 1, true) === '#星铁三月七面板 面板图1 补80级', buildPanelPreviewMsg('三月七', 1, true))
-check('默认图库的大序号原样传递',
-  buildPanelPreviewMsg('琴', 10001) === '#琴面板 面板图10001 补90级', buildPanelPreviewMsg('琴', 10001))
+// ---- 1. 立绘区尺寸与显示尺寸契约 ----
+check('原神立绘区 = miao 面板的 1400×500',
+  PANEL_BOX.gs.width === 1400 && PANEL_BOX.gs.height === 500)
+check('星铁立绘区 = miao 面板的 1400×520',
+  PANEL_BOX.sr.width === 1400 && PANEL_BOX.sr.height === 520)
 
-// ---- 2. 转发语义（需要一个真实序号：夹具建在默认图库的临时角色目录）----
+const gsData = buildPreviewData({
+  roleName: '琴',
+  n: 3,
+  filePath: path.join('E:', 'repo', '琴_3_甲_乙.webp'),
+  label: '主图库',
+  isSr: false,
+  imageSize: { width: 2000, height: 1000 }
+})
+check('原神：框尺寸与游戏名正确',
+  gsData.boxWidth === 1400 && gsData.boxHeight === 500 && gsData.gameName === '原神',
+  `${gsData.boxWidth}×${gsData.boxHeight} ${gsData.gameName}`)
+check('等比 contain 显示尺寸按较小缩放比计算（2000×1000 → 1000×500 / 50%）',
+  gsData.displaySize === '1000×500' && gsData.scalePct === '50%',
+  `${gsData.displaySize} ${gsData.scalePct}`)
+check('原图尺寸与文件名回填', gsData.imageSize === '2000×1000' && gsData.fileName === '琴_3_甲_乙.webp',
+  `${gsData.imageSize} ${gsData.fileName}`)
+check('图片用 file:// 绝对地址供模板引用',
+  gsData.fileUrl === pathToFileURL(path.join('E:', 'repo', '琴_3_甲_乙.webp')).href, gsData.fileUrl)
+check('提示文案指向 miao 原生命令（原神不带 #星铁）',
+  gsData.note.includes('#琴面板 面板图3') && !gsData.note.includes('#星铁琴'), gsData.note)
+
+const srData = buildPreviewData({
+  roleName: '三月七',
+  n: 1,
+  filePath: path.join('E:', 'repo', '三月七_1.webp'),
+  label: '米游社',
+  isSr: true,
+  imageSize: { width: 1000, height: 1040 }
+})
+check('星铁：框高与显示尺寸按 1400×520 计算（1000×1040 → 500×520 / 50%）',
+  srData.boxHeight === 520 && srData.displaySize === '500×520' && srData.scalePct === '50%',
+  `${srData.displaySize} ${srData.scalePct}`)
+check('星铁提示带 #星铁 前缀', srData.note.includes('#星铁三月七面板 面板图1'), srData.note)
+check('无尺寸信息时不显示尺寸行（不报错）',
+  buildPreviewData({ roleName: '琴', n: 1, filePath: 'x.webp', label: '主图库' }).displaySize === '' &&
+  buildPreviewData({ roleName: '琴', n: 1, filePath: 'x.webp', label: '主图库' }).imageSize === '')
+
+// ---- 2. 序号定位（需要真实序号）----
 const roleDir = path.join(MIAO_PROFILE_LINK, 'normal-character', '测试预览角色Z')
-const { PreviewProfileImg } = await import(mod('apps/previewProfileImg.js'))
 const app = new PreviewProfileImg()
 
 try {
   fs.mkdirSync(roleDir, { recursive: true })
   fs.writeFileSync(path.join(roleDir, '测试预览角色Z_10001_甲_乙.webp'), 'x')
 
-  const makeE = (msg) => ({
-    msg,
-    original_msg: msg,
-    isMaster: true,
-    user_id: 1,
-    replies: [],
-    reply (m) { this.replies.push(m) }
-  })
+  const makeE = (msg) => ({ msg, isMaster: true, user_id: 1, replies: [], reply (m) { this.replies.push(m) } })
 
-  const e1 = makeE('#预览测试预览角色Z面板图10001')
-  const ret1 = app.previewBySlot(e1)
-  check('预览命中序号 → 返回 false 交给 miao', ret1 === false, String(ret1))
-  check('e.msg 被改写为 miao 面板命令',
-    e1.msg === '#测试预览角色Z面板 面板图10001 补90级', e1.msg)
-  check('e.original_msg 同步改写（miao 优先读它）',
-    e1.original_msg === e1.msg, e1.original_msg)
-  check('未自行回复', e1.replies.length === 0, JSON.stringify(e1.replies))
+  const ok = await app.resolvePreviewTarget(makeE('#预览测试预览角色Z面板图10001'))
+  check('命中序号 → 返回模板数据', ok.ok === true, JSON.stringify(ok.reply || ''))
+  check('数据里带上角色名/序号/来源标签',
+    ok.data.roleName === '测试预览角色Z' && ok.data.seq === 10001 && ok.data.label === '默认图库',
+    `${ok.data.roleName} ${ok.data.seq} ${ok.data.label}`)
 
-  const e2 = makeE('#星铁预览测试预览角色Z面板图10001')
-  app.previewBySlot(e2)
-  check('星铁前缀决定注入等级',
-    e2.msg === '#星铁测试预览角色Z面板 面板图10001 补80级', e2.msg)
-  check('星铁场景同样同步改写 original_msg', e2.original_msg === e2.msg, e2.original_msg)
+  const srTarget = await app.resolvePreviewTarget(makeE('#星铁预览测试预览角色Z面板图10001'))
+  check('星铁前缀决定立绘区尺寸', srTarget.data.boxHeight === 520, String(srTarget.data.boxHeight))
 
-  const e3 = makeE('#预览测试预览角色Z面板图99999')
-  const ret3 = app.previewBySlot(e3)
-  check('序号不存在 → 自行回复并终止', ret3 !== false && e3.replies.length === 1, JSON.stringify(e3.replies))
-  check('序号无效提示含角色与序号', String(e3.replies[0]).includes('99999'), String(e3.replies[0]))
+  const miss = await app.resolvePreviewTarget(makeE('#预览测试预览角色Z面板图99999'))
+  check('序号不存在 → 返回提示', miss.ok === false && miss.reply.includes('序号无效'), miss.reply)
+  check('序号无效提示含角色与序号', miss.reply.includes('99999'), miss.reply)
+
+  const bad = await app.resolvePreviewTarget(makeE('#预览测试预览角色Z面板图'))
+  check('命令格式不匹配 → 给出用法', bad.ok === false && bad.reply.includes('用法'), bad.reply)
 } finally {
   fs.rmSync(roleDir, { recursive: true, force: true })
 }

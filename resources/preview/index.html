@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面板图预览 - {{ roleName }}</title>
+    <!-- 单页预览，样式内联，避免为一个页面再拆 css/less 两份文件 -->
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "MiSans-Semibold", "HYWH-65W", "Microsoft YaHei", sans-serif;
+            background: #f4f5f7;
+            color: #3b3f45;
+            padding: 24px;
+            width: fit-content;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
+            padding: 18px 22px 14px;
+        }
+
+        .header {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .title { font-size: 26px; font-weight: 700; }
+        .title .seq { color: #d3a04a; }
+        .tag {
+            font-size: 13px;
+            padding: 2px 10px;
+            border-radius: 10px;
+            background: #eef1f5;
+            color: #667085;
+        }
+
+        /* 立绘区：与 miao 面板 .main-pic 的真实尺寸一致（原神 1400×500 / 星铁 1400×520） */
+        .stage {
+            position: relative;
+            background-color: #fafbfc;
+            background-image:
+                linear-gradient(45deg, #eceff3 25%, transparent 25%, transparent 75%, #eceff3 75%),
+                linear-gradient(45deg, #eceff3 25%, transparent 25%, transparent 75%, #eceff3 75%);
+            background-size: 24px 24px;
+            background-position: 0 0, 12px 12px;
+            border: 1px dashed #c9ced6;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .stage-pic {
+            width: 100%;
+            height: 100%;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+        }
+
+        .caption {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #98a2b3;
+        }
+
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 26px;
+            margin-top: 12px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+
+        .meta .k { color: #98a2b3; margin-right: 6px; }
+        .filename { font-family: "tttgbnumber", monospace; }
+
+        .note {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #98a2b3;
+        }
+
+        .footer {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid #eef1f5;
+            font-size: 12px;
+            color: #b6bcc6;
+            text-align: right;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card" style="width: {{ boxWidth + 44 }}px;">
+        <div class="header">
+            <div class="title">{{ roleName }}<span class="seq"> · 第 {{ seq }} 张</span></div>
+            <div class="tag">{{ label }}</div>
+            <div class="tag">{{ gameName }} · 立绘区 {{ boxWidth }}×{{ boxHeight }}</div>
+        </div>
+
+        <div class="stage" style="width: {{ boxWidth }}px; height: {{ boxHeight }}px;">
+            <div class="stage-pic" style="background-image: url({{@ fileUrl }})"></div>
+        </div>
+        <div class="caption">面板立绘区：{{ boxWidth }}×{{ boxHeight }}，等比 contain 居中（与真实面板一致）</div>
+
+        <div class="meta">
+            <div><span class="k">文件</span><span class="filename">{{ fileName }}</span></div>
+            {{ if imageSize }}
+            <div><span class="k">原图</span>{{ imageSize }}</div>
+            {{ /if }}
+            {{ if displaySize }}
+            <div><span class="k">面板内显示</span>{{ displaySize }}（{{ scalePct }}）</div>
+            {{ /if }}
+        </div>
+
+        <div class="note">{{ note }}</div>
+
+        <div class="footer">{{@sys.copyright}}</div>
+    </div>
+</body>
+
+</html>
