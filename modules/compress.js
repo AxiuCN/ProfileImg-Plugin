@@ -50,3 +50,29 @@ async function encodeWithQuality(inputBuffer, format, quality) {
   else pipeline.webp({ quality })
   return pipeline.toBuffer()
 }
+
+/**
+ * 探测图片实际格式（sharp 口径：jpeg / png / webp / gif …）
+ * 读不出格式时返回空串，调用方按「需要转换」处理
+ * @param {Buffer} inputBuffer - 图片 Buffer
+ * @returns {Promise<string>} 格式名（小写），失败返回空串
+ */
+export async function detectFormat(inputBuffer) {
+  try {
+    const meta = await sharp(inputBuffer).metadata()
+    return meta?.format || ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 按目标格式重新编码图片（保证字节与文件扩展名一致，不做体积优化）
+ * @param {Buffer} inputBuffer - 原始图片 Buffer
+ * @param {string} format - 目标格式 ('jpeg'|'webp'|'png')
+ * @param {number} [quality] - 质量 (1-100)，默认 95
+ * @returns {Promise<Buffer>} 目标格式的图片 Buffer
+ */
+export async function convertToFormat(inputBuffer, format, quality = 95) {
+  return encodeWithQuality(inputBuffer, format, quality)
+}

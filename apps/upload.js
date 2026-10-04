@@ -3,18 +3,20 @@ import path from 'node:path'
 import { loadMap, autoAssignRepo, getActiveRepoIds } from '../model/mapJson.js'
 import { getPluginConfig, isManager, canAccessGallery } from '../components/config.js'
 import { resolveRoleName } from '../modules/alias.js'
-import { compressToTarget } from '../modules/compress.js'
-import { getNextSeqInRange, SEGMENTS } from '../components/panelUtils.js'
+import { compressToTarget, detectFormat, convertToFormat } from '../modules/compress.js'
+import { getNextSeqInRange, SEGMENTS, resolveGalleryKey } from '../components/panelUtils.js'
 import { getRepoDir } from '../components/constants.js'
+import { findImageByN } from '../model/galleryIndex.js'
 import { getUploadDir, getDefaultDir, mainRepoLockIdForPath } from '../model/galleryConfig.js'
 import { acquireLocks } from '../model/git.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
 /**
- * 面板图上传（版权信息可选）
+ * 面板图上传 / 替换（版权信息可选）
  *
- * 含版权：角色名_n_作者_来源[_备注].扩展名 — #添加琴面板图 张三 米游社
- * 无版权：角色名_n.扩展名 — #添加琴面板图
+ * 上传（含版权）：角色名_n_作者_来源[_备注].扩展名 — #添加琴面板图 张三 米游社
+ * 上传（无版权）：角色名_n.扩展名 — #添加琴面板图
+ * 替换：#替换琴面板图3 + 图片 —— 只换第 3 张的图片字节，文件名（含版权/序号）不变
  *
  * 写入目标（多图库源布局）：
  *   - 成员上传始终写入默认图库（miao-plugin/resources/profile），文件名取 default 段位（10001+）
@@ -27,7 +29,7 @@ export class UploadWithCompress extends plugin {
   constructor() {
     super({
       name: '[面板图图库管理器]上传',
-      dsc: '上传面板图（版权信息可选）',
+      dsc: '上传面板图（版权信息可选）/ 替换已有面板图的图片',
       event: 'message',
       priority: 1,
       rule: [
@@ -40,6 +42,11 @@ export class UploadWithCompress extends plugin {
           // 无版权：#添加琴面板图
           reg: /^#?\s*(?:上传|添加)(.+)(?:面板图)\s*$/,
           fnc: 'uploadSimple'
+        },
+        {
+          // 替换指定序号的图片（文件名与版权信息不动）：#替换琴面板图3 + 图片
+          reg: /^#?\s*替换(.+?)(?:面板图)\s*(\d+)\s*$/,
+          fnc: 'replaceImage'
         }
       ]
     })
@@ -148,18 +155,8 @@ export class UploadWithCompress extends plugin {
           if (!res.ok) continue
           const buffer = Buffer.from(await res.arrayBuffer())
 
-          // 压缩（若启用）—— 放在取号之前：压缩含 await，取号与写盘之间必须无 await
-          let finalBuffer = buffer
-          if (compressEnabled) {
-            const maxKB = (uploadCfg.maxSize && !isNaN(uploadCfg.maxSize)) ? uploadCfg.maxSize : 500
-            const targetBytes = maxKB * 1024
-            if (buffer.length > targetBytes) {
-              const { compressed } = await compressToTarget(buffer, targetBytes, format)
-              if (compressed && compressed.length < buffer.length) {
-                finalBuffer = compressed
-              }
-            }
-          }
+          // 压缩 / 转格式 —— 放在取号之前：这些步骤含 await，取号与写盘之间必须无 await
+          const finalBuffer = await this._toTargetFormat(buffer, format, uploadCfg)
 
           // 序号在下载/压缩完成后再取：取号与写盘之间没有 await，避免并发上传撞到同一个 n
           const nextNum = this._getNextSeq(writeDir, roleName, seg.start, seg.end)
@@ -212,6 +209,105 @@ export class UploadWithCompress extends plugin {
   }
 
   /**
+   * 替换指定序号面板图的图片字节
+   * 文件名（角色名/序号/版权/备注/扩展名）完全不变，只覆盖内容，便于反复试图
+   * @param {object} e - 消息事件
+   */
+  async replaceImage(e) {
+    if (!(await guardLayout(e))) return true
+    return this.replaceBySlot(e)
+  }
+
+  /**
+   * 替换指定序号面板图的图片字节（守卫之外的业务部分）
+   * 文件名（角色名/序号/版权/备注/扩展名）完全不变，只覆盖内容，便于反复试图
+   * @param {object} e - 消息事件
+   * @returns {boolean} true = 已处理
+   */
+  async replaceBySlot(e) {
+    // 权限：仅主人或已授权成员（见 config/manager_config.yaml）
+    if (!isManager(e)) {
+      return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
+    }
+
+    const match = e.msg.match(/^#?\s*替换(.+?)(?:面板图)\s*(\d+)\s*$/)
+    if (!match) return true
+    const roleName = resolveRoleName(match[1].trim())
+    const n = parseInt(match[2], 10)
+
+    const target = findImageByN(roleName, 'normal', n)
+    if (!target) {
+      return e.reply([
+        `[面板图图库管理器]\n序号无效：角色${roleName}没有第${n}张图\n`,
+        '（第三方图库的图片不参与序号，请在源仓库中替换）'
+      ].join(''))
+    }
+    if (target.displayN === null) {
+      return e.reply('[面板图图库管理器]\n第三方图库的面板图不参与序号，请在源仓库中替换')
+    }
+
+    // 成员图库边界：目标图所属图库须被允许
+    if (!e.isMaster) {
+      const gkey = resolveGalleryKey(target.name, roleName, n)
+      if (!gkey || !canAccessGallery(e.user_id, gkey)) {
+        return e.reply(`[面板图图库管理器]\n你未被授权操作「${gkey || '未知'}」图库的面板图`)
+      }
+    }
+
+    const imgSegments = await this._extractImages(e)
+    if (imgSegments.length === 0) {
+      return e.reply('[面板图图库管理器] 消息中未找到图片。\n用法：#替换角色名面板图N + 图片（本条消息或引用消息）')
+    }
+
+    const img = imgSegments[0]
+    const imgUrl = img.url || img.data?.url || (img.data?.file_id ? img.data.file_id : null)
+    if (!imgUrl) return e.reply('[面板图图库管理器] 未能读取消息中的图片')
+
+    // 目标扩展名不可改（改名等于换版权），所以字节必须转成该扩展名对应的格式
+    const ext = path.extname(target.filePath).slice(1).toLowerCase()
+    const format = ext === 'jpg' ? 'jpeg' : ext
+
+    const uploadCfg = getPluginConfig()?.upload || {}
+    let buffer
+    try {
+      const res = await fetch(imgUrl)
+      if (!res.ok) return e.reply('[面板图图库管理器] 图片下载失败，请稍后重试')
+      buffer = Buffer.from(await res.arrayBuffer())
+    } catch (err) {
+      logger.error('[ProfileImg-Plugin] 替换：图片下载失败:', err)
+      return e.reply('[面板图图库管理器] 图片下载失败，请稍后重试')
+    }
+
+    let finalBuffer
+    try {
+      finalBuffer = await this._toTargetFormat(buffer, format, uploadCfg)
+    } catch (err) {
+      logger.error('[ProfileImg-Plugin] 替换：图片格式转换失败:', err)
+      return e.reply(`[面板图图库管理器] 图片转换失败（${err.message}），请换一张 ${format} 图片重试`)
+    }
+
+    // 主仓库内的文件与 Git 更新共用源级锁（默认图库无需加锁）
+    const lockId = mainRepoLockIdForPath(target.dir)
+    const galleryLock = acquireLocks(lockId ? [{ id: lockId, operation: '替换面板图', type: 'update' }] : [])
+    if (!galleryLock.ok) return e.reply(`[面板图图库管理器] ${galleryLock.msg}`)
+
+    try {
+      fs.writeFileSync(target.filePath, finalBuffer)
+    } catch (err) {
+      logger.error('[ProfileImg-Plugin] 替换面板图失败:', err)
+      return e.reply('[面板图图库管理器] 替换失败: ' + err.message)
+    } finally {
+      galleryLock.release()
+    }
+
+    const label = target.source === 'default' ? '默认图库' : target.label
+    const extra = imgSegments.length > 1 ? '\n（消息含多张图片，只使用了第一张）' : ''
+    return e.reply(
+      `[面板图图库管理器]\n已替换${label}中${roleName}第${n}张面板图\n文件：${target.name}（版权信息与序号未变）${extra}`
+    )
+  }
+
+  /**
    * 计算下一个可用序号（段位内最小空缺，扫描目录内所有该角色文件）
    * @param {string} dir - 角色目录
    * @param {string} roleName - 角色名
@@ -222,6 +318,28 @@ export class UploadWithCompress extends plugin {
   _getNextSeq(dir, roleName, start, end) {
     const n = getNextSeqInRange(dir, roleName, start, end)
     return n < 0 ? start : n
+  }
+
+  /**
+   * 把图片字节规整为目标格式（可选压缩），保证写入的字节与文件扩展名一致
+   * 顺序：先按要求压缩，再校验实际格式；格式不符时按目标格式重编码
+   * @param {Buffer} buffer - 原始图片 Buffer
+   * @param {string} format - 目标格式 ('webp'|'png'|'jpeg')
+   * @param {object} uploadCfg - 上传配置（enabled / maxSize）
+   * @returns {Promise<Buffer>} 可写入目标扩展名的 Buffer
+   */
+  async _toTargetFormat(buffer, format, uploadCfg = {}) {
+    let out = buffer
+    if (uploadCfg.enabled === true) {
+      const maxKB = (uploadCfg.maxSize && !isNaN(uploadCfg.maxSize)) ? uploadCfg.maxSize : 500
+      const { compressed } = await compressToTarget(buffer, maxKB * 1024, format)
+      if (compressed && compressed.length < buffer.length) out = compressed
+    }
+    // 压缩未生效（或未开启）时字节可能仍是原格式，必须与扩展名对齐
+    if (await detectFormat(out) !== format) {
+      out = await convertToFormat(out, format, 95)
+    }
+    return out
   }
 
   /**

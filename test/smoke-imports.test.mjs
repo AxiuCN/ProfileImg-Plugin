@@ -111,4 +111,15 @@ for (const f of ['upload.js', 'delProfileImg.js', 'moveBlockImg.js', 'renameProf
   check(`${f} 改动主仓库文件前取锁`, /mainRepoLockIdForPath\(/.test(src) && /acquireLocks\(/.test(src))
 }
 
+// ---- 替换 / 预览命令 ----
+check('上传模块含 3 条规则（含版权添加 / 无版权添加 / 替换）',
+  (upUpload.match(/fnc: '/g) || []).length === 3, String((upUpload.match(/fnc: '/g) || []).length))
+check('替换与上传共用格式规整（扩展名与字节一致）',
+  /_toTargetFormat\(/.test(upUpload) && /convertToFormat\(/.test(upUpload))
+
+const previewSrc = fs.readFileSync(path.join(pluginRoot, 'apps/previewProfileImg.js'), 'utf8')
+check('预览命令已注册', /fnc: 'preview'/.test(previewSrc))
+check('预览不 import miao 内部模块（只改写消息交给 miao）', !/miao-plugin/.test(previewSrc))
+check('预览命中后返回 false 交给后续插件', /e\.msg = buildPanelPreviewMsg/.test(previewSrc) && /return false/.test(previewSrc))
+
 finish()
