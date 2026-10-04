@@ -138,14 +138,21 @@ check('替换与上传共用格式规整（扩展名与字节一致）',
 
 const previewSrc = fs.readFileSync(path.join(pluginRoot, 'apps/previewProfileImg.js'), 'utf8')
 check('预览命令已注册', /fnc: 'preview'/.test(previewSrc))
-check('预览不 import miao 内部模块（只改写消息交给 miao）', !/^import[^\n]*miao-plugin/m.test(previewSrc))
-check('预览命中后返回 false 交给后续插件', /return false/.test(previewSrc))
-check('预览同时改写 e.msg 与 e.original_msg（miao 优先读 original_msg）',
-  /e\.msg = cmd/.test(previewSrc) && /e\.original_msg = cmd/.test(previewSrc))
-check('预览带能力门槛（上游 miao 无 面板图N/补 时自行提示，不改写消息漏给其他插件）',
-  /supportsPanelPreview/.test(previewSrc) && /if \(!supportsPanelPreview\(\)\)/.test(previewSrc))
-check('预览的能力门槛来自 model/profileSrc.js（与 supportsMultiSrc 同处）',
-  /import \{ supportsPanelPreview \} from '\.\.\/model\/profileSrc\.js'/.test(previewSrc))
+check('预览不再改写消息交给 miao（改为本插件内渲染）',
+  !/e\.msg\s*=/.test(previewSrc) && !/e\.original_msg\s*=/.test(previewSrc) && !/return false/.test(previewSrc))
+check('预览先自行校验序号（避免 miao 取不到图时随机回退）', /findImageByN\(/.test(previewSrc))
+check('预览渲染委托 modules/preview',
+  /renderPanelPreview/.test(previewSrc) && /modules\/preview\/index\.js/.test(previewSrc))
+check('预览渲染异常有兜底提示', /预览渲染失败/.test(previewSrc))
+
+const previewMiaoSrc = fs.readFileSync(path.join(pluginRoot, 'modules/preview/miao.js'), 'utf8')
+check('预览用相对路径 import miao（#miao 别名对别的插件不可用）',
+  /import\('\.\.\/\.\.\/\.\.\/miao-plugin\//.test(previewMiaoSrc) && !/from '#miao/.test(previewMiaoSrc) && !/import\('#miao/.test(previewMiaoSrc))
+const previewVirtualSrc = fs.readFileSync(path.join(pluginRoot, 'modules/preview/virtual.js'), 'utf8')
+check('预览不落账号数据（不用 miao 的 Player / ProfileChange）',
+  !/ProfileChange/.test(previewMiaoSrc + previewVirtualSrc) && /new miao\.Avatar/.test(previewVirtualSrc))
+check('预览复用 miao 面板模板渲染',
+  /character\/profile-detail/.test(fs.readFileSync(path.join(pluginRoot, 'modules/preview/index.js'), 'utf8')))
 
 // ---- index.js 的 app 注册写法（本次事故的核心：注册被静默跳过）----
 const indexSrc = fs.readFileSync(path.join(pluginRoot, 'index.js'), 'utf8')

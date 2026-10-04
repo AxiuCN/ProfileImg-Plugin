@@ -82,39 +82,6 @@ export function supportsMultiSrc (opts = {}) {
 }
 
 /**
- * miao 是否支持「面板图序号 + 虚拟面板」（`#预览` 的两个前置能力）
- *
- * 两项都由配套的 miao-plugin fork 提供，上游版本均无实现：
- *   - `apps/profile.js` 的 rule 放行改写后的 `面板图N` 段
- *   - `apps/profile/ProfileDetail.js` 解析 `面板图N`（写入 `e._panelImgIdx`）
- *   - `models/avatar/ProfileAvatar.js` 按序号选图（`CharImg.getProfileImgByIndex`）
- *   - `apps/profile/ProfileChange.js` 识别 `补`（虚拟面板基准 baseChange）
- * 任缺一项，改写后的命令连 miao 的 rule 都匹配不上，消息会静默落到其他插件（曾被打成图鉴），
- * 因此预览前先探测，探测不过就本插件自己给出提示、不改写消息
- * @param {object} [opts]
- * @param {string} [opts.miaoRoot] - miao-plugin 目录（默认当前 bot 的 plugins/miao-plugin）
- * @returns {boolean}
- */
-export function supportsPanelPreview (opts = {}) {
-  const root = opts.miaoRoot || MIAO_PLUGIN_DIR
-  // 各环节的源码标记：上游 miao 的 ImgUpload 规则里有 `(?:面板图)(\d)`，与 `面板图\d` 不相邻，不会误判
-  const markers = [
-    ['apps/profile.js', /面板图\\d/],
-    ['apps/profile/ProfileDetail.js', /_panelImgIdx/],
-    ['models/avatar/ProfileAvatar.js', /_panelImgIdx/],
-    ['apps/profile/ProfileChange.js', /换补|baseChange/]
-  ]
-  try {
-    return markers.every(([rel, re]) => {
-      const file = path.join(root, rel)
-      return fs.existsSync(file) && re.test(fs.readFileSync(file, 'utf8'))
-    })
-  } catch {
-    return false
-  }
-}
-
-/**
  * 读取配置中的 profileImgSrc 列表
  * @param {object} [opts]
  * @param {string} [opts.file]
