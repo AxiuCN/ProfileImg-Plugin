@@ -11,7 +11,7 @@ installFrameworkStubs()
 requireMiaoPlugin()
 
 const {
-  ensureProfileConfig, supportsMultiSrc, readProfileImgSrc, writeProfileImgSrc,
+  ensureProfileConfig, supportsMultiSrc, supportsPanelPreview, readProfileImgSrc, writeProfileImgSrc,
   buildSrcList
 } = await import(mod('model/profileSrc.js'))
 
@@ -37,6 +37,42 @@ const { check, finish } = checker()
 // 1. 能力探测（读真实 miao 模板，只读）
 check('识别 miao 支持 profileImgSrc', supportsMultiSrc() === true)
 check('探测不存在的模板 → false', supportsMultiSrc({ defaultFile: path.join(cfgDir, 'nope.js') }) === false)
+
+// 1.1 预览能力探测（面板图序号 + 补 虚拟面板，只有配套 miao-plugin fork 才有）
+const capRoot = path.join(tmp, 'miao-cap')
+const capFiles = {
+  'apps/profile.js': 'rule: /^#*([^#]+)\\s*(面板|面板图\\d+)\\s*$/',
+  'apps/profile/ProfileDetail.js': 'e._panelImgIdx = imgIdx',
+  'models/avatar/ProfileAvatar.js': 'if (profile._panelImgIdx > 0) {',
+  'apps/profile/ProfileChange.js': 'let regRet = /([换补])(.*)/.exec(msg)'
+}
+const writeCapFiles = (skip) => {
+  fs.rmSync(capRoot, { recursive: true, force: true })
+  for (const [rel, content] of Object.entries(capFiles)) {
+    if (rel === skip) continue
+    const file = path.join(capRoot, rel)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, content, 'utf8')
+  }
+}
+
+writeCapFiles()
+check('识别配套 fork 的预览能力（面板图序号 + 补）', supportsPanelPreview({ miaoRoot: capRoot }) === true)
+
+// 上游 miao 的 ImgUpload 规则里是 `(?:面板图)(\d)`，与 `面板图\d` 不相邻，不得误判
+writeCapFiles()
+fs.writeFileSync(path.join(capRoot, 'apps/profile.js'),
+  'rule: /^#?\\s*(?:移除|清除|删除)(.+)(?:面板图)(\\d){1,}\\s*$/', 'utf8')
+check('上游 miao（rule 不放行面板图序号）→ false', supportsPanelPreview({ miaoRoot: capRoot }) === false)
+
+writeCapFiles('models/avatar/ProfileAvatar.js')
+check('缺「按序号选图」环节 → false', supportsPanelPreview({ miaoRoot: capRoot }) === false)
+
+writeCapFiles('apps/profile/ProfileChange.js')
+check('缺「补」虚拟面板 → false', supportsPanelPreview({ miaoRoot: capRoot }) === false)
+
+check('miao 目录不存在 → false', supportsPanelPreview({ miaoRoot: path.join(tmp, 'nope-miao') }) === false)
+check('真实环境探测只读且返回布尔', typeof supportsPanelPreview() === 'boolean')
 
 // 2. 从模板生成 profile.js
 const target = path.join(cfgDir, 'profile.js')

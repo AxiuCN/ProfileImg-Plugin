@@ -138,9 +138,14 @@ check('替换与上传共用格式规整（扩展名与字节一致）',
 
 const previewSrc = fs.readFileSync(path.join(pluginRoot, 'apps/previewProfileImg.js'), 'utf8')
 check('预览命令已注册', /fnc: 'preview'/.test(previewSrc))
-check('预览不 import miao 内部模块（自绘，不依赖 miao 面板数据）', !/miao-plugin/.test(previewSrc))
-check('预览走本插件渲染管线 render(\'preview\', \'index\')', /render\('preview', 'index'/.test(previewSrc))
-check('预览模板存在', fs.existsSync(path.join(pluginRoot, 'resources/preview/index.html')))
+check('预览不 import miao 内部模块（只改写消息交给 miao）', !/^import[^\n]*miao-plugin/m.test(previewSrc))
+check('预览命中后返回 false 交给后续插件', /return false/.test(previewSrc))
+check('预览同时改写 e.msg 与 e.original_msg（miao 优先读 original_msg）',
+  /e\.msg = cmd/.test(previewSrc) && /e\.original_msg = cmd/.test(previewSrc))
+check('预览带能力门槛（上游 miao 无 面板图N/补 时自行提示，不改写消息漏给其他插件）',
+  /supportsPanelPreview/.test(previewSrc) && /if \(!supportsPanelPreview\(\)\)/.test(previewSrc))
+check('预览的能力门槛来自 model/profileSrc.js（与 supportsMultiSrc 同处）',
+  /import \{ supportsPanelPreview \} from '\.\.\/model\/profileSrc\.js'/.test(previewSrc))
 
 // ---- index.js 的 app 注册写法（本次事故的核心：注册被静默跳过）----
 const indexSrc = fs.readFileSync(path.join(pluginRoot, 'index.js'), 'utf8')
