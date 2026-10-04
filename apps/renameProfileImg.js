@@ -7,6 +7,9 @@ import { guardLayout } from '../model/layoutGuard.js'
 import { mainRepoLockIdForPath } from '../model/galleryConfig.js'
 import { acquireLocks } from '../model/git.js'
 
+/** 重命名命令：#重命名角色面板图N 作者 来源 [备注]（放行框架归一后的 `#星铁` 前缀） */
+const RENAME_RE = /^#?\s*(?:星铁)?\s*重命名(.+?)面板图(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/
+
 /**
  * #重命名角色名面板图N 作者 来源 [备注]
  * 修改面板图的版权归属信息（重命名文件）
@@ -24,7 +27,7 @@ export class RenameProfileImg extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: /^#?\s*重命名(.+?)面板图(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/, fnc: 'rename', permission: 'master' }
+        { reg: RENAME_RE, fnc: 'rename', permission: 'master' }
       ]
     })
   }
@@ -33,7 +36,7 @@ export class RenameProfileImg extends plugin {
     if (!(await guardLayout(e))) return true
 
     // 非贪婪 (.+?) 捕获角色名，"面板图"分隔，(\d+) 捕获序号 N
-    const match = e.msg.match(/^#?\s*重命名(.+?)面板图(\d+)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/)
+    const match = e.msg.match(RENAME_RE)
     if (!match) return true
 
     const rawRole = match[1].trim()

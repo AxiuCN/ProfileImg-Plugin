@@ -6,6 +6,9 @@ import { render } from '../components/render.js'
 import { formatSize, getDirSize } from '../components/format.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
+/** 可视化命令：#角色面板图可视化（放行框架归一后的 `#星铁` 前缀） */
+const VISUALIZE_RE = /^#?\s*(?:星铁)?\s*(.+?)(?:面板图可视化)\s*$/
+
 /** 每页展示的图片数（4 列网格 × 5 行） */
 const PAGE_SIZE = 20
 
@@ -22,7 +25,7 @@ export class Visualize extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: /^#?\s*(.+)(?:面板图可视化)\s*$/, fnc: 'visualize' }
+        { reg: VISUALIZE_RE, fnc: 'visualize' }
       ]
     })
   }
@@ -30,9 +33,9 @@ export class Visualize extends plugin {
   async visualize (e) {
     if (!(await guardLayout(e))) return true
 
-    const roleName = resolveRoleName(
-      e.msg.replace(/#|面板图可视化/g, '').trim()
-    )
+    const match = e.msg.match(VISUALIZE_RE)
+    if (!match) return true
+    const roleName = resolveRoleName(match[1].trim())
 
     if (!roleName) {
       return e.reply('[面板图图库管理器]\n请输入正确的角色名')

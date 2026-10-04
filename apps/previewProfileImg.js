@@ -1,7 +1,7 @@
 import { resolveRoleName } from '../modules/alias.js'
 import { findImageByN } from '../model/galleryIndex.js'
 import { guardLayout } from '../model/layoutGuard.js'
-import { parsePreviewCommand, renderPanelPreview } from '../modules/preview/index.js'
+import { parsePreviewCommand, renderPanelPreview, PREVIEW_CMD_RE } from '../modules/preview/index.js'
 
 /**
  * 面板图预览 — 把指定序号的面板图放进**完整的 miao 角色面板**里渲染一张图
@@ -33,8 +33,8 @@ export class PreviewProfileImg extends plugin {
       priority: 1,
       rule: [
         {
-          // #预览琴面板图3 / *预览遐蝶面板图2 / #星铁预览遐蝶面板图2
-          reg: /^[#*]?\s*(星铁|原神)?\s*预览(.+?)(?:面板图)\s*(\d+)\s*$/,
+          // #预览琴面板图3 / *预览遐蝶面板图2（框架会把 * 改写成 #星铁）/ #星铁预览遐蝶面板图2
+          reg: PREVIEW_CMD_RE,
           fnc: 'preview'
         }
       ]

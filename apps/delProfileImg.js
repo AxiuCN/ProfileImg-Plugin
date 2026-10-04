@@ -7,6 +7,9 @@ import { guardLayout } from '../model/layoutGuard.js'
 import { mainRepoLockIdForPath } from '../model/galleryConfig.js'
 import { acquireLocks } from '../model/git.js'
 
+/** 删除命令：#删除角色面板图N（框架会把星铁前缀归一成 `#星铁`，这里放行它，角色名捕获组不含前缀） */
+const DELETE_RE = /^#?\s*(?:星铁)?\s*(?:移除|清除|删除)(.+?)(?:面板图)(\d+)\s*$/
+
 /**
  * 删除面板图 — 接管 miao-plugin 的 #删除xxx面板图N
  * 优先级 1，高于 miao-plugin 默认优先级
@@ -24,7 +27,7 @@ export class DelProfileImg extends plugin {
       event: 'message',
       priority: 1,
       rule: [
-        { reg: /^#?\s*(?:移除|清除|删除)(.+)(?:面板图)(\d+)\s*$/, fnc: 'delete' }
+        { reg: DELETE_RE, fnc: 'delete' }
       ]
     })
   }
@@ -39,7 +42,7 @@ export class DelProfileImg extends plugin {
     }
 
     // 从 regex 捕获组直接取角色名和序号（避免破坏含数字的角色名）
-    const match = e.msg.match(/^#?\s*(?:移除|清除|删除)(.+?)(?:面板图)(\d+)\s*$/)
+    const match = e.msg.match(DELETE_RE)
     if (!match) return true
 
     const roleName = resolveRoleName(match[1].trim())

@@ -18,8 +18,8 @@ import { buildPanelRenderData, buildPanelDmgCalc } from './renderData.js'
  * 只把名字、立绘与头像换成目标角色，并在面板顶部标注是占位数据。
  */
 
-/** 命令解析（`#预览xx面板图N` / `*预览xx面板图N` / `#星铁预览xx面板图N`） */
-const CMD_RE = /^([#*])?\s*(星铁|原神)?\s*预览(.+?)(?:面板图)\s*(\d+)\s*$/
+/** 命令解析（`#预览xx面板图N` / `*预览xx面板图N` / `#星铁预览xx面板图N`）；rule 与解析共用 */
+export const PREVIEW_CMD_RE = /^([#*])?\s*(星铁|原神)?\s*预览(.+?)(?:面板图)\s*(\d+)\s*$/
 
 /** 没有游戏关键词时的默认游戏：`#` 原神、`*` 星铁 */
 const DEFAULT_GAME = { '#': 'gs', '*': 'sr' }
@@ -33,12 +33,10 @@ const PLACEHOLDER_CHAR = { gs: '胡桃', sr: '三月七' }
  * @returns {{ roleName: string, n: number, game: 'gs'|'sr' }|null} 不匹配返回 null
  */
 export function parsePreviewCommand (msg) {
-  const match = String(msg || '').match(CMD_RE)
+  const match = String(msg || '').match(PREVIEW_CMD_RE)
   if (!match) return null
   const [, prefix, gameWord, roleName, n] = match
-  const game = gameWord === '星铁'
-    ? 'sr'
-    : gameWord === '原神' ? 'gs' : (DEFAULT_GAME[prefix] || 'gs')
+  const game = gameWord === '原神' ? 'gs' : gameWord ? 'sr' : (DEFAULT_GAME[prefix] || 'gs')
   return { roleName: roleName.trim(), n: parseInt(n, 10), game }
 }
 

@@ -11,6 +11,11 @@ import { acquireLocks } from '../model/git.js'
 import { isManager, canAccessGallery } from '../components/config.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
+/** 屏蔽命令：#屏蔽角色面板图 N（放行框架归一后的 `#星铁` 前缀） */
+const BLOCK_RE = /^#\s*(?:星铁)?\s*屏蔽(.+?)面板图\s*(\d*)$/
+/** 启用命令：#启用角色面板图 N（兼容旧写法里的「屏蔽」二字） */
+const UNBLOCK_RE = /^#\s*(?:星铁)?\s*启用(.+?)(?:屏蔽)?面板图\s*(\d*)$/
+
 /**
  * 屏蔽/启用面板图（多图库源布局）
  *
@@ -27,8 +32,8 @@ export class MoveBlockImg extends plugin {
       event: 'message',
       priority: 5,
       rule: [
-        { reg: '^#屏蔽(.+)面板图\\s*(\\d*)$', fnc: 'blockImg' },
-        { reg: '^#启用(.+?)(屏蔽)?面板图\\s*(\\d*)$', fnc: 'unblockImg' }
+        { reg: BLOCK_RE, fnc: 'blockImg' },
+        { reg: UNBLOCK_RE, fnc: 'unblockImg' }
       ]
     })
   }
@@ -39,8 +44,7 @@ export class MoveBlockImg extends plugin {
     if (!isManager(e)) {
       return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
     }
-    const rawMsg = e.msg.replace(/^#/, '')
-    const match = rawMsg.match(/^屏蔽(.+)面板图\s*(\d*)$/)
+    const match = e.msg.match(BLOCK_RE)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #屏蔽角色名面板图 序号')
     const roleName = resolveRoleName(match[1].trim())
     const n = parseInt(match[2]) || 1
@@ -101,11 +105,10 @@ export class MoveBlockImg extends plugin {
     if (!isManager(e)) {
       return e.reply('[面板图图库管理器]\n该指令仅主人或已授权群成员可使用')
     }
-    const rawMsg = e.msg.replace(/^#/, '')
-    const match = rawMsg.match(/^启用(.+?)(屏蔽)?面板图\s*(\d*)$/)
+    const match = e.msg.match(UNBLOCK_RE)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
     const roleName = resolveRoleName(match[1].trim())
-    const n = parseInt(match[3]) || 1
+    const n = parseInt(match[2]) || 1
 
     // ① 默认图库内的 .bak（段位 10001+ 保留原序号）
     const bakFile = findBlockedByN(roleName, 'normal', n)

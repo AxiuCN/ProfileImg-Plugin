@@ -11,6 +11,12 @@ import { getUploadDir, getDefaultDir, mainRepoLockIdForPath } from '../model/gal
 import { acquireLocks } from '../model/git.js'
 import { guardLayout } from '../model/layoutGuard.js'
 
+/* 两个添加类命令（放行框架归一后的 `#星铁` 前缀，捕获组只拿角色名） */
+/** #添加角色面板图 作者 来源 [备注] */
+const UPLOAD_ATTR_RE = /^#?\s*(?:星铁)?\s*(?:上传|添加)(.+?)(?:面板图)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/
+/** #添加角色面板图（无版权） */
+const UPLOAD_SIMPLE_RE = /^#?\s*(?:星铁)?\s*(?:上传|添加)(.+?)(?:面板图)\s*$/
+
 /**
  * 面板图上传 / 替换（版权信息可选）
  *
@@ -35,12 +41,12 @@ export class UploadWithCompress extends plugin {
       rule: [
         {
           // 含版权：#添加琴面板图 张三 米游社 [AI扩图]
-          reg: /^#?\s*(?:上传|添加)(.+?)(?:面板图)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/,
+          reg: UPLOAD_ATTR_RE,
           fnc: 'uploadWithAttribution'
         },
         {
           // 无版权：#添加琴面板图
-          reg: /^#?\s*(?:上传|添加)(.+)(?:面板图)\s*$/,
+          reg: UPLOAD_SIMPLE_RE,
           fnc: 'uploadSimple'
         },
         {
@@ -54,7 +60,7 @@ export class UploadWithCompress extends plugin {
 
   /** 含版权上传 */
   async uploadWithAttribution(e) {
-    const match = e.msg.match(/^#?\s*(?:上传|添加)(.+?)(?:面板图)\s+(.+?)\s+(.+?)(?:\s+(.+))?\s*$/)
+    const match = e.msg.match(UPLOAD_ATTR_RE)
     if (!match) return true
 
     return this._doUpload(e, {
