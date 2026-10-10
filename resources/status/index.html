@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="{{_res_path}}status/index.css"/>
+</head>
+<body>
+  <div class="container">
+
+    <!-- ==================== 顶部标题栏 ==================== -->
+    <div class="header">
+      <div class="header-char-wrap">
+        <img class="header-char" src="{{_res_path}}status/header-char.png" alt=""
+             onerror="this.parentNode.style.display='none'"/>
+      </div>
+      <div class="header-titles">
+        <div class="main-title">面板图图库管理器</div>
+        <div class="sub-title">多游戏 · 多图库 · 一站式管理</div>
+      </div>
+      <div class="header-bubble">
+        <span class="bubble-star">✦</span>
+        你的角色，在这里都能找到属于它们的面板图
+        <span class="bubble-star">✦</span>
+      </div>
+    </div>
+
+    {{ if isEmpty }}
+    <!-- ==================== 空状态 ==================== -->
+    <div class="empty-box">
+      <img class="empty-icon" src="{{_res_path}}status/icons/folder-gray.png" alt=""/>
+      <div class="empty-title">图库尚未就绪</div>
+      <div class="empty-desc">
+        当前只有默认图库，还没有下载任何自有图库。<br>
+        发送 <code>#下载主图库</code> 或 <code>#下载第三方图库 &lt;URL&gt;</code> 开始使用。
+      </div>
+    </div>
+    {{ else }}
+
+    <!-- ==================== 总览 ==================== -->
+    <div class="overview">
+      <div class="overview-head">
+        <div class="overview-icon-box">
+          <img src="{{_res_path}}status/icons/folder-image.png" alt=""/>
+        </div>
+        <div class="overview-title">
+          总览 <span class="overview-sub">图库源 {{ sourceCount }} 个</span>
+        </div>
+      </div>
+      <div class="overview-stats">
+        <div class="stat">
+          <div class="stat-icon-box"><img src="{{_res_path}}status/icons/user.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ totalRoles }}</div>
+            <div class="stat-label">角色</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon-box"><img src="{{_res_path}}status/icons/image.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ totalImages }}</div>
+            <div class="stat-label">图片</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon-box"><img src="{{_res_path}}status/icons/storage.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ totalSizeText }}</div>
+            <div class="stat-label">大小</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 图库列表标题栏 ==================== -->
+    <div class="section-title-bar">
+      <div class="section-title-text">
+        图库列表 <span class="section-sub">共 {{ sourceCount }} 个</span>
+      </div>
+      <span class="section-sparkle">✨</span>
+    </div>
+
+    <!-- ==================== 图库列表 ==================== -->
+    {{ each items item }}
+      {{ if item.isGroup }}
+        <!-- ===== 分组 ===== -->
+        <div class="gallery-group color-{{ item.colorKey }}">
+          <div class="gallery-row group-head">
+            <div class="gallery-icon-box">
+              <img src="{{_res_path}}status/icons/{{ item.iconKey }}.png" alt=""/>
+            </div>
+            <div class="gallery-main">
+              <div class="gallery-title-row">
+                <span class="gallery-name">{{ item.label }}</span>
+                <span class="gallery-tag tag-third">第三方图库</span>
+              </div>
+              <div class="gallery-metrics">
+                <span class="metric"><img src="{{_res_path}}status/icons/user.png"/><span class="metric-num">{{ item.roles }}</span> 角色</span>
+                <span class="metric"><img src="{{_res_path}}status/icons/image.png"/><span class="metric-num">{{ item.images }}</span> 图片</span>
+                <span class="metric"><img src="{{_res_path}}status/icons/storage.png"/><span class="metric-num">{{ item.sizeText }}</span></span>
+              </div>
+            </div>
+          </div>
+          {{ each item.children child }}
+          <div class="gallery-row group-child">
+            <div class="child-bullet"></div>
+            <div class="gallery-icon-box small">
+              <img src="{{_res_path}}status/icons/{{ child.iconKey }}.png" alt=""/>
+            </div>
+            <div class="gallery-main">
+              <div class="gallery-title-row">
+                <span class="gallery-name child-name">{{ child.subName }}</span>
+              </div>
+              <div class="gallery-metrics">
+                <span class="metric"><img src="{{_res_path}}status/icons/user.png"/><span class="metric-num">{{ child.roles }}</span> 角色</span>
+                <span class="metric"><img src="{{_res_path}}status/icons/image.png"/><span class="metric-num">{{ child.images }}</span> 图片</span>
+                <span class="metric"><img src="{{_res_path}}status/icons/storage.png"/><span class="metric-num">{{ child.sizeText }}</span></span>
+                <span class="metric-dir">{{ child.dirName }}</span>
+              </div>
+            </div>
+          </div>
+          {{ /each }}
+        </div>
+      {{ else }}
+        <!-- ===== 单项 ===== -->
+        <div class="gallery-row color-{{ item.colorKey }}">
+          <div class="gallery-icon-box">
+            <img src="{{_res_path}}status/icons/{{ item.iconKey }}.png" alt=""/>
+          </div>
+          <div class="gallery-main">
+            <div class="gallery-title-row">
+              <span class="gallery-name">
+                {{ item.label }}{{ if item.subName }}<span class="gallery-sub"> · {{ item.subName }}</span>{{ /if }}
+              </span>
+              {{ if item.kind === 'default' }}
+                <span class="gallery-tag tag-default">默认图库</span>
+              {{ else if item.kind === 'main' }}
+                <span class="gallery-tag tag-main">主仓库</span>
+              {{ else }}
+                <span class="gallery-tag tag-third">第三方图库</span>
+              {{ /if }}
+            </div>
+            <div class="gallery-metrics">
+              <span class="metric"><img src="{{_res_path}}status/icons/user.png"/><span class="metric-num">{{ item.roles }}</span> 角色</span>
+              <span class="metric"><img src="{{_res_path}}status/icons/image.png"/><span class="metric-num">{{ item.images }}</span> 图片</span>
+              <span class="metric"><img src="{{_res_path}}status/icons/storage.png"/><span class="metric-num">{{ item.sizeText }}</span></span>
+              <span class="metric-dir">{{ item.dirName }}</span>
+            </div>
+          </div>
+        </div>
+      {{ /if }}
+    {{ /each }}
+
+    <!-- ==================== 未登记目录 ==================== -->
+    {{ if unregistered.length > 0 }}
+    <div class="notice-box">
+      <div class="notice-title">⚠️ 未登记的图库目录（下次启动自动登记并注册）</div>
+      <ul class="notice-list">
+        {{ each unregistered name }}
+        <li>{{ name }}</li>
+        {{ /each }}
+      </ul>
+      <div class="notice-hint">也可在锅巴「第三方图库」新增条目（dir 填该目录的绝对路径）；跨盘图库请直接填绝对路径</div>
+    </div>
+    {{ /if }}
+
+    {{ /if }}
+
+    <!-- ==================== 屏蔽图库 ==================== -->
+    <div class="blocked-box {{ blocked.installed ? '' : 'blocked-empty' }}">
+      <div class="blocked-header">
+        <div class="blocked-icon-box">
+          <img src="{{_res_path}}status/icons/blocked.png" alt=""/>
+        </div>
+        <div class="blocked-title">屏蔽图库</div>
+        <div class="blocked-arrow">▾</div>
+      </div>
+      {{ if blocked.installed }}
+      <div class="blocked-stats">
+        <div class="stat">
+          <div class="stat-icon-box light"><img src="{{_res_path}}status/icons/user.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ blocked.charCount }}</div>
+            <div class="stat-label">屏蔽角色数</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon-box light"><img src="{{_res_path}}status/icons/image.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ blocked.imageCount }}</div>
+            <div class="stat-label">屏蔽图片数</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon-box light"><img src="{{_res_path}}status/icons/storage.png" alt=""/></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ blocked.sizeText }}</div>
+            <div class="stat-label">大小</div>
+          </div>
+        </div>
+      </div>
+      {{ if blocked.version }}
+      <div class="blocked-version">版本：{{ blocked.version }}</div>
+      {{ /if }}
+      {{ else }}
+      <div class="blocked-empty-text">未安装 · 发送 <code>#下载屏蔽图库</code> 安装</div>
+      {{ /if }}
+    </div>
+
+    <div class="copyright">{{@sys.copyright}}</div>
+  </div>
+</body>
+</html>
