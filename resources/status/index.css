@@ -1,4 +1,4 @@
-/* 面板图图库状态 — 俏皮贴纸风 */
+/* 面板图图库状态 — 俏皮贴纸风（无旋转版） */
 
 /* ==================== 字体 ==================== */
 
@@ -65,7 +65,7 @@ body {
     linear-gradient(180deg, #eef3fb 0%, #e6eefc 100%);
 }
 
-/* ==================== 顶部标题栏（贴纸感） ==================== */
+/* ==================== 顶部标题栏 ==================== */
 
 .header {
   position: relative;
@@ -107,6 +107,7 @@ body {
   display: inline-block;
   margin-bottom: 16px;
   z-index: 2;
+  isolation: isolate;
 }
 
 .header-char-wrap::before {
@@ -126,6 +127,8 @@ body {
 }
 
 .header-char {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 116px;
   height: 116px;
@@ -154,7 +157,6 @@ body {
   text-shadow:
     2px 2px 0 #ffffff,
     4px 4px 0 rgba(167, 139, 250, 0.35);
-  transform: rotate(-1.5deg);
   display: inline-block;
 }
 
@@ -171,7 +173,6 @@ body {
     #818cf8 85%,
     transparent 100%);
   opacity: 0.7;
-  transform: rotate(-1.5deg);
 }
 
 .sub-title {
@@ -198,7 +199,6 @@ body {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.5px;
-  transform: rotate(1deg);
   box-shadow:
     0 4px 14px rgba(99, 102, 241, 0.18),
     0 0 0 2px rgba(167, 139, 250, 0.25);
@@ -296,7 +296,6 @@ body {
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 3px 10px rgba(99, 102, 241, 0.18);
-  transform: rotate(-4deg);
 }
 
 .overview-icon-box img { width: 26px; height: 26px; object-fit: contain; }
@@ -383,7 +382,6 @@ body {
   box-shadow:
     0 6px 20px rgba(139, 92, 246, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  transform: rotate(-1deg);
 }
 
 .section-title-text {
@@ -476,10 +474,6 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-.gallery-row:not(.group-child):not(.group-head) .gallery-icon-box {
-  transform: rotate(-3deg);
-}
-
 .gallery-icon-box.small { width: 36px; height: 36px; border-radius: 11px; }
 .gallery-icon-box img { width: 32px; height: 32px; object-fit: contain; }
 .gallery-icon-box.small img { width: 24px; height: 24px; }
@@ -502,7 +496,7 @@ body {
   font-weight: 500;
 }
 
-/* 标签：倾斜贴纸 */
+/* 标签 */
 .gallery-tag {
   display: inline-block;
   padding: 3px 11px;
@@ -513,7 +507,6 @@ body {
   color: #fff;
   white-space: nowrap;
   letter-spacing: 0.5px;
-  transform: rotate(-2deg);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12);
 }
 
@@ -692,7 +685,6 @@ body {
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 3px 8px rgba(220, 38, 38, 0.15);
-  transform: rotate(-4deg);
 }
 
 .blocked-icon-box img { width: 28px; height: 28px; object-fit: contain; }
