@@ -16,13 +16,12 @@ body {
 
 .title-row .badge-warn {
   font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
-  font-size: 40px;
+  font-size: 24px;
   font-weight: 400;
-  line-height: 1;
   letter-spacing: 2px;
-  height: 54px;
+  height: 40px;
   padding: 0 20px;
-  border-radius: 27px;
+  border-radius: 20px;
 }
 
 .ban-grid {
