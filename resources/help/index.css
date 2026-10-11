@@ -1,8 +1,21 @@
 /* 图库帮助 — 页面特有布局
    基调（配色 / 字体 / 容器 / header / footer / 卡片 / 徽标）见 ../common/ui.css */
 
+/* 窄版：与手机屏宽接近，图片不被整体缩小，字才看得清 */
+body {
+  width: 750px;
+}
+
+.header {
+  padding: 32px 34px 24px;
+}
+
+.main-content {
+  padding: 26px;
+}
+
 .grp-card {
-  padding: 18px 22px 8px;
+  padding: 20px 24px 10px;
   margin-bottom: 18px;
 }
 
@@ -27,7 +40,7 @@
 
 .grp-title {
   font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
-  font-size: 20px;
+  font-size: 22px;
   color: var(--title-color);
   letter-spacing: 1px;
 }
@@ -44,8 +57,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 11px 0 11px 14px;
+  gap: 3px;
+  padding: 12px 0 12px 15px;
   border-bottom: 1px dashed rgba(148, 163, 184, 0.22);
 }
 
@@ -66,13 +79,13 @@
 }
 
 .cmd-title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.5px;
 }
 
 .cmd-desc {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }

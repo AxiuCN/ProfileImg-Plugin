@@ -1,6 +1,19 @@
 /* 图库状态 — 页面特有布局
    基调（配色 / 字体 / 容器 / header / footer / 卡片 / 徽标 / 指标）见 ../common/ui.css */
 
+/* 窄版：与手机屏宽接近，图片不被整体缩小，字才看得清 */
+body {
+  width: 750px;
+}
+
+.header {
+  padding: 32px 34px 24px;
+}
+
+.main-content {
+  padding: 26px;
+}
+
 .src-list {
   display: flex;
   flex-direction: column;
@@ -8,7 +21,7 @@
 }
 
 .src-card {
-  padding: 16px 20px;
+  padding: 18px 22px;
 }
 
 .src-head {
@@ -19,14 +32,14 @@
 
 .src-name {
   font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
-  font-size: 19px;
+  font-size: 21px;
   color: var(--title-color);
   letter-spacing: 1px;
 }
 
 .src-dir {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: 13px;
   color: #94a3b8;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -44,7 +57,7 @@
 }
 
 .version-line {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   font-family: 'Number', 'Microsoft YaHei', sans-serif;
   white-space: nowrap;
@@ -66,9 +79,9 @@
 }
 
 .empty-card {
-  padding: 26px;
+  padding: 28px;
   text-align: center;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text-secondary);
 }
 
@@ -81,7 +94,7 @@
 
 .warn-head {
   font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
-  font-size: 18px;
+  font-size: 20px;
   color: var(--warn);
   letter-spacing: 1px;
 }
@@ -89,14 +102,14 @@
 .warn-list {
   margin: 8px 0 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
   word-break: break-all;
 }
 
 .hint {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: #94a3b8;
   line-height: 1.7;
 }
