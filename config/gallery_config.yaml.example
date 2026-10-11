@@ -23,7 +23,7 @@
 # remoteUrl —— 远程地址，可留空：留空表示本地只读源（不参与 #更新第三方图库）
 thirdParty:
   # - name: "某同人图库"                           # 图库名（显示用）
-  #   dir: "D:/Yunzai/app/plugins/ProfileImg-Plugin/resources/gallery/ProfileImg/xxx-fan-repo"
+  #   dir: "<绝对路径>/xxx-fan-repo"                # 例：E:/gallery/xxx-fan-repo（正斜杠）
   #   remoteUrl: "https://github.com/xxx/xxx.git"  # 可留空 = 本地只读源
   #   enabled: true                                # 是否参与 #更新第三方图库 与图库源注册
   #

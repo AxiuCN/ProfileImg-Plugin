@@ -32,4 +32,6 @@ CLAUDE.md
 
 # Deepseek Harness 工作区
 .dsh/
-AGENTS.md
+
+# 部署环境与本机路径（隐私，不进仓库）
+docs/private/
