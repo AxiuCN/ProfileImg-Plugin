@@ -167,4 +167,15 @@ check('index.js 逐条记录 app 注册结果（便于发现漏注册）', /载�
 check('index.js 图库源初始化不阻塞 apps 注册',
   /initGallerySources\(\)\.catch/.test(indexSrc) && !/await initGallerySources\(\)/.test(indexSrc))
 
+// ---- 出图页脚版权行：框架名识别 + 名称与版本号之间留空格 ----
+const { buildCopyright } = await import(mod('components/pluginVersion.js'))
+const copyright = buildCopyright()
+check('版权行识别框架名（TRSS-Yunzai / Yunzai-Bot）',
+  /^Created By (TRSS-Yunzai|Yunzai-Bot)( |<)/.test(copyright), copyright)
+check('版权行名称与版本号之间有空格（不出现 Yunzai-Bot3.1.3 这种粘连）',
+  !/(TRSS-Yunzai|Yunzai-Bot|ProfileImg-Plugin)<span/.test(copyright) &&
+  /(TRSS-Yunzai|Yunzai-Bot) <span class="version">/.test(copyright) &&
+  /ProfileImg-Plugin <span class="version">/.test(copyright), copyright)
+check('版权行带插件版本号', /ProfileImg-Plugin <span class="version">\d+\.\d+\.\d+<\/span>/.test(copyright), copyright)
+
 finish()

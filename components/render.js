@@ -1,7 +1,7 @@
 import puppeteer from '../../../lib/puppeteer/puppeteer.js'
 import path from 'node:path'
 import fs from 'node:fs'
-import { currentVersion, yunzaiVersion } from './pluginVersion.js'
+import { buildCopyright } from './pluginVersion.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 
@@ -35,10 +35,8 @@ export async function render(app, tpl, data = {}, imgType = 'jpeg') {
   data.elemLayout = path.join(pluginRoot, 'resources', 'common', 'layout', 'elem.html')
   data.defaultLayout = path.join(pluginRoot, 'resources', 'common', 'layout', 'default.html')
 
-  // 注入系统版权信息
-  data.sys = {
-    copyright: `Created By Yunzai-Bot<span class="version">${yunzaiVersion}</span> & ProfileImg-Plugin<span class="version">${currentVersion}</span>`
-  }
+  // 注入系统版权信息（框架名按 bot 根 package.json 判定，名称与版本号之间留空格）
+  data.sys = { copyright: buildCopyright() }
 
   return await puppeteer.screenshot(`ProfileImg-Plugin/${app}/${tpl}`, data)
 }

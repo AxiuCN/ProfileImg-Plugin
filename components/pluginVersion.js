@@ -13,14 +13,33 @@ try {
 }
 
 const yunzaiPkgPath = path.join(process.cwd(), 'package.json')
-let yunzaiVersion = 'TRSS-Yunzai'
+
+/**
+ * 框架显示名与版本号
+ * 按 bot 根 package.json 的包名判定：TRSS-Yunzai 为 `trss-yunzai`，原版为 `yunzai-bot`
+ */
+let yunzaiName = 'Yunzai-Bot'
+let yunzaiVersion = ''
 try {
   if (fs.existsSync(yunzaiPkgPath)) {
     const pkg = JSON.parse(fs.readFileSync(yunzaiPkgPath, 'utf8'))
-    yunzaiVersion = pkg.version || 'TRSS-Yunzai'
+    yunzaiName = /trss/i.test(pkg.name || '') ? 'TRSS-Yunzai' : 'Yunzai-Bot'
+    yunzaiVersion = pkg.version || ''
   }
 } catch (e) { /* 忽略 */ }
 
 const isV3 = yunzaiVersion[0] * 1 > 2
 
-export { currentVersion, yunzaiVersion, isV3 }
+/**
+ * 出图页脚版权行（模板用 `{{@sys.copyright}}` 注入）
+ * 名称与版本号之间必须留空格，否则会渲染成 `Yunzai-Bot3.1.3` 这种贴在一起的形态
+ * @returns {string}
+ */
+export function buildCopyright() {
+  const framework = yunzaiVersion
+    ? `${yunzaiName} <span class="version">${yunzaiVersion}</span>`
+    : yunzaiName
+  return `Created By ${framework} & ProfileImg-Plugin <span class="version">${currentVersion}</span>`
+}
+
+export { currentVersion, yunzaiName, yunzaiVersion, isV3 }
