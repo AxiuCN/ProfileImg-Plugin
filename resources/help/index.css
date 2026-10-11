@@ -1,104 +1,78 @@
-body {
-  transform: scale(1);
-  width: 830px;
-  /* 移除 background 相关属性 */
+/* 图库帮助 — 页面特有布局
+   基调（配色 / 字体 / 容器 / header / footer / 卡片 / 徽标）见 ../common/ui.css */
+
+.grp-card {
+  padding: 18px 22px 8px;
+  margin-bottom: 18px;
 }
-.container {
-  width: 830px;
-  background: url("../common/theme/bg-01.jpg") no-repeat;
-  background-size: cover; /* 或 100% auto，按你喜欢 */
-  background-position: top left;
-  /* 保留原有 main-01.png 的叠加背景 */
-  background-image: url(../common/theme/main-01.png), url("../common/theme/bg-01.jpg");
-  background-repeat: no-repeat, no-repeat;
-  background-size: 100% auto, cover; /* main-01 宽度撑满，bg-01 覆盖全区域 */
-  background-position: top left, top left;
-  /* 原有的其他 .container 属性保持不变 */
+
+.grp-card:last-child {
+  margin-bottom: 0;
 }
-.label {
-  font-family: Number, "微软雅黑", sans-serif;
-}
-.head-box {
-  margin: 60px 0 0 0;
-  padding-bottom: 0;
-}
-.head-box .title {
-  font-size: 50px;
-}
-.cont-box {
-  border-radius: 15px;
-  margin-top: 20px;
-  margin-bottom: 20px;
-  padding: 5px 15px;
-  overflow: hidden;
-  box-shadow: 0 5px 10px 0 rgba(0, 0, 0, 0.15);
-  position: relative;
-  background: rgba(43, 52, 61, 0.8);
-}
-.help-group {
-  color: #ceb78b;
-  font-size: 18px;
-  font-weight: bold;
-  padding: 8px 0 5px 10px;
-}
-.help-table {
-  text-align: center;
-  border-collapse: collapse;
-  margin: 5px -10px -10px -15px;
-  border-radius: 0 0 10px 10px;
-  display: table;
-  overflow: hidden;
-  width: calc(100% + 30px);
-  color: #fff;
-}
-.help-table .tr {
-  display: table-row;
-}
-.help-table .td,
-.help-table .th {
-  font-size: 14px;
-  display: table-cell;
-  box-shadow: 0 0 1px 0 #888 inset;
-  padding: 12px 0 12px 50px;
-  line-height: 24px;
-  position: relative;
-  width: 33.33%;
-  text-align: left;
-}
-.help-table .tr:nth-child(odd) {
-  background: rgba(34, 41, 51, 0.6);
-}
-.help-table .tr:nth-child(even) {
-  background: rgba(34, 41, 51, 0.3);
-}
-.help-table .tr:last-child .td {
+
+.grp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-color);
 }
-.help-table .th {
-  background: rgba(34, 41, 51, 0.5);
+
+.grp-bar {
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), rgba(37, 99, 235, 0.35));
 }
-.help-icon {
-  width: 40px;
-  height: 40px;
-  display: block;
+
+.grp-title {
+  font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
+  font-size: 20px;
+  color: var(--title-color);
+  letter-spacing: 1px;
+}
+
+.grp-head .grp-count {
+  margin-left: auto;
+}
+
+.cmd-list {
+  padding: 6px 0 4px;
+}
+
+.cmd-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 0 11px 14px;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.22);
+}
+
+.cmd-row:last-child {
+  border-bottom: none;
+}
+
+/* 不再使用图片雪碧图做图标，改为行首渐变竖条 */
+.cmd-row::before {
+  content: '';
   position: absolute;
-  background: url("icon.png") 0 0 no-repeat;
-  background-size: 500px auto;
-  border-radius: 5px;
-  left: 6px;
-  top: 12px;
-  transform: scale(0.85);
+  left: 0;
+  top: 16px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.55), rgba(37, 99, 235, 0.12));
 }
-.help-title {
-  display: block;
-  color: #d3bc8e;
-  font-size: 16px;
-  line-height: 24px;
+
+.cmd-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
 }
-.help-desc {
-  display: block;
+
+.cmd-desc {
   font-size: 13px;
-  line-height: 18px;
-  color: #eee;
+  color: var(--text-secondary);
 }
-/*# sourceMappingURL=index.css.map */

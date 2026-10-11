@@ -1,0 +1,102 @@
+/* 图库状态 — 页面特有布局
+   基调（配色 / 字体 / 容器 / header / footer / 卡片 / 徽标 / 指标）见 ../common/ui.css */
+
+.src-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.src-card {
+  padding: 16px 20px;
+}
+
+.src-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.src-name {
+  font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
+  font-size: 19px;
+  color: var(--title-color);
+  letter-spacing: 1px;
+}
+
+.src-dir {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+}
+
+.src-body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.22);
+}
+
+.version-line {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'Number', 'Microsoft YaHei', sans-serif;
+  white-space: nowrap;
+}
+
+.version-line .sha {
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.blocked-card {
+  margin-top: 16px;
+  padding: 16px 20px;
+}
+
+.blocked-card.muted {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.empty-card {
+  padding: 26px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.warn-card {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border-color: rgba(217, 119, 6, 0.35);
+  background: var(--warn-bg);
+}
+
+.warn-head {
+  font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
+  font-size: 18px;
+  color: var(--warn);
+  letter-spacing: 1px;
+}
+
+.warn-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.7;
+}

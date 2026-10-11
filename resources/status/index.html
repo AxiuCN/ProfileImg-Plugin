@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}} - ProfileImg-Plugin</title>
+  <link rel="stylesheet" type="text/css" href="{{_res_path}}common/ui.css"/>
+  <link rel="stylesheet" type="text/css" href="{{_res_path}}status/index.css"/>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-content-left">
+        <div class="main-title">{{title}}</div>
+        <div class="title-divider">
+          <div class="divider-line"></div>
+        </div>
+        <div class="header-subtitle">{{subTitle}}</div>
+      </div>
+      <div class="header-stats-area">
+        <div class="stat-card">
+          {{each stats item idx}}
+          {{if idx > 0}}<div class="stat-divider"></div>{{/if}}
+          <div class="stat-block">
+            <span class="stat-label">{{item.label}}</span>
+            <div class="stat-value">{{item.value}}</div>
+          </div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      {{if sources.length}}
+      <div class="src-list">
+        {{each sources s}}
+        <div class="src-card card">
+          <div class="src-head">
+            <span class="src-name">{{s.label}}</span>
+            <span class="badge {{s.badge}}">{{s.kindLabel}}</span>
+          </div>
+          <div class="src-dir">{{s.dirName}}</div>
+          <div class="src-body">
+            <div class="metrics">
+              <div class="metric">
+                <div class="metric-value">{{s.roles}}</div>
+                <div class="metric-label">角色</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">{{s.images}}</div>
+                <div class="metric-label">图片</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">{{s.size}}</div>
+                <div class="metric-label">体积</div>
+              </div>
+            </div>
+            {{if s.version}}
+            <div class="version-line">版本 <span class="sha">{{s.version.sha}}</span> · {{s.version.date}}</div>
+            {{/if}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{else if empty}}
+      <div class="empty-card card">
+        {{if mode === 'blocked'}}屏蔽图库未安装，发送 #下载屏蔽图库 可安装{{else}}未找到主图库仓库，请发送 #下载主图库{{/if}}
+      </div>
+      {{/if}}
+
+      {{if blocked}}
+        {{if blocked.installed}}
+        <div class="blocked-card card">
+          <div class="src-head">
+            <span class="src-name">屏蔽图库</span>
+            <span class="badge badge-warn">已安装</span>
+          </div>
+          <div class="src-body">
+            <div class="metrics">
+              <div class="metric">
+                <div class="metric-value">{{blocked.charCount}}</div>
+                <div class="metric-label">屏蔽角色</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">{{blocked.imageCount}}</div>
+                <div class="metric-label">屏蔽图片</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">{{blocked.size}}</div>
+                <div class="metric-label">体积</div>
+              </div>
+            </div>
+            {{if blocked.version}}
+            <div class="version-line">版本 <span class="sha">{{blocked.version.sha}}</span> · {{blocked.version.date}}</div>
+            {{/if}}
+          </div>
+        </div>
+        {{else}}
+        <div class="blocked-card card muted">
+          <div class="src-head">
+            <span class="src-name">屏蔽图库</span>
+            <span class="badge badge-warn">未安装</span>
+          </div>
+          <div class="hint">发送 #下载屏蔽图库 可安装</div>
+        </div>
+        {{/if}}
+      {{/if}}
+
+      {{if unregistered.length}}
+      <div class="warn-card card">
+        <div class="warn-head">未登记的图库目录</div>
+        <ul class="warn-list">
+          {{each unregistered item}}
+          <li>{{item.name}}</li>
+          {{/each}}
+        </ul>
+        <div class="hint">下次启动会自动登记并注册为图库源；也可在锅巴「第三方图库」新增条目（dir 填该目录的绝对路径，跨盘图库请直接填绝对路径）</div>
+      </div>
+      {{/if}}
+    </div>
+
+    <div class="footer">
+      <div class="footer-content">
+        <div class="copyright">{{@sys.copyright}}</div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

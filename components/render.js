@@ -5,6 +5,14 @@ import { currentVersion, yunzaiVersion } from './pluginVersion.js'
 
 const pluginRoot = path.join(process.cwd(), 'plugins/ProfileImg-Plugin')
 
+/**
+ * 渲染出图（帮助图 / 状态图 / 可视化共用）
+ * 页面视觉基调见 resources/common/ui.css
+ * @param {string} app - 模板目录（resources/ 下的子目录）
+ * @param {string} tpl - 模板名（不含 .html）
+ * @param {object} data - 渲染数据
+ * @param {string} imgType - jpeg / png（png 会置 omitBackground，浅色底会变透明）
+ */
 export async function render(app, tpl, data = {}, imgType = 'jpeg') {
   data._plugin = 'ProfileImg-Plugin'
   data._res_path = `../../../../../plugins/ProfileImg-Plugin/resources/`
