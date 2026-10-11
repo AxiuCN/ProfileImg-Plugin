@@ -7,6 +7,8 @@ import { guardLayout } from '../model/layoutGuard.js'
 const LIST_RE = /^#?\s*(?:星铁)?\s*(.+?)(?:面板图列表)\s*$/
 /** 屏蔽列表命令：#角色面板图屏蔽列表（原本就要求带 `#`） */
 const BLOCKED_LIST_RE = /^#\s*(?:星铁)?\s*(.+?)面板图屏蔽列表$/
+/** 屏蔽列表别名：#角色屏蔽面板图列表（必须排在 LIST_RE 之前，否则角色名会吃进「屏蔽」二字） */
+const BLOCKED_LIST_ALT_RE = /^#\s*(?:星铁)?\s*(.+?)屏蔽面板图列表$/
 
 /**
  * 面板图列表 — 接管 miao-plugin 的 #xxx面板图列表 + 屏蔽列表
@@ -23,8 +25,9 @@ export class ProfileImgList extends plugin {
       event: 'message',
       priority: 1,
       rule: [
-        { reg: LIST_RE, fnc: 'mainList' },
-        { reg: BLOCKED_LIST_RE, fnc: 'blockedList' }
+        { reg: BLOCKED_LIST_RE, fnc: 'blockedList' },
+        { reg: BLOCKED_LIST_ALT_RE, fnc: 'blockedList' },
+        { reg: LIST_RE, fnc: 'mainList' }
       ]
     })
   }
@@ -51,7 +54,7 @@ export class ProfileImgList extends plugin {
   async blockedList (e) {
     if (!(await guardLayout(e))) return true
 
-    let roleName = e.msg.match(BLOCKED_LIST_RE)?.[1]?.trim() || ''
+    let roleName = (e.msg.match(BLOCKED_LIST_RE) || e.msg.match(BLOCKED_LIST_ALT_RE))?.[1]?.trim() || ''
     if (!roleName) return e.reply('[面板图图库管理器]\n请输入正确的角色名')
     roleName = resolveRoleName(roleName)
 

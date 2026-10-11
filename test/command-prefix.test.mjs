@@ -21,15 +21,18 @@ const ROLE = '测试前缀角色'
 /** 每个角色类命令：文件、规则下标、角色名捕获组下标、正面样例（%s = 角色名） */
 const CASES = [
   { file: 'delProfileImg.js', rule: 0, role: 1, cmds: ['#删除%s面板图2', '#星铁删除%s面板图2'] },
-  { file: 'profileImgList.js', rule: 0, role: 1, cmds: ['#%s面板图列表', '#星铁%s面板图列表'] },
-  { file: 'profileImgList.js', rule: 1, role: 1, cmds: ['#%s面板图屏蔽列表', '#星铁%s面板图屏蔽列表'] },
+  // profileImgList 规则 0/1 是屏蔽列表（两种写法），规则 2 才是普通列表（屏蔽必须排在前面）
+  { file: 'profileImgList.js', rule: 2, role: 1, cmds: ['#%s面板图列表', '#星铁%s面板图列表'] },
+  { file: 'profileImgList.js', rule: 0, role: 1, cmds: ['#%s面板图屏蔽列表', '#星铁%s面板图屏蔽列表'] },
+  { file: 'profileImgList.js', rule: 1, role: 1, cmds: ['#%s屏蔽面板图列表', '#星铁%s屏蔽面板图列表'] },
   { file: 'upload.js', rule: 0, role: 1, cmds: ['#添加%s面板图 张三 米游社', '#星铁添加%s面板图 张三 米游社'] },
   { file: 'upload.js', rule: 1, role: 1, cmds: ['#添加%s面板图', '#星铁添加%s面板图'] },
   { file: 'upload.js', rule: 2, role: 1, cmds: ['#替换%s面板图2'] },
   { file: 'moveBlockImg.js', rule: 0, role: 1, cmds: ['#屏蔽%s面板图 2', '#星铁屏蔽%s面板图 2', '#星铁屏蔽%s面板图'] },
   { file: 'moveBlockImg.js', rule: 1, role: 1, cmds: ['#启用%s面板图 2', '#星铁启用%s面板图 2', '#星铁启用%s屏蔽面板图 2'] },
   { file: 'renameProfileImg.js', rule: 0, role: 1, cmds: ['#重命名%s面板图2 张三 米游社', '#星铁重命名%s面板图2 张三 米游社'] },
-  { file: 'visualize.js', rule: 0, role: 1, cmds: ['#%s面板图可视化', '#星铁%s面板图可视化'] }
+  // visualize 规则 0~2 是屏蔽写法，规则 3 才是普通「面板图可视化」（屏蔽必须排在前面）
+  { file: 'visualize.js', rule: 3, role: 1, cmds: ['#%s面板图可视化', '#星铁%s面板图可视化'] }
 ]
 
 const rules = {}
@@ -69,7 +72,7 @@ check('替换命令保持原样：`#星铁替换…` 不匹配（走 `#替换…
   !replaceReg.test(`#星铁替换${ROLE}面板图2`))
 
 // 列表 / 可视化是泛捕获命令（角色名交给别名解析兜底），这里只钉「不把前缀词从角色名里剥掉」
-const listHit = `#星穹铁道${ROLE}面板图列表`.match(rules['profileImgList.js#0'])
+const listHit = `#星穹铁道${ROLE}面板图列表`.match(rules['profileImgList.js#2'])
 check('列表命令：非归一前缀词留在角色名里（不会静默吞掉）',
   listHit?.[1]?.trim() === `星穹铁道${ROLE}`, `捕获=${listHit?.[1]?.trim()}`)
 

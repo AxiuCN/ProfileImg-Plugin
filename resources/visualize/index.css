@@ -6,6 +6,25 @@ body {
   width: 1000px;
 }
 
+/* 标题行：标题 +（屏蔽页的）已屏蔽标记
+   标记与标题同字体同字号，避免大字体标题旁挂小号标签 */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.title-row .badge-warn {
+  font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 2px;
+  height: 54px;
+  padding: 0 20px;
+  border-radius: 27px;
+}
+
 .ban-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

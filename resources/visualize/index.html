@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>角色图片可视化 - {{ roleName }}</title>
+    <title>{{ title }} - ProfileImg-Plugin</title>
     <link rel="stylesheet" type="text/css" href="{{_res_path}}common/ui.css"/>
     <link rel="stylesheet" type="text/css" href="{{_res_path}}visualize/index.css"/>
 </head>
@@ -13,7 +13,10 @@
     <div class="container">
       <div class="header">
         <div class="header-content-left">
-          <div class="main-title" data-text="{{ roleName }} 面板图可视化">{{ roleName }} 面板图可视化</div>
+          <div class="title-row">
+            <div class="main-title" data-text="{{ title }}">{{ title }}</div>
+            {{ if blocked }}<span class="badge badge-warn">已屏蔽</span>{{ /if }}
+          </div>
           <div class="title-divider">
              <div class="divider-line"></div>
            </div>
@@ -21,7 +24,7 @@
         <div class="header-stats-area">
           <div class="stat-card">
             <div class="stat-block">
-              <span class="stat-label">图片总数</span>
+              <span class="stat-label">{{ if blocked }}屏蔽总数{{ else }}图片总数{{ /if }}</span>
               <div class="stat-value">{{ totalCount }}</div>
             </div>
             {{ if folderSize }}
