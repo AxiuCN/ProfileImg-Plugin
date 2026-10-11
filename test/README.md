@@ -33,7 +33,7 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 | `gallery-index.test.mjs` | 多源索引：源列表（含第三方一层分组展开为 `图库名·gs-character` 等，标签用原始目录名）、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库与临时分组目录，可逆清理） | miao-plugin 配置模板 |
 | `layout-guard.test.mjs` | 布局守卫：legacy 一律拦截、fresh 默认拦截但 `allowFresh` 放行、ready 放行（按当前环境状态分支断言） | miao-plugin 配置模板 |
 | `layout-notice.test.mjs` | 启动布局提示：三个状态（legacy / fresh / srcPending）文案、24h 同状态节流与状态间独立、发送失败不记录（下次重试）、主人不可用不发送（只经 `notifyLayout` 公开入口） | 无 |
-| `status-output.test.mjs` | 状态图数据安全（三种模式渲染数据不回显绝对路径、目录名只有 basename、表头统计与源数量一致、模式语义与空态）、`statSource` 规模口径（平铺跳过 `.git`、分层只算 normal/super、角色/图片计数、目录缺失归零） | 无 |
+| `status-output.test.mjs` | 状态图数据安全（三种模式渲染数据不回显绝对路径、目录名只有 basename、表头统计与源数量一致、模式语义与空态）、第三方分组层级（子文件夹归父图库、父行合计等于子行之和、两位顺序号、图库源计数把子文件夹各算一个、git 夹具验证更新时间截到分钟）、`statSource` 规模口径（平铺跳过 `.git`、分层只算 normal/super、角色/图片计数、目录缺失归零） | 无 |
 | `repo-branch.test.mjs` | 仓库默认分支探测：main / master / 自定义 / 空仓库 / 非仓库回退 | git 可执行文件 |
 | `git-args.test.mjs` | Git 参数安全：分支名含 shell 元字符（`&`）或以 `-` 开头（`--upload-pack` 参数注入）一律拒绝、地址白名单（`-` 开头 / 空值拒绝且不启动 Git）、合法地址与多级分支不误伤、探测不可达地址回退 main、本地 HEAD 非法分支名回退 main | git 可执行文件 |
 | `migrate-run.test.mjs` | **旧布局迁移实跑（沙箱）**：源码复制到 `test/.test-tmp/migrate-run/` 并 chdir，真实执行 `migrateToMultiSrc()`——损坏 junction 仍判 legacy、junction 移除与 default 搬迁/段位规范化、第三方副本清理、`.bak` 屏蔽状态迁移到第三方源（含一层分组与图库名含 `_`）、源内缺文件必须告警、各分组子源写入 `profileImgSrc`、重跑迁移时同名冲突保留 `.conflict` 且不覆盖目标 | 可创建 junction 的平台 |

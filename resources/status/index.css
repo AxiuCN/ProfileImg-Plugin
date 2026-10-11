@@ -30,6 +30,23 @@ body {
   gap: 10px;
 }
 
+/* 读取顺序徽标（profileImgSrc 顺序：默认图库 → 主仓库 → 各第三方图库） */
+.src-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-family: 'Number', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent) 0%, rgba(37, 99, 235, 0.72) 100%);
+}
+
 .src-name {
   font-family: 'NZBZ', 'Microsoft YaHei', sans-serif;
   font-size: 21px;
@@ -69,9 +86,56 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* 同仓库的下级文件夹：缩进挂在父图库行下，便于看出层级与读取顺序 */
+.src-children {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line-strong);
+}
+
+.child-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.child-name {
+  font-family: 'Number', 'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.child-metrics {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* 屏蔽图库：警示色独立区，与普通图库源明显区分 */
 .blocked-card {
   margin-top: 16px;
-  padding: 16px 20px;
+  padding: 18px 22px;
+}
+
+.blocked-card.danger {
+  border-color: rgba(220, 38, 38, 0.32);
+  border-left: 4px solid var(--error-text-color);
+  background: var(--error-bg-color);
+}
+
+.blocked-card.danger .src-name,
+.blocked-card.danger .metric-value,
+.blocked-card.danger .version-line .sha {
+  color: var(--error-text-color);
 }
 
 .blocked-card.muted {

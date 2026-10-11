@@ -6,6 +6,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { mod, checker, installFrameworkStubs, ensureTmpDir } from './_helper.mjs'
 
 installFrameworkStubs()
@@ -33,8 +34,9 @@ for (const mode of ['overall', 'main', 'blocked']) {
   check(`状态数据（${mode}）未登记目录只给名字`,
     data.unregistered.every(item => item.name && !/[\\/]/.test(item.name)))
   check(`状态数据（${mode}）表头统计与源数量一致`,
-    data.stats[0].value === data.sources.length,
-    `stats[0]=${data.stats[0].value} sources=${data.sources.length}`)
+    data.stats[0].value === data.sourceCount &&
+    data.sourceCount === data.sources.reduce((n, s) => n + (s.children.length || 1), 0),
+    `stats[0]=${data.stats[0].value} sourceCount=${data.sourceCount}`)
 }
 
 // ---- 2. 模式语义 ----
@@ -85,5 +87,46 @@ check('分层源角色数 / 图片数', tier.roles === 2 && tier.images === 2, J
 // ---- 5. 目录不存在时归零 ----
 const empty = statSource({ kind: 'main', label: '空仓库', dir: path.join(tmp, 'nope'), level: 'tier' })
 check('目录不存在 → 全零', empty.roles === 0 && empty.images === 0 && empty.size === 0)
+
+// ---- 6. 第三方分组：同仓库子文件夹归到父图库下，父行合计 + 更新时间 ----
+const groupDir = path.join(tmp, 'tp-group-src')
+fs.rmSync(groupDir, { recursive: true, force: true })
+fs.mkdirSync(path.join(groupDir, 'gs-character', '角色A'), { recursive: true })
+fs.mkdirSync(path.join(groupDir, 'sr-character', '角色B'), { recursive: true })
+fs.writeFileSync(path.join(groupDir, 'gs-character', '角色A', 'a.webp'), Buffer.alloc(100))
+fs.writeFileSync(path.join(groupDir, 'sr-character', '角色B', 'b.webp'), Buffer.alloc(300))
+
+// 建 git 仓库并打一个固定时间的提交：验证第三方图库的「更新时间」
+const hasGit = spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0
+if (hasGit) {
+  const gitOpt = { cwd: groupDir, encoding: 'utf8' }
+  spawnSync('git', ['init'], gitOpt)
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A'], gitOpt)
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'init'], {
+    ...gitOpt,
+    env: { ...process.env, GIT_AUTHOR_DATE: '2026-01-02T03:04:05+08:00', GIT_COMMITTER_DATE: '2026-01-02T03:04:05+08:00' }
+  })
+}
+
+const grouped = buildStatusData({ mode: 'overall', thirdParty: [{ name: '测试图库', dir: groupDir, enabled: true }] })
+const parent = grouped.sources.find(s => s.label === '测试图库')
+check('第三方分组：子文件夹归到父图库条目下',
+  parent?.children?.length === 2, JSON.stringify(parent?.children?.map(c => c.label)))
+check('第三方分组：父行合计等于子行之和',
+  !!parent &&
+  parent.roles === parent.children.reduce((n, c) => n + c.roles, 0) &&
+  parent.images === parent.children.reduce((n, c) => n + c.images, 0),
+  JSON.stringify({ roles: parent?.roles, children: parent?.children?.map(c => c.roles) }))
+check('第三方分组：父条目带仓库目录名与两位顺序号',
+  parent?.dirName === 'tp-group-src' && /^\d{2}$/.test(String(parent?.order)),
+  `${parent?.dirName} / ${parent?.order}`)
+check('图库源计数：分组子文件夹各算一个',
+  grouped.sourceCount === grouped.sources.reduce((n, s) => n + (s.children.length || 1), 0) &&
+  grouped.stats[0].value === grouped.sourceCount,
+  `sourceCount=${grouped.sourceCount} stats[0]=${grouped.stats[0].value}`)
+check('第三方图库更新时间（截到分钟）',
+  !hasGit || parent?.version?.updatedAt === '2026-01-02 03:04', String(parent?.version?.updatedAt))
+check('带分组夹具后仍不回显绝对路径',
+  !JSON.stringify(grouped).includes('tp-group-src' + path.sep) && !/[A-Za-z]:[\\/]/.test(JSON.stringify(grouped)))
 
 finish()

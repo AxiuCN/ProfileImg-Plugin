@@ -38,8 +38,10 @@
         {{each sources s}}
         <div class="src-card card">
           <div class="src-head">
+            <span class="src-order">{{s.order}}</span>
             <span class="src-name">{{s.label}}</span>
             <span class="badge {{s.badge}}">{{s.kindLabel}}</span>
+            {{if s.children.length}}<span class="badge badge-count">{{s.children.length}} 个文件夹</span>{{/if}}
           </div>
           <div class="src-dir">{{s.dirName}}</div>
           <div class="src-body">
@@ -53,14 +55,24 @@
                 <div class="metric-label">图片</div>
               </div>
               <div class="metric">
-                <div class="metric-value">{{s.size}}</div>
+                <div class="metric-value">{{s.sizeText}}</div>
                 <div class="metric-label">体积</div>
               </div>
             </div>
             {{if s.version}}
-            <div class="version-line">版本 <span class="sha">{{s.version.sha}}</span> · {{s.version.date}}</div>
+            <div class="version-line">版本 <span class="sha">{{s.version.sha}}</span> · 更新 {{s.version.updatedAt}}</div>
             {{/if}}
           </div>
+          {{if s.children.length}}
+          <div class="src-children">
+            {{each s.children c}}
+            <div class="child-row">
+              <span class="child-name">{{c.label}}</span>
+              <span class="child-metrics">{{c.roles}} 角色 · {{c.images}} 图片 · {{c.sizeText}}</span>
+            </div>
+            {{/each}}
+          </div>
+          {{/if}}
         </div>
         {{/each}}
       </div>
@@ -72,10 +84,10 @@
 
       {{if blocked}}
         {{if blocked.installed}}
-        <div class="blocked-card card">
+        <div class="blocked-card card danger">
           <div class="src-head">
             <span class="src-name">屏蔽图库</span>
-            <span class="badge badge-warn">已安装</span>
+            <span class="badge badge-danger">已安装</span>
           </div>
           <div class="src-body">
             <div class="metrics">
@@ -93,7 +105,7 @@
               </div>
             </div>
             {{if blocked.version}}
-            <div class="version-line">版本 <span class="sha">{{blocked.version.sha}}</span> · {{blocked.version.date}}</div>
+            <div class="version-line">版本 <span class="sha">{{blocked.version.sha}}</span> · 更新 {{blocked.version.updatedAt}}</div>
             {{/if}}
           </div>
         </div>

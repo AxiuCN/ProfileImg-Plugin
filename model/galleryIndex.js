@@ -24,7 +24,8 @@ const IMG_RE = /\.(webp|png|jpg|jpeg)$/i
  * 每个可直读子目录各自成为一个平铺源；主仓库 / 默认图库保持单源
  * @param {object} [opts]
  * @param {Array<{name: string, dir: string, enabled?: boolean}>} [opts.thirdParty] - 指定第三方列表（套件用）
- * @returns {Array<{kind: 'default'|'main'|'thirdParty', label: string, dir: string, level: string, repoId?: number}>}
+ * @returns {Array<{kind: 'default'|'main'|'thirdParty', label: string, dir: string, level: string, repoId?: number, parent?: string, groupName?: string}>}
+ *   `parent` / `groupName` 只出现在第三方分组子源上（`parent` 为所属图库名），供状态图把「同仓库不同文件夹」归到父图库下
  */
 export function getSources (opts = {}) {
   const sources = [{ kind: 'default', label: '默认图库', dir: MIAO_PROFILE_LINK, level: 'tier' }]
@@ -41,7 +42,8 @@ export function getSources (opts = {}) {
         kind: 'thirdParty',
         label: d.groupName ? `${tp.name}·${d.groupName}` : tp.name,
         dir: d.dir,
-        level: d.level
+        level: d.level,
+        ...(d.groupName ? { parent: tp.name, groupName: d.groupName } : {})
       })
     }
   }
