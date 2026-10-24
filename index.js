@@ -3,7 +3,7 @@ import path from 'node:path'
 import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 
-import { buildAliasMap, watchCustomAliasFiles } from './modules/alias.js'
+import { buildAliasMap, watchCustomAliasFiles, getAliasSource } from './modules/alias.js'
 import { buildProMap } from './modules/proMap.js'
 import { initMap } from './model/mapJson.js'
 import { GALLERY_ROOT, PROFILE_DIR, PROFILE_IMG_DIR } from './components/constants.js'
@@ -29,12 +29,21 @@ if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
 }
 
 // ============================================================
-// 2. 构建角色别名映射表 + Pro 角色映射（必须在加载 apps 之前）
+// 2. 角色别名来源 + Pro 角色映射（必须在加载 apps 之前）
+//    别名来源优先级：Atlas-Plugin 门面 → 本地兜底（watcher 二选一，见 modules/alias.js 文件头）
 // ============================================================
-buildAliasMap()
+const aliasSource = getAliasSource()
+if (aliasSource.kind === 'atlas' && aliasSource.keys > 0) {
+  logger.info(`[ProfileImg-Plugin] 别名来源：Atlas（v${aliasSource.version} / ${aliasSource.keys} 键）`)
+} else {
+  buildAliasMap()
+  // 监听 miao-plugin 自定义别名 cfg，变更自动重建别名表（热更新）
+  watchCustomAliasFiles()
+  logger.info(aliasSource.kind === 'atlas'
+    ? '[ProfileImg-Plugin] 别名来源：本地兜底（Atlas 别名表为空）'
+    : '[ProfileImg-Plugin] 别名来源：本地兜底（Atlas 不可用）')
+}
 buildProMap()
-// 监听 miao-plugin 自定义别名 cfg，变更自动重建别名表（热更新）
-watchCustomAliasFiles()
 
 // ============================================================
 // 3. 确保图库基础目录结构存在

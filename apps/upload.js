@@ -108,7 +108,7 @@ export class UploadWithCompress extends plugin {
     // 解析角色名
     const rawRole = e.msg.match(/(?:上传|添加)(.+?)(?:面板图)/)?.[1]?.trim()
       || e.msg.replace(/#|面板图|上传|添加/g, '').trim()
-    const roleName = resolveRoleName(rawRole)
+    const roleName = resolveRoleName(rawRole, e.game)
 
     // 新角色：自动分配主仓库（map.json 统一路由）
     const map = loadMap()
@@ -238,7 +238,7 @@ export class UploadWithCompress extends plugin {
 
     const match = e.msg.match(/^#?\s*替换(.+?)(?:面板图)\s*(\d+)\s*$/)
     if (!match) return true
-    const roleName = resolveRoleName(match[1].trim())
+    const roleName = resolveRoleName(match[1].trim(), e.game)
     const n = parseInt(match[2], 10)
 
     const target = findImageByN(roleName, 'normal', n)

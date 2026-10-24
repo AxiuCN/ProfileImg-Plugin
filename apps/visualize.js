@@ -90,7 +90,7 @@ export class Visualize extends plugin {
     const cmd = this._parse(e.msg)
     if (!cmd) return true
 
-    const roleName = resolveRoleName(cmd.roleName)
+    const roleName = resolveRoleName(cmd.roleName, e.game)
     if (!roleName) {
       return e.reply('[面板图图库管理器]\n请输入正确的角色名')
     }

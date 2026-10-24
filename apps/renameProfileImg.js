@@ -45,7 +45,7 @@ export class RenameProfileImg extends plugin {
     const source = match[4].trim()
     const modifications = (match[5] || '').trim()
 
-    const roleName = resolveRoleName(rawRole)
+    const roleName = resolveRoleName(rawRole, e.game)
 
     const target = findImageByN(roleName, 'normal', seqNum)
     if (!target) {

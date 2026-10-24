@@ -45,7 +45,7 @@ export class DelProfileImg extends plugin {
     const match = e.msg.match(DELETE_RE)
     if (!match) return true
 
-    const roleName = resolveRoleName(match[1].trim())
+    const roleName = resolveRoleName(match[1].trim(), e.game)
     const n = parseInt(match[2], 10)
 
     const target = findImageByN(roleName, 'normal', n)

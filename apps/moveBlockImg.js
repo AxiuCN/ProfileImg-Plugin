@@ -46,7 +46,7 @@ export class MoveBlockImg extends plugin {
     }
     const match = e.msg.match(BLOCK_RE)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #屏蔽角色名面板图 序号')
-    const roleName = resolveRoleName(match[1].trim())
+    const roleName = resolveRoleName(match[1].trim(), e.game)
     const n = parseInt(match[2]) || 1
 
     const target = findImageByN(roleName, 'normal', n)
@@ -107,7 +107,7 @@ export class MoveBlockImg extends plugin {
     }
     const match = e.msg.match(UNBLOCK_RE)
     if (!match) return e.reply('[面板图图库管理器]指令格式错误，请使用 #启用角色名面板图 序号')
-    const roleName = resolveRoleName(match[1].trim())
+    const roleName = resolveRoleName(match[1].trim(), e.game)
     const n = parseInt(match[2]) || 1
 
     // ① 默认图库内的 .bak（段位 10001+ 保留原序号）

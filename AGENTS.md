@@ -7,6 +7,7 @@ This file provides project-level guidance to AI coding agents (DSH) when working
 ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图库源（默认图库 / 各主仓库 / 第三方只读源 + 屏蔽图库），ESM（`"type": "module"`），依赖 `sharp` 与 `yaml`。
 
 - **依赖 miao-plugin 2.5.20+** — 图库通过 `profileImgSrc`（`miao-plugin/config/profile.js`）注册给 miao 读；`#预览` 另需 miao 的面板模板与内部模块
+- **可选依赖 Atlas-Plugin** — 角色别名来源优先用其 `modules/aliasApi.js` 门面（未安装 / 表为空则本地兜底），见 [`docs/模块-别名.md`](docs/模块-别名.md)
 - **单入口** — 有 `index.js` 时框架不注册文件 watcher（无热重载），任何 `.js` / 模板改动都要**完整重启** Yunzai
 - **文档入库范围** — `AGENTS.md` 与 `docs/` **入库**，与代码一同提交；`docs/private/` 放本机路径与部署（**不入库**，新克隆上不存在），因此入库文档只写占位（`<bot根>` / `<插件根>`）且不得依赖它
 
@@ -38,6 +39,7 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 | 配置三层、第三方源结构探测、登记流程、路径约定、成员权限、命名格式、map.json、存储路径 | [`docs/图库源与配置.md`](docs/图库源与配置.md) |
 | UI 基调（`ui.css` / 宽度 / 字号）、三套出图页面（帮助 / 状态 / 可视化）、页脚版权行 | [`docs/UI-出图.md`](docs/UI-出图.md) |
 | 面板图预览：虚拟面板、占位骨架、miao 渲染契约 | [`docs/模块-预览.md`](docs/模块-预览.md) |
+| 角色别名：Atlas 门面优先、本地兜底冻结、watcher 二选一、两条路径差异 | [`docs/模块-别名.md`](docs/模块-别名.md) |
 | 初始化 / 迁移 / 更新 / 锁与并发 / Git 规范 / 待办清单 | [`docs/维护与迁移.md`](docs/维护与迁移.md) |
 | 盘符、部署流程、出图 POC 做法 | `docs/private/`（不入库） |
 
@@ -73,6 +75,7 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 15. **重启提示统一 `restartHint()`**（只说「重启 Yunzai」）；同步结果统一 `buildSyncReport()`
 16. **列表合并转发上限 20 张**；可视化每页 20 张（4 列 × 5 行）
 17. **锅巴 schema 每个大 label（SOFT_GROUP_BEGIN）一个文件** — `guoba/index.js` 只做拼装；`defSet/config.yaml` 的每个 `${变量}` 必须在 `guoba/index.js` 的 defaultValues 里有对应项
+18. **别名来源 Atlas 优先** — `modules/alias.js` 先走 Atlas 门面（**动态 import + try/catch**，静态 import 会让未装 Atlas 的机器整插件加载失败）；未命中 / 不可用才用本地冻结实现；**watcher 二选一**（Atlas 可用时不挂本地那套）；`resolveRoleName(name, game)` 的 game 由命令侧传（`#预览` 用 `cmd.game`，其余用 `e.game`）
 
 ## 测试
 
@@ -95,10 +98,11 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 | `status-output` | 状态图数据安全（不回显绝对路径等）+ 第三方分组层级与更新时间（git 夹具）+ `statSource` 口径 |
 | `repo-branch` / `git-args` | 默认分支探测 / Git 参数安全（含 `-` 开头拒绝） |
 | `third-party-path` / `unregistered-repo` | 第三方路径解析与防覆盖 / 未登记目录发现与补登记 |
+| `alias-fallback` | 别名兜底（Atlas 移交后冻结，不依赖 Atlas）：预设别名 / 精确 / 大小写不敏感 / 模糊唯一命中 / 未知原样返回、对外入口（Atlas 与兜底同答案、空输入）、`getAliasSource()` 摘要、cfg 覆盖预设与坏行跳过（仅 cfg 原本不存在时临时夹具） |
 | `smoke-imports` | 全模块可加载 + 每个 app 恰好一个 class 且规则非空 + 关键语义（argv、锁、取号、预览、版权行） |
 
 约定：命名 `<主题>.test.mjs`；路径一律经 `test/_helper.mjs` 的 `pluginRoot` / `mod()` 推导，**禁止裸相对字面量与盘符绝对路径**；框架全局用 `installFrameworkStubs()` 的内存实现；临时产物只写 `test/.test-tmp/`（已 gitignore）；**断言必须能真的失败**——新增套件应临时还原被修的代码确认转红后再入库。细节见 `test/README.md`。
 
 ## 待办
 
-见 [`docs/维护与迁移.md`](docs/维护与迁移.md) 末节（阶段 3：迁移能力退役时点、第三方寻址增强、别名解析改 miao API、map.json 降级、资源与旧样式清理）。
+见 [`docs/维护与迁移.md`](docs/维护与迁移.md) 末节（阶段 3：迁移能力退役时点、第三方寻址增强、map.json 降级、资源与旧样式清理；别名来源已移交 Atlas，见 [`docs/模块-别名.md`](docs/模块-别名.md)）。

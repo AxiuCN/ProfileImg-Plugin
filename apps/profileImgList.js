@@ -37,7 +37,7 @@ export class ProfileImgList extends plugin {
     if (!(await guardLayout(e))) return true
 
     const match = e.msg.match(LIST_RE)
-    const roleName = resolveRoleName(match?.[1]?.trim() || '')
+    const roleName = resolveRoleName(match?.[1]?.trim() || '', e.game)
 
     if (!roleName) {
       return e.reply('[面板图图库管理器]\n请输入正确的角色名')
@@ -56,7 +56,7 @@ export class ProfileImgList extends plugin {
 
     let roleName = (e.msg.match(BLOCKED_LIST_RE) || e.msg.match(BLOCKED_LIST_ALT_RE))?.[1]?.trim() || ''
     if (!roleName) return e.reply('[面板图图库管理器]\n请输入正确的角色名')
-    roleName = resolveRoleName(roleName)
+    roleName = resolveRoleName(roleName, e.game)
 
     const blocked = getBlockedAggregated(roleName)
     if (blocked.length === 0) {

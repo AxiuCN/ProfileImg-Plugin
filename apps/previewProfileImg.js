@@ -46,7 +46,7 @@ export class PreviewProfileImg extends plugin {
     const cmd = parsePreviewCommand(e.msg)
     if (!cmd) return true
 
-    const roleName = resolveRoleName(cmd.roleName)
+    const roleName = resolveRoleName(cmd.roleName, cmd.game)
     // 先自己校验序号：miao 取不到序号时会静默回退随机图，预览会张冠李戴
     if (!findImageByN(roleName, 'normal', cmd.n)) {
       return e.reply([

@@ -5,7 +5,51 @@ import { getRepoDir } from '../components/constants.js'
 import { getDefaultDir } from '../model/galleryConfig.js'
 import { normalizeRoleName } from './proMap.js'
 
-/** 别名映射表，启动时从 miao-plugin 的 alias.js + 自定义别名 cfg 构建 */
+/**
+ * 角色别名解析 —— 来源优先级：Atlas 门面 → 本地兜底
+ *
+ * **别名来源已移交 Atlas-Plugin**（门面 `Atlas-Plugin/modules/aliasApi.js`，契约版本 `ALIAS_API_VERSION`）：
+ * - 主路径：`Atlas-Plugin/modules/aliasApi.js` 的 `resolveAlias(name, gameId)`（契约版本 1，永不抛错）
+ *   Atlas 表 3077 键，含武器/圣遗物/ZZZ、多值、六种间隔号归一；本插件只取「对侧候选名」并用
+ *   自己的**图库目录存在性**裁决最终角色名（门面不提供也不该提供目录语义）。
+ * - 兜底路径：`resolveRoleNameLocal()` —— 本文件的本地实现（解析 miao `meta-{gs,sr}/character/alias.js`
+ *   与两个自定义 cfg），**保留、不改语义、不再维护**，仅当 Atlas 未安装 / 门面缺失 / 别名表为空时启用。
+ * - **watcher 二选一**：Atlas 可用时不调用 `watchCustomAliasFiles()`（Atlas 首次 `loadAliasMap()` 自己挂），
+ *   否则才启用本地那套，避免同一批 cfg 被监听两次。
+ *
+ * 两条路径**不等价**（降级的固有代价）：兜底表只有角色名（1895 条）、键只 `toLowerCase`；
+ * Atlas 路径对 `•` / `·` / 无分隔号三种写法等价，且命中面更大。详见 `docs/模块-别名.md`。
+ */
+
+/**
+ * Atlas 别名门面（动态 import：Atlas 未装 / 被禁用时静态 import 会让本插件整个加载失败，兜底就没机会）
+ * `AliasLoader` 模块顶层无副作用，import 本身安全；真正建表与挂 watcher 发生在首次 `loadAliasMap()`
+ */
+let atlas = null
+try {
+  atlas = await import('../../Atlas-Plugin/modules/aliasApi.js')
+} catch (e) {
+  atlas = null
+}
+
+/** 本插件的游戏标识（miao 口径）→ Atlas gameId */
+const ATLAS_GAME = { gs: 'gi', sr: 'hsr' }
+
+/**
+ * 别名来源摘要（启动日志与排障用）
+ * @returns {{ kind: 'atlas'|'local', version?: number, keys?: number }}
+ */
+export function getAliasSource() {
+  if (!atlas) return { kind: 'local' }
+  try {
+    const status = atlas.getAliasStatus()
+    return { kind: 'atlas', version: status.version, keys: status.keys }
+  } catch (e) {
+    return { kind: 'local' }
+  }
+}
+
+/** 别名映射表（本地兜底用），启动时从 miao-plugin 的 alias.js + 自定义别名 cfg 构建 */
 let ALIAS_MAP = new Map()
 
 // 自定义别名配置文件（miao-plugin config/，数据单一来源：增删走 #喵喵别名* 命令，本插件只读）
@@ -141,14 +185,14 @@ function roleDirExists(roleName) {
 }
 
 /**
- * 解析角色名，支持别名
+ * 解析角色名（本地兜底实现，**已冻结**：别名来源移交 Atlas 后仅作降级路径，不再维护）
+ *
  * 四级回退：别名 Map → 精确匹配 → 大小写不敏感 → 模糊匹配
- * 别名优先：miao 别名（预设 + 自定义合并表）权威性高于图库目录名，
- * 防止「别名与目录撞名」时残留/空目录屏蔽别名（如 晴歌 → 知更鸟•晴歌）
+ * 别名优先：别名表权威性高于图库目录名，防止「别名与目录撞名」时残留/空目录屏蔽别名（如 晴歌 → 知更鸟•晴歌）
  * @param {string} input - 用户输入的角色名
  * @returns {string} 官方角色名，若解析失败则返回原输入
  */
-export function resolveRoleName(input) {
+export function resolveRoleNameLocal(input) {
   let result = input
   const lowerInput = input.toLowerCase()
 
@@ -188,7 +232,38 @@ export function resolveRoleName(input) {
   return normalizeRoleName(result)
 }
 
-// ---- 自定义别名热更新（miao-plugin cfg 文件变更后重建别名表） ----
+/**
+ * 解析角色名，支持别名（对外唯一入口）
+ *
+ * 顺序：Atlas 门面（对侧候选 → 图库目录存在性裁决）→ 本地四级回退
+ * @param {string} input - 用户输入的角色名
+ * @param {'gs'|'sr'} [game] - 已知游戏时传入（`#预览` 的 `*` / `#星铁` 前缀、`e.game`）；缺省不按游戏过滤
+ * @returns {string} 官方角色名，若解析失败则返回原输入
+ */
+export function resolveRoleName(input, game) {
+  const name = String(input ?? '').trim()
+  if (!name) return ''
+
+  // 1. Atlas 门面：candidates 是「对侧候选名」（表双向、不含方向），逐个用图库目录存在性裁决
+  if (atlas) {
+    try {
+      const { candidates } = atlas.resolveAlias(name, ATLAS_GAME[game])
+      for (const candidate of candidates) {
+        if (candidate && candidate !== name && roleDirExists(candidate)) {
+          return normalizeRoleName(candidate)
+        }
+      }
+    } catch (e) {
+      logger.warn('[ProfileImg-Plugin] Atlas 别名门面调用异常，改用本地兜底:', e.message)
+    }
+  }
+
+  // 2. 本地兜底（Atlas 不可用 / 别名表为空 / 未命中）
+  return resolveRoleNameLocal(name)
+}
+
+// ---- 自定义别名热更新（miao-plugin cfg 文件变更后重建别名表）----
+// 注意：Atlas 可用时不启用本监听（watcher 二选一，见文件头）
 
 let reloadTimer = null
 let cfgDirWatcher = null
@@ -210,7 +285,7 @@ function scheduleReload () {
 }
 
 /**
- * 监听 miao-plugin 自定义别名 cfg 文件，变更时自动重建别名表
+ * 监听 miao-plugin 自定义别名 cfg 文件，变更时自动重建别名表（**仅本地兜底路径使用**）
  * 双监听：目录级 fs.watch（主监听，感知文件首次创建）+ 文件级 fs.watchFile（兜底）
  * 任一监听失败均降级/跳过，不影响插件其余功能
  */
