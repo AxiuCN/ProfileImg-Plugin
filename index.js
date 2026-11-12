@@ -32,11 +32,11 @@ if (!fs.existsSync(configFile) && fs.existsSync(exampleFile)) {
 // 2. 角色别名来源 + Pro 角色映射（必须在加载 apps 之前）
 //    别名来源优先级：Atlas-Plugin 门面 → 本地兜底（watcher 二选一，见 modules/alias.js 文件头）
 // ============================================================
+buildAliasMap()
 const aliasSource = getAliasSource()
 if (aliasSource.kind === 'atlas' && aliasSource.keys > 0) {
   logger.info(`[ProfileImg-Plugin] 别名来源：Atlas（v${aliasSource.version} / ${aliasSource.keys} 键）`)
 } else {
-  buildAliasMap()
   // 监听 miao-plugin 自定义别名 cfg，变更自动重建别名表（热更新）
   watchCustomAliasFiles()
   logger.info(aliasSource.kind === 'atlas'

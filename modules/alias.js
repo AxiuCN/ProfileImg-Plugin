@@ -1,8 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getRepoForChar, getActiveRepoIds } from '../model/mapJson.js'
-import { getRepoDir } from '../components/constants.js'
-import { getDefaultDir } from '../model/galleryConfig.js'
+import { getSources, resolveRoleDirectory } from '../model/galleryIndex.js'
 import { normalizeRoleName } from './proMap.js'
 
 /**
@@ -13,7 +11,7 @@ import { normalizeRoleName } from './proMap.js'
  *   Atlas 表 3077 键，含武器/圣遗物/ZZZ、多值、六种间隔号归一；本插件只取「对侧候选名」并用
  *   自己的**图库目录存在性**裁决最终角色名（门面不提供也不该提供目录语义）。
  * - 兜底路径：`resolveRoleNameLocal()` —— 本文件的本地实现（解析 miao `meta-{gs,sr}/character/alias.js`
- *   与两个自定义 cfg），**保留、不改语义、不再维护**，仅当 Atlas 未安装 / 门面缺失 / 别名表为空时启用。
+ *   与两个自定义 cfg），用于已知标准名判定和 Atlas 未命中时的兜底，目录判断复用多源索引。
  * - **watcher 二选一**：Atlas 可用时不调用 `watchCustomAliasFiles()`（Atlas 首次 `loadAliasMap()` 自己挂），
  *   否则才启用本地那套，避免同一批 cfg 被监听两次。
  *
@@ -51,6 +49,7 @@ export function getAliasSource() {
 
 /** 别名映射表（本地兜底用），启动时从 miao-plugin 的 alias.js + 自定义别名 cfg 构建 */
 let ALIAS_MAP = new Map()
+let localAliasAtlasVersion = -1
 
 // 自定义别名配置文件（miao-plugin config/，数据单一来源：增删走 #喵喵别名* 命令，本插件只读）
 const CUSTOM_ALIAS_FILES = [
@@ -144,27 +143,13 @@ export function buildAliasMap() {
  */
 function getAllCharDirs() {
   const allDirs = new Set()
-  try {
-    for (const repoId of getActiveRepoIds()) {
-      const normalDir = path.join(getRepoDir(repoId), 'normal-character')
-      if (!fs.existsSync(normalDir)) continue
-      const chars = fs.readdirSync(normalDir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => d.name)
-      for (const c of chars) allDirs.add(c)
-    }
-    const defaultDir = getDefaultDir()
-    if (defaultDir) {
-      const normalDir = path.join(defaultDir, 'normal-character')
-      if (fs.existsSync(normalDir)) {
-        const chars = fs.readdirSync(normalDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-          .map(d => d.name)
-        for (const c of chars) allDirs.add(c)
+  for (const source of getSources()) {
+    const normalDir = source.level === 'flat' ? source.dir : path.join(source.dir, 'normal-character')
+    try {
+      for (const dir of fs.readdirSync(normalDir, { withFileTypes: true })) {
+        if (dir.isDirectory()) allDirs.add(dir.name)
       }
-    }
-  } catch (e) {
-    logger.warn('[ProfileImg-Plugin] 扫描角色目录失败:', e.message)
+    } catch { /* 当前源不可读时继续其余源 */ }
   }
   return [...allDirs]
 }
@@ -177,15 +162,11 @@ function getAllCharDirs() {
  */
 function roleDirExists(roleName) {
   const dirName = normalizeRoleName(roleName)
-  const repoId = getRepoForChar(dirName)
-  if (fs.existsSync(path.join(getRepoDir(repoId), 'normal-character', dirName))) return true
-  const defaultDir = getDefaultDir()
-  if (defaultDir && fs.existsSync(path.join(defaultDir, 'normal-character', dirName))) return true
-  return false
+  return getSources().some(source => !!resolveRoleDirectory(source, 'normal', dirName))
 }
 
 /**
- * 解析角色名（本地兜底实现，**已冻结**：别名来源移交 Atlas 后仅作降级路径，不再维护）
+ * 解析角色名（本地兜底实现，同时提供已知标准名判定）
  *
  * 四级回退：别名 Map → 精确匹配 → 大小写不敏感 → 模糊匹配
  * 别名优先：别名表权威性高于图库目录名，防止「别名与目录撞名」时残留/空目录屏蔽别名（如 晴歌 → 知更鸟•晴歌）
@@ -242,11 +223,19 @@ export function resolveRoleNameLocal(input) {
  */
 export function resolveRoleName(input, game) {
   const name = String(input ?? '').trim()
-  if (!name) return ''
+  if (!name || name === '.' || name === '..' || /[\\/]/.test(name)) return ''
 
   // 1. Atlas 门面：candidates 是「对侧候选名」（表双向、不含方向），逐个用图库目录存在性裁决
   if (atlas) {
     try {
+      const version = atlas.getAliasVersion()
+      if (version !== localAliasAtlasVersion) {
+        buildAliasMap()
+        localAliasAtlasVersion = version
+      }
+      // 标准名判定也读取当前 cfg 覆盖，随 Atlas 的重建版本一起失效。
+      if (ALIAS_MAP.get(name.toLowerCase()) === name && roleDirExists(name)) return normalizeRoleName(name)
+
       const { candidates } = atlas.resolveAlias(name, ATLAS_GAME[game])
       for (const candidate of candidates) {
         if (candidate && candidate !== name && roleDirExists(candidate)) {

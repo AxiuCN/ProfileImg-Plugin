@@ -3,7 +3,7 @@ import path from 'node:path'
 import { BLOCKED_REPO_DIR } from '../components/constants.js'
 import { getDirSize } from '../components/format.js'
 import { sortPanelFiles, resolveNRange, parseFilename } from '../components/panelUtils.js'
-import { listRoleBlocked } from './galleryIndex.js'
+import { listRoleBlocked, resolveRoleDirectory } from './galleryIndex.js'
 
 /** 非标准文件在屏蔽列表中的 display n 兜底池（不与任何段位冲突） */
 const BAK_DISPLAY_BASE = 9999999
@@ -55,8 +55,8 @@ export function getBlockedAggregated(roleName) {
   const result = []
 
   // 1. blocked-character 目录
-  const blockedDir = getBlockedDir(roleName)
-  if (fs.existsSync(blockedDir)) {
+  const blockedDir = resolveRoleDirectory({ dir: BLOCKED_REPO_DIR, level: 'flat' }, 'normal', roleName)
+  if (blockedDir) {
     const imgs = fs.readdirSync(blockedDir)
       .filter(f => /\.(webp|png|jpg|jpeg|gif)$/i.test(f) && fs.statSync(path.join(blockedDir, f)).isFile())
     const sorted = sortPanelFiles(imgs, roleName)

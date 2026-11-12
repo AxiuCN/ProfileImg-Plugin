@@ -57,9 +57,18 @@ export function getSources (opts = {}) {
  * @param {string} role
  * @returns {string} 目录绝对路径（不可用时空串）
  */
-function roleDirOf (source, type, role) {
-  if (source.level === 'flat') return type === 'normal' ? path.join(source.dir, role) : ''
-  return path.join(source.dir, `${type}-character`, role)
+export function resolveRoleDirectory (source, type, role) {
+  if (!role || (source.level === 'flat' && type !== 'normal')) return ''
+  const dir = source.level === 'flat'
+    ? path.join(source.dir, role)
+    : path.join(source.dir, `${type}-character`, role)
+  try {
+    const relative = path.relative(fs.realpathSync(source.dir), fs.realpathSync(dir))
+    if (!relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith('..' + path.sep)) return ''
+    return dir
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -75,7 +84,7 @@ export function listRoleImages (roleName, type = 'normal') {
   const role = normalizeRoleName(roleName)
   const out = []
   for (const source of getSources()) {
-    const dir = roleDirOf(source, type, role)
+    const dir = resolveRoleDirectory(source, type, role)
     if (!dir || !fs.existsSync(dir)) continue
     let names = []
     try {
@@ -131,7 +140,7 @@ export function listRoleBlocked (roleName, type = 'normal') {
   const role = normalizeRoleName(roleName)
   const out = []
   for (const source of getSources()) {
-    const dir = roleDirOf(source, type, role)
+    const dir = resolveRoleDirectory(source, type, role)
     if (!dir || !fs.existsSync(dir)) continue
     let names = []
     try {
