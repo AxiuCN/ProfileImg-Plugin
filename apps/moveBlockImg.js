@@ -147,6 +147,7 @@ export class MoveBlockImg extends plugin {
   /** 主图库屏蔽：移入 blocked-character，按空位重排 n */
   _blockMain (e, roleName, target) {
     const blockedDir = getBlockedDir(roleName)
+    if (!blockedDir) return e.reply('[面板图图库管理器]\n角色名无效，无法屏蔽')
     if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true })
 
     // 提取原文件名中"角色名_序号"之后的部分（版权信息 / 扩展名）
@@ -167,6 +168,7 @@ export class MoveBlockImg extends plugin {
   /** 主图库启用：从 blocked-character 移回主图库，按空位重排 n */
   _unblockMain (e, roleName, target) {
     const blockedDir = getBlockedDir(roleName)
+    if (!blockedDir) return e.reply('[面板图图库管理器]\n角色名无效，无法启用')
     if (!fs.existsSync(blockedDir)) return e.reply(`[面板图图库管理器]\n角色${roleName}暂无屏蔽面板图`)
 
     const suffix = this._extractSuffix(target.name, roleName)

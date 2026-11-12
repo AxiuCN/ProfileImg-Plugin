@@ -11,7 +11,7 @@ import { mod, checker, installFrameworkStubs, requireMiaoPlugin, ensureTmpDir } 
 installFrameworkStubs()
 requireMiaoPlugin()
 
-const { listRoleImages, listRoleBlocked, findImageByN, getSources, countSourceImages } =
+const { listRoleImages, listRoleBlocked, findImageByN, getSources, countSourceImages, resolveRoleDirectory } =
   await import(mod('model/galleryIndex.js'))
 const { MIAO_PROFILE_LINK } = await import(mod('components/constants.js'))
 
@@ -85,5 +85,39 @@ check('分组源目录指向子图库',
 const noGroup = getSources({ thirdParty: [{ name: '空', dir: path.join(tmpDir, 'nope'), enabled: true }] })
 check('不可直读的第三方源不进源列表', noGroup.every(s => s.kind !== 'thirdParty') || noGroup.some(s => s.label === '空') === false)
 fs.rmSync(groupRoot, { recursive: true, force: true })
+
+// ---- 角色目录范围：越源的原始输入一律拒绝（resolveRoleDirectory 是唯一读入口）----
+const scopeRoot = path.join(tmpDir, 'scope-root')
+const outsideRoot = path.join(tmpDir, 'scope-outside')
+fs.rmSync(scopeRoot, { recursive: true, force: true })
+fs.rmSync(outsideRoot, { recursive: true, force: true })
+fs.mkdirSync(path.join(scopeRoot, 'normal-character', '琴'), { recursive: true })
+fs.writeFileSync(path.join(scopeRoot, 'normal-character', '琴', 'a.webp'), 'x')
+fs.mkdirSync(outsideRoot, { recursive: true })
+fs.writeFileSync(path.join(outsideRoot, 'sentinel.png'), 'x')
+
+const tierSource = { dir: scopeRoot, level: 'tier' }
+const flatSource = { dir: scopeRoot, level: 'flat' }
+const innerDir = resolveRoleDirectory(tierSource, 'normal', '琴')
+check('源内角色目录可解析', innerDir === path.join(scopeRoot, 'normal-character', '琴'), innerDir)
+check('父目录名被拒绝', resolveRoleDirectory(tierSource, 'normal', '..') === '')
+check('越源相对路径被拒绝', resolveRoleDirectory(tierSource, 'normal', path.join('..', '..', 'scope-outside')) === '')
+check('角色目录不存在时空串', resolveRoleDirectory(tierSource, 'normal', '不存在的角色zz') === '')
+check('平铺源不提供 super 层', resolveRoleDirectory(flatSource, 'super', '琴') === '')
+
+const linkPath = path.join(scopeRoot, 'normal-character', 'SyntheticLink')
+let linkMade = false
+try {
+  if (!fs.existsSync(linkPath)) fs.symlinkSync(outsideRoot, linkPath, 'junction')
+  linkMade = fs.existsSync(linkPath)
+} catch { /* 平台不允许建目录链接 */ }
+if (linkMade) {
+  check('指向源外的目录链接被拒绝', resolveRoleDirectory(tierSource, 'normal', 'SyntheticLink') === '',
+    resolveRoleDirectory(tierSource, 'normal', 'SyntheticLink'))
+} else {
+  console.log('  ⤵ 略过：当前平台/权限不支持创建目录链接')
+}
+fs.rmSync(scopeRoot, { recursive: true, force: true })
+fs.rmSync(outsideRoot, { recursive: true, force: true })
 
 finish()

@@ -30,7 +30,7 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 | `profile-src.test.mjs` | miao `profile.js` 读写：能力探测、模板复制生成、声明段替换保留注释与其他 export、往返一致、追加模式、幂等、边界拒绝；源列表构建：一层分组展开为多个子图库、主仓库不支持分组（记 skipped） | miao-plugin 配置模板 |
 | `migrate-precheck.test.mjs` | 迁移预检：三态判定、报告结构、**预检只读**（miao 配置字节与目录不变） | miao-plugin 配置模板 |
 | `default-segment-name.test.mjs` | default 段位命名：有版权 / 有备注 / 无版权 / 非标准命名的重命名规则、原名「」备注、扩展名与段位号 | 无 |
-| `gallery-index.test.mjs` | 多源索引：源列表（含第三方一层分组展开为 `图库名·gs-character` 等，标签用原始目录名）、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库与临时分组目录，可逆清理） | miao-plugin 配置模板 |
+| `gallery-index.test.mjs` | 多源索引：源列表（含第三方一层分组展开为 `图库名·gs-character` 等，标签用原始目录名）、跨源读取、段位升序、`.bak`/非图片排除、按序号寻址、统计（夹具建在默认图库与临时分组目录，可逆清理）；角色目录范围：`resolveRoleDirectory` 只认源根内的真实路径（`..` / 越源相对路径 / 指向源外的目录链接 / 目录不存在 → 空串，平铺源不提供 super 层） | miao-plugin 配置模板 |
 | `layout-guard.test.mjs` | 布局守卫：legacy 一律拦截、fresh 默认拦截但 `allowFresh` 放行、ready 放行（按当前环境状态分支断言） | miao-plugin 配置模板 |
 | `layout-notice.test.mjs` | 启动布局提示：三个状态（legacy / fresh / srcPending）文案、24h 同状态节流与状态间独立、发送失败不记录（下次重试）、主人不可用不发送（只经 `notifyLayout` 公开入口） | 无 |
 | `status-output.test.mjs` | 状态图数据安全（三种模式渲染数据不回显绝对路径、目录名只有 basename、表头统计与源数量一致、模式语义与空态）、第三方分组层级（子文件夹归父图库、父行合计等于子行之和、两位顺序号、图库源计数把子文件夹各算一个、git 夹具验证更新时间截到分钟）、`statSource` 规模口径（平铺跳过 `.git`、分层只算 normal/super、角色/图片计数、目录缺失归零） | 无 |
@@ -39,8 +39,9 @@ node test/xxx.test.mjs           # 单跑（任意 cwd）
 | `migrate-run.test.mjs` | **旧布局迁移实跑（沙箱）**：源码复制到 `test/.test-tmp/migrate-run/` 并 chdir，真实执行 `migrateToMultiSrc()`——损坏 junction 仍判 legacy、junction 移除与 default 搬迁/段位规范化、第三方副本清理、`.bak` 屏蔽状态迁移到第三方源（含一层分组与图库名含 `_`）、源内缺文件必须告警、各分组子源写入 `profileImgSrc`、重跑迁移时同名冲突保留 `.conflict` 且不覆盖目标 | 可创建 junction 的平台 |
 | `gallery-lock.test.mjs` | 操作锁：锁 id 归属（第三方统一、路径→主仓库）、二次获取被拒、release 后可再取、多锁整体获取与失败回滚、过期与损坏锁可接管、锁文件名消毒 | 无 |
 | `preview-panel.test.mjs` | 预览数据层：虚拟面板构造（原神 90 / 星铁 80 与 promote 不越界、伪造圣遗物生效、默认武器可用、不生成 PlayerData 文件）、渲染数据组装（模板必需字段齐备、属性 Base/Plus、评分、立绘换成该序号图、星铁行迹 9 格、伤害计算与无规则时安全跳过）、立绘定位与路径转换（命中序号 / 不存在返回 null、同盘相对路径编码、跨盘 `file://`）、命令解析与占位骨架（`#`=原神 / `*`=星铁 / `#星铁`、`#原神` / 非法命令 null；已知角色不受前缀影响，未收录角色按前缀借胡桃 / 三月七骨架且名字头像换成目标角色）、失败分支（角色不存在 / 序号不存在明确提示）；夹具为默认图库临时角色目录，可逆清理 | miao-plugin 内部模块与面板模板 |
-| `visualize-cmd.test.mjs` | 可视化 / 屏蔽列表的写法与路由：普通（`#xx面板图可视化`）、短写（`#可视化xx`）、屏蔽三种写法与 `#星铁` 前缀逐条断言命中哪条规则且捕获干净（屏蔽吃词的两个坑用正例钉住）、不接管列表命令；屏蔽页数据来源 `getBlockedAggregated` 能定位各源 `.bak` | 无 |
-| `alias-fallback.test.mjs` | 别名兜底（Atlas 交接后冻结）：预设别名 / 精确 / 大小写 / 模糊 / 未知原样、对外入口（Atlas 与兜底同答案）、`getAliasSource()` 摘要、cfg 覆盖预设与坏行跳过（仅当 miao 的 `alias_gs.cfg` 原本不存在时临时写夹具，测完删除） | 无（不依赖 Atlas） |
+| `visualize-cmd.test.mjs` | 可视化 / 屏蔽列表的写法与路由：普通（`#xx面板图可视化`）、短写（`#可视化xx`）、屏蔽三种写法与 `#星铁` 前缀逐条断言命中哪条规则且捕获干净（屏蔽吃词的两个坑用正例钉住）、不接管列表命令；屏蔽页数据来源 `getBlockedAggregated` 能定位各源 `.bak`、屏蔽写入目录 `getBlockedDir` 的安全名（父目录名 / 分隔符 → 空串） | 无 |
+| `alias-fallback.test.mjs` | 别名兜底（本地实现，Atlas 不可用 / 未命中时启用）：预设别名 / 精确 / 大小写 / 模糊 / 未知原样、对外入口（Atlas 与兜底同答案、空输入与路径式角色名返回空串）、`getAliasSource()` 摘要、cfg 覆盖预设与坏行跳过、第三方源内角色可经别名与模糊扫描命中且停用源不参与（cfg 与 `gallery_config.yaml` 都只在原本不存在时临时写夹具，测完删除） | 无（不依赖 Atlas） |
+| `alias-atlas-priority.test.mjs` | Atlas 双向候选下的「已登记标准名优先」：给标准名配上别名后 Atlas 会返回对侧候选，标准名仍取自身目录、别名仍解析到标准名；Atlas 表重建（自定义 cfg 增删）后本地标准名判定随之失效（版本同步）。夹具为标准名 / 别名 / 热更新角色目录 + 临时 cfg，可逆清理 | 真实 Atlas-Plugin 且别名表非空；miao 自定义别名 cfg 不存在 |
 | `command-prefix.test.mjs` | 星铁前缀就地放行：逐条断言列表 / 屏蔽列表 / 添加 / 删除 / 屏蔽 / 启用 / 重命名 / 可视化在 `#星铁…`（`*` 的归一形）下匹配且角色名捕获干净；非归一写法（`#原神…` / `#星穹铁道…` / `#崩铁…` / `#铁道…`）用负例钉住不误吃；`#替换` 保持原样不认前缀；预览规则与解析放行 `*` / `#星铁` / `#原神` | 无 |
 | `replace-image.test.mjs` | 替换命令：同名覆盖后文件名/序号不变、PNG 源被转成目标扩展名格式（webp）、未带图片与序号无效的提示、同格式替换同样生效（图片走 data: URL，不联网） | 无 |
 | `third-party-path.test.mjs` | 第三方图库目录解析：旧相对名 / 正反斜杠绝对路径 / UNC / 空值；安装目标目录为非 Git 且非空时拒绝覆盖（含场景提示与目录未改动） | 无 |

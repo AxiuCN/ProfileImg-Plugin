@@ -96,4 +96,10 @@ check('屏蔽数据：带可渲染的文件路径', hit?.filePath?.endsWith(bakN
 check('屏蔽数据：标记为 .bak 且保留段位序号', hit?.isBak === true && hit?.displayN === 10001, JSON.stringify({ isBak: hit?.isBak, displayN: hit?.displayN }))
 check('屏蔽数据：带来源标签（非标准名时页面用它占位）', typeof hit?.label === 'string' && hit.label.length > 0, String(hit?.label))
 
+// ---- 4. 屏蔽写入目录的安全名（目录可能尚不存在，不能靠 realpath 校验）----
+const { getBlockedDir } = await import(mod('model/blockedInfo.js'))
+check('屏蔽目录：正常角色名可拼', getBlockedDir('琴').endsWith(path.join('blocked-character', '琴')), getBlockedDir('琴'))
+check('屏蔽目录：父目录名返回空串', getBlockedDir('..') === '', getBlockedDir('..'))
+check('屏蔽目录：含分隔符返回空串', getBlockedDir('../x') === '' && getBlockedDir('a\\b') === '', `${getBlockedDir('../x')}|${getBlockedDir('a\\b')}`)
+
 finish()

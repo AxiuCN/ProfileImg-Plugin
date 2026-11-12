@@ -35,11 +35,21 @@ export function getBlockedInfo() {
 }
 
 /**
- * 获取角色屏蔽图库路径
+ * 角色名能否安全用于拼目录（命令层已过滤，这里再挡一次：屏蔽目标目录可能尚不存在，无法用 realpath 校验）
+ * @param {string} roleName
+ * @returns {boolean}
+ */
+function isSafeRoleName(roleName) {
+  return !!roleName && roleName !== '.' && roleName !== '..' && !/[\\/]/.test(roleName)
+}
+
+/**
+ * 获取角色屏蔽图库路径（屏蔽写入目标，目录可能尚不存在）
  * @param {string} roleName - 角色名
- * @returns {string}
+ * @returns {string} 目录绝对路径（角色名不安全时空串）
  */
 export function getBlockedDir(roleName) {
+  if (!isSafeRoleName(roleName)) return ''
   return path.join(BLOCKED_REPO_DIR, roleName)
 }
 

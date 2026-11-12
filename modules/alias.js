@@ -49,7 +49,21 @@ export function getAliasSource() {
 
 /** 别名映射表（本地兜底用），启动时从 miao-plugin 的 alias.js + 自定义别名 cfg 构建 */
 let ALIAS_MAP = new Map()
+/** 建 ALIAS_MAP 时对应的 Atlas 表版本：Atlas 重建后据此触发本地表重建 */
 let localAliasAtlasVersion = -1
+
+/**
+ * Atlas 别名表当前版本（门面不可用 / 调用失败时返回 -1）
+ * @returns {number}
+ */
+function currentAtlasVersion() {
+  if (!atlas) return -1
+  try {
+    return atlas.getAliasVersion()
+  } catch {
+    return -1
+  }
+}
 
 // 自定义别名配置文件（miao-plugin config/，数据单一来源：增删走 #喵喵别名* 命令，本插件只读）
 const CUSTOM_ALIAS_FILES = [
@@ -135,6 +149,8 @@ export function buildAliasMap() {
     }
   }
   logger.info(`[ProfileImg-Plugin] 别名表已加载，共 ${ALIAS_MAP.size} 条记录（含自定义别名 ${customCount} 条）`)
+  // 记下建表时的 Atlas 版本：首次解析无需再重建一次，热更新仍按版本变化重建
+  localAliasAtlasVersion = currentAtlasVersion()
 }
 
 /**
@@ -147,7 +163,8 @@ function getAllCharDirs() {
     const normalDir = source.level === 'flat' ? source.dir : path.join(source.dir, 'normal-character')
     try {
       for (const dir of fs.readdirSync(normalDir, { withFileTypes: true })) {
-        if (dir.isDirectory()) allDirs.add(dir.name)
+        // 平铺源扫描的是源根，`.git` 等点目录不是角色（只取普通目录）
+        if (dir.isDirectory() && !dir.name.startsWith('.')) allDirs.add(dir.name)
       }
     } catch { /* 当前源不可读时继续其余源 */ }
   }
@@ -228,7 +245,7 @@ export function resolveRoleName(input, game) {
   // 1. Atlas 门面：candidates 是「对侧候选名」（表双向、不含方向），逐个用图库目录存在性裁决
   if (atlas) {
     try {
-      const version = atlas.getAliasVersion()
+      const version = currentAtlasVersion()
       if (version !== localAliasAtlasVersion) {
         buildAliasMap()
         localAliasAtlasVersion = version

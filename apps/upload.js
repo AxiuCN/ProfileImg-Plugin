@@ -110,6 +110,12 @@ export class UploadWithCompress extends plugin {
       || e.msg.replace(/#|面板图|上传|添加/g, '').trim()
     const roleName = resolveRoleName(rawRole, e.game)
 
+    // 角色名要拼成目录：解析失败（空串 / 路径分隔符 / . 与 ..）就地拒绝，
+    // 否则空角色名会落到 normal-character 源根（见 resolveRoleName 的入口过滤）
+    if (!roleName) {
+      return e.reply('[面板图图库管理器]\n角色名无效：不能包含路径分隔符（/ 或 \\）')
+    }
+
     // 新角色：自动分配主仓库（map.json 统一路由）
     const map = loadMap()
     if (!(roleName in map.mapping)) {

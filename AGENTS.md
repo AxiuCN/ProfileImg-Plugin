@@ -39,7 +39,7 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 | 配置三层、第三方源结构探测、登记流程、路径约定、成员权限、命名格式、map.json、存储路径 | [`docs/图库源与配置.md`](docs/图库源与配置.md) |
 | UI 基调（`ui.css` / 宽度 / 字号）、三套出图页面（帮助 / 状态 / 可视化）、页脚版权行 | [`docs/UI-出图.md`](docs/UI-出图.md) |
 | 面板图预览：虚拟面板、占位骨架、miao 渲染契约 | [`docs/模块-预览.md`](docs/模块-预览.md) |
-| 角色别名：Atlas 门面优先、本地兜底冻结、watcher 二选一、两条路径差异 | [`docs/模块-别名.md`](docs/模块-别名.md) |
+| 角色别名：Atlas 门面优先、标准名优先、版本同步、多源目录判定、watcher 二选一 | [`docs/模块-别名.md`](docs/模块-别名.md) |
 | 初始化 / 迁移 / 更新 / 锁与并发 / Git 规范 / 待办清单 | [`docs/维护与迁移.md`](docs/维护与迁移.md) |
 | 盘符、部署流程、出图 POC 做法 | `docs/private/`（不入库） |
 
@@ -75,7 +75,8 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 15. **重启提示统一 `restartHint()`**（只说「重启 Yunzai」）；同步结果统一 `buildSyncReport()`
 16. **列表合并转发上限 20 张**；可视化每页 20 张（4 列 × 5 行）
 17. **锅巴 schema 每个大 label（SOFT_GROUP_BEGIN）一个文件** — `guoba/index.js` 只做拼装；`defSet/config.yaml` 的每个 `${变量}` 必须在 `guoba/index.js` 的 defaultValues 里有对应项
-18. **别名来源 Atlas 优先** — `modules/alias.js` 先走 Atlas 门面（**动态 import + try/catch**，静态 import 会让未装 Atlas 的机器整插件加载失败）；未命中 / 不可用才用本地冻结实现；**watcher 二选一**（Atlas 可用时不挂本地那套）；`resolveRoleName(name, game)` 的 game 由命令侧传（`#预览` 用 `cmd.game`，其余用 `e.game`）
+18. **别名来源 Atlas 优先** — `modules/alias.js` 先走 Atlas 门面（**动态 import + try/catch**，静态 import 会让未装 Atlas 的机器整插件加载失败）；本地表**始终构建**，承担「已知标准名」判定（Atlas 表双向，不先保标准名就会把标准名改查到别名目录），并按 `getAliasVersion()` 同步失效；未命中 / 不可用才降级到本地四级回退；**watcher 二选一**（Atlas 可用时不挂本地那套）；`resolveRoleName(name, game)` 的 game 由命令侧传（`#预览` 用 `cmd.game`，其余用 `e.game`）
+19. **角色目录读取只走 `resolveRoleDirectory`** — 用 realpath 校验目标必须在源根内（越界 / 目录链接指向源外 / 不存在 → 空串），不得自己 `path.join(source.dir, role)`；屏蔽写入目标目录可能尚不存在、realpath 会失配，走 `getBlockedDir` 的纯字符串安全名判定
 
 ## 测试
 
@@ -87,7 +88,7 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 | `profile-src` | miao `profile.js` 读写与能力探测 + 源列表构建（分组展开、主仓库不支持分组） |
 | `migrate-precheck` / `migrate-run` | 迁移预检只读性 / 旧布局迁移实跑（沙箱：损坏 junction、段位规范化、`.conflict`、`.bak` 状态、分组子源写入） |
 | `default-segment-name` | default 段位命名（有版权 / 备注 / 无版权 / 非标准 +「」原名） |
-| `gallery-index` | 多源索引（源列表含分组展开、跨源读取、段位升序、`.bak` 排除、统计；夹具可逆） |
+| `gallery-index` | 多源索引（源列表含分组展开、跨源读取、段位升序、`.bak` 排除、统计；夹具可逆）+ 角色目录范围（`resolveRoleDirectory` 拒绝 `..` / 越源路径 / 指向源外的目录链接，目录不存在返回空串） |
 | `gallery-lock` | 锁：id 统一、二次获取被拒、release 后可取、多锁回滚、过期 / 损坏可接管、文件名消毒 |
 | `preview-panel` | 虚拟面板（不落 PlayerData、星铁 promote 不越界）+ 渲染数据齐备 + 立绘路径 + 命令解析与占位骨架 + 失败分支 |
 | `command-prefix` | 星铁前缀就地放行（角色名捕获干净）+ 非归一写法负例 + 预览解析 |
@@ -98,7 +99,8 @@ ProfileImg-Plugin — miao-plugin 的面板图图库管理器：管理多个图�
 | `status-output` | 状态图数据安全（不回显绝对路径等）+ 第三方分组层级与更新时间（git 夹具）+ `statSource` 口径 |
 | `repo-branch` / `git-args` | 默认分支探测 / Git 参数安全（含 `-` 开头拒绝） |
 | `third-party-path` / `unregistered-repo` | 第三方路径解析与防覆盖 / 未登记目录发现与补登记 |
-| `alias-fallback` | 别名兜底（Atlas 移交后冻结，不依赖 Atlas）：预设别名 / 精确 / 大小写不敏感 / 模糊唯一命中 / 未知原样返回、对外入口（Atlas 与兜底同答案、空输入）、`getAliasSource()` 摘要、cfg 覆盖预设与坏行跳过（仅 cfg 原本不存在时临时夹具） |
+| `alias-fallback` | 别名兜底（本地实现，不依赖 Atlas）：预设别名 / 精确 / 大小写不敏感 / 模糊唯一命中 / 未知原样返回、对外入口（Atlas 与兜底同答案、空输入与路径式名称返回空串）、`getAliasSource()` 摘要、cfg 覆盖预设与坏行跳过、第三方源内角色可经别名与模糊扫描命中且停用源不参与（cfg 与 `gallery_config.yaml` 仅在原本不存在时临时夹具） |
+| `alias-atlas-priority` | Atlas 双向候选下的标准名优先（标准名不被改查到别名目录、别名仍解析到标准名）+ 表重建后本地标准名判定随 `getAliasVersion()` 失效（缺 Atlas / 表为空 / 用户 cfg 已存在则跳过） |
 | `smoke-imports` | 全模块可加载 + 每个 app 恰好一个 class 且规则非空 + 关键语义（argv、锁、取号、预览、版权行） |
 
 约定：命名 `<主题>.test.mjs`；路径一律经 `test/_helper.mjs` 的 `pluginRoot` / `mod()` 推导，**禁止裸相对字面量与盘符绝对路径**；框架全局用 `installFrameworkStubs()` 的内存实现；临时产物只写 `test/.test-tmp/`（已 gitignore）；**断言必须能真的失败**——新增套件应临时还原被修的代码确认转红后再入库。细节见 `test/README.md`。
